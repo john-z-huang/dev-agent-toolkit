@@ -23,14 +23,14 @@ NEED=<输入/授权/网络/认证/决定>  PRESERVED=<现场>
 
 缺少输入、授权、网络、认证或权限时停在动作前；不要求用户粘贴 token，不改用浏览器绕过 GitHub 规则。
 
-查询未覆盖与执行失败分别处理：未覆盖的信息查询按 [`read-only-queries.md`](../references/read-only-queries.md) 使用已授权 Connector 或受控 CLI，无须逐次申请额外的业务授权；必需工具缺失、权限/认证/网络失败、脏工作区、状态冲突或校验失败则停止依赖该结果的步骤，不换 CLI、旧查询结果或兼容脚本绕过。独立且不依赖失败结果的只读查询可继续，但不解除失败门禁。
+能力缺口与执行失败分别处理：没有对应工具、工具未暴露或功能未覆盖时，按 [`cli-fallback.md`](../references/cli-fallback.md) 自行用 CLI 补足查询或已授权写入，无须仅因工具缺口再问授权。工具/服务实际连接、权限、认证、网络、状态或校验失败时，停止依赖该结果的步骤，不换 CLI、旧结果或兼容脚本跳过失败条件。部分成功或写入不明时先回读现场。必要检查无法完成或 CLI 也不可用时才报告具体阻塞；独立工作可继续。
 
 ## 2. 处理冲突
 
 - dirty tracked：停止切换、pull、worktree 创建，保留现场。
 - 未跟踪文件会被覆盖：停止，不用 clean/reset/stash/删除/改名/移动消除冲突。
 - 目标路径已被主分支提供：不覆盖。
-- PR base/head/Issue 错误：停止推送/合并，使用已知编号和预期关系调用 `audit_issue_pr_policy`；当前没有 revert 或修改 PR base 的工具，保留现场并报告。
+- PR base/head/Issue 错误：停止推送/合并，使用已知编号和预期关系调用 `audit_issue_pr_policy`；修正已在授权范围内时，缺少 revert 或修改 PR base 工具可按 CLI 补充规约处理，之后重新审计。缺少新修正动作的授权时才请求最小决定。
 - Git 冲突需要新业务/架构决定：停止；只有已批准内容的机械冲突可解决。
 - Serena 未暴露、项目激活失败或语言服务器异常时，按 [`code-understanding.md`](../references/code-understanding.md) 降级到普通文件工具；若缺少调用链、类型关系或影响范围证据，停止并报告具体影响。
 

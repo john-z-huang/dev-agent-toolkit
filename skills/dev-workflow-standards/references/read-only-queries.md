@@ -6,8 +6,8 @@
 
 1. 专用 MCP 或当前已授权的 GitHub Connector/App 能满足查询时，优先使用。repo-bound MCP 调用仍须传入准确的绝对 `repo_path`。
 2. 工具未覆盖所需的信息查询时，允许按本文执行只读 CLI；先核实本地根目录或远端 `owner/repo`，限定字段、路径和输出数量。CLI 用 `git -C` 或 `gh --repo` 等明确目标，不依赖偶然的启动目录。
-3. 工作流要求的 `audit_repository_state`、`check_branch_names`、`check_commit_message`、`check_staged_changes`、`audit_issue_pr_policy` 等门禁仍用规定工具。补充查询不替代这些门禁，也不把 API 失败视为通过。
-4. “查询未覆盖”不同于工具不可用或执行失败。缺失必需工具、权限/认证/网络失败、脏工作区、状态冲突或校验拒绝时，停止对应步骤，保留现场并按[恢复流程](../workflows/recovery-and-exceptions.md)报告。不能换 CLI、旧结果或兼容脚本绕过；独立且不依赖失败结果的查询可继续。
+3. 工作流要求的 `audit_repository_state`、`check_branch_names`、`check_commit_message`、`check_staged_changes`、`audit_issue_pr_policy` 等门禁优先用规定工具；未暴露或功能未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 保留必要事实与通过条件。补充查询不等于完整门禁，也不把未执行或失败的 API 校验视为通过。
+4. “查询未覆盖/工具未暴露”不同于工具或服务的实际执行失败。连接、权限、认证、网络、仓库状态或校验拒绝时，保留现场并按[恢复流程](../workflows/recovery-and-exceptions.md)处理，不能换 CLI、旧结果或兼容脚本跳过失败条件；独立查询可继续。
 
 ## 按完整操作判定
 
@@ -39,11 +39,11 @@
 
 - 重定向、`--output`、下载、tee、管道后续程序、命令替换及命令连接中的每个实际步骤须分别判断，不能继承外层查询的豁免。获准的项目文件编辑和测试仍按原工作流处理，不因本规约自动禁止或授权。
 - 禁止输出、回显、插值或持久化凭据；错误报告只保留非敏感摘要。不要执行 `gh auth token` 或批量输出可能含秘密的配置。
-- 写操作必须先有当前任务范围内的用户意图授权，再满足宿主审批、沙箱权限和既有工作流门禁；优先使用规定写工具，未封装的写操作停止并报告。已授予且未撤回的授权在原范围内持续有效，无须重复索取；新增动作或扩大范围需相应授权。
+- 写操作必须先有当前任务范围内的用户意图授权，再满足宿主审批、沙箱权限和既有工作流门禁；优先使用覆盖需求的写工具，未覆盖时按 [`cli-fallback.md`](cli-fallback.md) 自行使用 CLI。已授予且未撤回的授权在原范围内持续有效，无须仅因换入口重复索取；新增动作或扩大范围需相应授权。
 - 本仓库文档调整不修改用户全局 AGENTS、已安装 Skill 或运行中的服务配置。如果上层仍禁止 CLI，当前会话继续遵守上层规则，报告冲突来源及影响，不能用仓库文档覆盖它。
 
 ## 核对案例
 
-交付时确认：未覆盖的 PR 列表查询可按上述入口执行；同名 `branch --list` 与 `branch -D` 分类不同；`fetch` 仍走写流程；REST 参数不能悄悄切换方法；GraphQL mutation 不放行；工具失败不走 CLI 后备；强制检查不被手工 diff 替代。本文描述 Agent 的选择规则，不声称新增了命令解析、拦截或审批能力。
+交付时确认：未覆盖的 PR 列表查询可按上述入口执行；同名 `branch --list` 与 `branch -D` 分类不同；`fetch` 仍走写流程；REST 参数不能悄悄切换方法；GraphQL mutation 不属于只读范围；工具失败不走 CLI 后备；必要检查不因换入口而省略。本文描述 Agent 的选择规则，不声称新增了命令解析、拦截或审批能力。
 
 依据：[Git status 后台刷新](https://git-scm.com/docs/git-status#_background_refresh)、[Git diff 外部驱动和 textconv](https://git-scm.com/docs/git-diff)、[gh api 方法和参数](https://cli.github.com/manual/gh_api)。

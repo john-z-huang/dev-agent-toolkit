@@ -1,6 +1,6 @@
 # 普通开发工作流
 
-适用：默认直接在当前工作区开发，无论仓库是否有 remote、是否需要 GitHub 交付或是否需要分支。只有用户在指令中明确要求 worktree 时，才改读 [`worktree-development.md`](worktree-development.md)。固定写操作和强制 Git/GitHub 门禁使用 [`mcp-tools.md`](../references/mcp-tools.md) 中的专用工具；补充只读查询按 [`read-only-queries.md`](../references/read-only-queries.md) 处理。
+适用：默认直接在当前工作区开发，无论仓库是否有 remote、是否需要 GitHub 交付或是否需要分支。只有用户在指令中明确要求 worktree 时，才改读 [`worktree-development.md`](worktree-development.md)。下文操作优先使用 [`mcp-tools.md`](../references/mcp-tools.md) 中的对应工具；未提供工具或功能未覆盖时，按 [`cli-fallback.md`](../references/cli-fallback.md) 自行用 CLI 补足，保留必要检查和授权。只读查询细节见 [`read-only-queries.md`](../references/read-only-queries.md)。
 
 ## 队列
 
@@ -54,7 +54,7 @@
 
 - `check_branch_names` 检查分支合规；
 - `check_commit_message` 检查完整提交信息；标题格式为 `<type>: 中文说明`，type 为 `feat/fix/docs/refactor/test/chore/perf/build/ci`；
-- 只包含本任务的完整文件，无令牌、用户改动或无关内容。MCP 暂存工具按整文件工作；若同一文件含有需保留的无关 hunk，停止并报告工具不支持部分暂存；
+- 只包含本任务改动，无令牌、无关内容或未经授权的用户改动。MCP 暂存工具按整文件工作；若同一文件含有需保留的无关 hunk，按 CLI 补充规约精确暂存本任务 hunk，核对完整 staged diff，保留其他内容；
 - `check_staged_changes` 和适用项目检查通过；
-- 调用 MCP 工具 `stage_repository_paths` 并传入 `repo_path`、`paths`，再调用 `commit_repository_changes` 并传入 `repo_path`、`message`、`expected_paths` 完成提交；工具不可用时停在本地结果，不手写 Git 命令绕过；
+- 整文件暂存优先调用 `stage_repository_paths` 并传入 `repo_path`、`paths`，提交优先调用 `commit_repository_changes` 并传入 `repo_path`、`message`、`expected_paths`。工具未暴露或功能未覆盖时按 CLI 补充规约执行，并核对 staged paths、完整内容、提交 SHA 和状态；工具实际失败则按恢复流程处理；
 - 需要 GitHub 交付时进入 [`github-delivery.md`](github-delivery.md)。

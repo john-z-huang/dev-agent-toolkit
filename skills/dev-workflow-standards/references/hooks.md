@@ -2,7 +2,7 @@
 
 Skill 不会自动把 `.githooks` 文件或脚本复制到目标项目。获得用户授权后，调用 MCP 工具 `configure_project_hooks_path` 并传入 `repo_path`；它只在目标仓库已有 `.githooks/pre-commit` 和 `.githooks/commit-msg`，且现有配置未指向其他路径时，设置该仓库本地的 `core.hooksPath`，不会复制或安装 Hook 资产。
 
-如目标项目尚无这些文件，当前 MCP 服务不提供资产复制工具。不要通过 Skill 内的通用终端流程代做；说明缺少能力，由用户决定如何提供项目 Hook 文件。配置工具会拒绝覆盖指向其他路径的现有设置。
+如目标项目尚无这些文件，当前 MCP 服务不提供资产复制工具；在用户已授权安装 Hook 时，可按 [`cli-fallback.md`](cli-fallback.md) 核实来源、脚本内容和目标后自行复制并验证，不覆盖已有文件，再优先使用配置工具。来源不明或未授权安装时才请求补充决定。配置工具会拒绝覆盖指向其他路径的现有设置，不能改用 CLI 跳过拒绝。
 
 Hook 脚本应通过目标项目内的相对路径调用版本化校验脚本，不依赖开发者机器上的 Skill 绝对路径。提交到 Git 的 Hook 可以随仓库共享；`core.hooksPath` 配置保存在本地 Git 配置中，新克隆或新开发者需要再次配置。`git commit --no-verify` 可以绕过本地 Hook；如需强制执行，还需仓库托管平台上的服务端检查。
 

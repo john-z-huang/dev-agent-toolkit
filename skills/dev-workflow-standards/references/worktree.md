@@ -1,6 +1,6 @@
 # Git Worktree 开发与交付
 
-仅当用户明确要求 worktree 时使用。Git 仓库、remote、GitHub 交付或并行任务本身不触发该模式。固定写操作和强制 Git 门禁使用 [`mcp-tools.md`](mcp-tools.md) 中的专用工具；补充只读查询按 [`read-only-queries.md`](read-only-queries.md) 处理，不替代创建前同步门禁。
+仅当用户明确要求 worktree 时使用。Git 仓库、remote、GitHub 交付或并行任务本身不触发该模式。下文操作优先使用 [`mcp-tools.md`](mcp-tools.md) 中的对应工具；未提供工具或功能未覆盖时按 [`cli-fallback.md`](cli-fallback.md) 补足，保留必要检查、授权及创建前同步门禁。只读细节见 [`read-only-queries.md`](read-only-queries.md)。
 
 ## 工作区边界
 
@@ -29,7 +29,7 @@
 
 创建基线冲突时，不覆盖文件、不使用 reset/clean/stash，也不改名或移动。目标 worktree 建立后，用 `copy_untracked_files_to_worktree` 按清单复制；工具会再次核验源指纹、路径安全、目标仓库及目标未占用状态。若调用返回部分复制，依据 `copied` 列表核对，保留原始副本并停止继续处理失败项。文件不会自动暂存或提交。
 
-要携带 ignored、symlink 或特殊文件时，工具无法安全搬运；保持原始副本并报告限制。需求完成后恢复无关未跟踪文件回原始工作区的跨 worktree 复制也未封装，不得猜测或覆盖。
+要携带 ignored、symlink 或特殊文件时，先核实是否在授权范围、实际文件类型及目的地安全性；工具不覆盖的类型可按 CLI 补充规约单独处理，不能绕过已发生的工具安全拒绝。跨 worktree 恢复未跟踪文件也可按该规约核实来源、目标和指纹后复制；不猜测、不覆盖，保留原始副本。
 
 ## 创建并实现
 
@@ -37,7 +37,7 @@
 2. 用 `create_repository_worktree` 传入原仓库路径、目标绝对路径、新分支和已同步的本地基线。它拒绝已存在的路径/分支以及在源仓库目录内创建。
 3. 按上一节复制允许携带的未跟踪内容；然后只在该 worktree 中实现和验证。
 
-若 Fork 的个人维护分支缺失，先停止并核对初始化方案：`create_repository_branch` 只允许以当前 HEAD 原地建分支，不能代替首次添加 `upstream`、确认维护基线或配置 tracking；这些初始化操作仍未完整封装。
+若 Fork 的个人维护分支缺失，先核对初始化方案：`create_repository_branch` 只允许以当前 HEAD 原地建分支，不能代替首次添加 `upstream`、确认维护基线或配置 tracking；未封装步骤按 CLI 补充规约在既有授权内完成。维护基线不明时停止，不自行猜测。
 
 ## 并行工作与串行交付
 
@@ -47,4 +47,4 @@
 
 ## 空远端
 
-空远端、无默认分支或无 PR base 时，标准同步门禁不成立。当前 MCP 没有 bootstrap README/提交/推送工具；停下并报告所缺能力，不要把需求内容混入初始化操作。
+空远端、无默认分支或无 PR base 时，标准同步门禁不成立。先核实最小 bootstrap 范围与授权；当前 MCP 未覆盖的步骤按 CLI 补充规约执行，回读确认默认分支/PR base 后再恢复标准同步流程，不要把需求内容混入初始化操作。

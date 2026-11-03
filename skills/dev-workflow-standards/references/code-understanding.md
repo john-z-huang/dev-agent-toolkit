@@ -61,8 +61,8 @@
 - 一般 Serena Memory 是项目文档的补充，不替代仓库规范、代码或父 Session 的实时任务状态；mode/count、分配、当前 slice 和授权由父 Session 持有。用户要求持久化的历史会话事实摘要是特定来源的事实记录，依其专门规约参与代码/项目背景事实查询，不受一般 Memory 这条规则排除。不得写入凭据、秘密、原始对话转录、完整日志或完整 diff。项目 Memory 是否进入版本控制由仓库忽略和协作约定决定；不要为保存 Memory 擅自修改 `.gitignore`。
 - Memory 默认在项目 `.serena/memories/`；`modules/auth` 这样的逻辑名对应主题子目录并由 Serena 添加 `.md`。遵守配置的数据目录、`read_only_memory_patterns` 和 `ignored_memory_patterns`；列表不可见不表示磁盘上不存在，不通过普通文件工具绕过隐藏或只读限制。`global/` 是跨项目作用域，仅在明确要求时写入；维护说明优先级不授予修改全局记忆的权限。
 - 需要重命名/移动 Memory 时，优先使用已暴露且获准的 `rename_memory`，其会维护规范的 `mem:` 引用，但不改写只读记忆。删除 Memory 仅在用户明确指示或授权后调用 `delete_memory`。更名、删除及覆盖前核对目标和引用，不因一般写入授权扩大操作范围。
-- 本次修改 Memory 或其引用时，检查目标与规范的 `mem:` 引用能否解析。官方将没有 MCP 对应工具的 `serena memories check` 定位为人工 CLI 检查；默认报告 stale 引用，裸名称和模糊扫描需显式启用，且它不验证事实正确性。在当前工作流禁止以 CLI 补齐未封装操作时，报告此项未执行及人工检查入口，不自行运行或编造 MCP 替代工具；已有明确授权且适用规则允许 CLI 时才执行。只改代码或普通文档不因此强制执行 Memory CLI。
-- 仅在用户明确要求检查或升级本机 uv 安装的 Serena 时处理；当前 MCP 没有安装来源检查或升级工具。按[本地 Serena 更新能力边界](serena-mcp-tool-upgrade.md)说明缺少的专用能力并停止，不以任意 shell、Git 或 uv 命令代做。
+- 本次修改 Memory 或其引用时，检查目标与规范的 `mem:` 引用能否解析。没有 MCP 对应工具的 `serena memories check` 可按 [`cli-fallback.md`](cli-fallback.md) 在已授权范围执行；先核实当前 CLI、项目及存储根，默认只报告 stale 引用，裸名称和模糊扫描需显式启用，且它不验证事实正确性。只改代码或普通文档不因此强制执行 Memory CLI。
+- 仅在用户明确要求检查或升级本机 uv 安装的 Serena 时处理；当前 MCP 未覆盖的安装检查或升级，按[本地 Serena 检查与更新](serena-mcp-tool-upgrade.md)在既有授权内使用相关 CLI，核对来源、版本和结果。
 
 ## CUDA 代码理解
 
@@ -73,7 +73,7 @@
 
 ## 普通文件工具的边界
 
-- 固定写操作和强制 Git/GitHub 门禁按 [`mcp-tools.md`](mcp-tools.md) 使用专用工具；未覆盖的信息查询按 [`read-only-queries.md`](read-only-queries.md) 选择只读 CLI。未封装的写操作或必需工具失败仍停止并报告。Serena 和补充查询均不替代规定的仓库状态检查。
+- Git/GitHub 操作优先按 [`mcp-tools.md`](mcp-tools.md) 使用对应工具；未暴露或功能未覆盖时按 [`cli-fallback.md`](cli-fallback.md) 补足查询或已授权写入。实际执行失败不能换入口绕过；Serena 和补充查询均不省略必要的仓库状态检查。
 - `rg`、`grep` 和普通文件读取用于 Markdown、YAML、JSON、日志、锁文件、生成文件、Serena 不支持的语言、精确文本搜索，以及 Serena 无法处理的文件。
 - `rg` 或普通文件读取找到候选后，如果后续需要理解源代码逻辑，应回到 Serena 的符号和引用分析，而不是继续依赖大段文本输出。
 
@@ -81,7 +81,7 @@
 
 - Serena 未暴露、项目激活失败、语言服务器未就绪或符号分析失败时，记录失败工具、目标路径、原因和证据限制，再用适当的普通文件工具做限定范围的降级；无需为可降级查询安装依赖、修改配置或反复重试同一失败调用。激活失败后不得继续使用其他项目的符号结果。
 - 工具降级本身不阻塞不依赖符号关系的任务；如果任务必须依赖调用链、类型关系或影响范围，而现有工具无法提供足够证据，应报告 `BLOCKED` 或 `SKIPPED` 及其影响，不得把未完成的理解标记为通过。
-- 若历史会话事实流程所需的 Serena Memory 工具缺失或失败，不得以代码符号查询或普通文件写入绕过；按 [`codex-session-facts.md`](codex-session-facts.md) 报告该流程缺口。无须保存会话摘要的普通代码理解任务仍按本节的 Serena 降级规则处理。
+- 历史会话事实流程所需 Memory 工具未暴露时，按 [`codex-session-facts.md`](codex-session-facts.md) 核实是否有覆盖相同存储语义的 CLI 入口；实际失败不得绕过，也不把代码符号查询当成会话事实。普通代码理解任务仍按本节的 Serena 降级规则处理。
 - Serena 的诊断、引用和实现结果只能辅助代码检查，不能替代测试、构建、lint、类型检查或集成验证。
 
 ## Worktree 规则

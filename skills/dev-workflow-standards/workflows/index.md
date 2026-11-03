@@ -2,7 +2,7 @@
 
 只做文档选择，不增加授权。匹配后只读取最相关的工作流；工作流无法解决时，再按下表查找参考文档。
 
-固定写操作和强制审计/检查必须使用 [`mcp-tools.md`](../references/mcp-tools.md) 中的专用工具。查询优先用 MCP 或已授权 Connector；未覆盖的只读查询按 [`read-only-queries.md`](../references/read-only-queries.md) 使用 CLI。工具不可用或权限、认证、网络、状态、校验失败不属于查询未覆盖，不以 CLI 绕过，按恢复流程报告。用户情境判断、代码修改和项目自定义验证仍按所选工作流执行。
+各步骤优先使用 [`mcp-tools.md`](../references/mcp-tools.md) 中覆盖所需操作的工具或已授权 Connector；无对应工具、工具未暴露或功能未覆盖时，按 [`cli-fallback.md`](../references/cli-fallback.md) 自行用 CLI 补足查询或已授权写入，保留相同的顺序、必要检查和核验要求。工具/服务的实际执行失败不属于能力缺口，不以 CLI 绕过，按恢复流程处理。用户情境判断、代码修改和项目自定义验证仍按所选工作流执行。下文点名工具均遵循此入口选择规则。
 
 仅处理 Python 环境、独立脚本或 Shell 脚本时，按下表读取相应环境文档即可，不要求先进入仓库或 Git/GitHub 工作流。项目工作流中涉及相关执行时，同样须在执行前加载对应文档；不在启动时通读两份环境规则。
 
@@ -23,6 +23,7 @@
 
 | 遇到的问题 | 读取 |
 |---|---|
+| MCP 工具选择、功能未覆盖或需要用 CLI 补足操作 | [`../references/cli-fallback.md`](../references/cli-fallback.md) |
 | Python 解释器、虚拟环境、依赖选择，或脚本、模块与一次性命令执行 | [`../references/python-environment.md`](../references/python-environment.md) |
 | 本地或远端 Shell 选择，脚本生成、执行与兼容性验证 | [`../references/shell-environment.md`](../references/shell-environment.md) |
 | git/gh 只读查询、CLI 豁免、API 方法与写操作边界 | [`../references/read-only-queries.md`](../references/read-only-queries.md) |

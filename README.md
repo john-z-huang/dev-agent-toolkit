@@ -112,11 +112,11 @@ uv tool uninstall dev-workflow-standards-mcp
 
 Python 执行和依赖环境任务按需读取 [`references/python-environment.md`](skills/dev-workflow-standards/references/python-environment.md)，Shell 脚本开发和验证按需读取 [`references/shell-environment.md`](skills/dev-workflow-standards/references/shell-environment.md)。独立脚本无需先进入 Git 工作流；非开发任务不增加环境规则加载步骤。
 
-Git/GitHub 写操作必须先满足工作流中的用户授权和执行层审批；已有授权在原范围内持续有效。服务只接受固定领域参数，不提供任意 shell、git、gh 或项目测试命令。固定写操作和强制门禁使用规定工具；查询优先用 MCP 或已授权 Connector，未覆盖的只读信息查询可按 [`只读查询规约`](skills/dev-workflow-standards/references/read-only-queries.md) 使用 CLI，无须逐次申请额外的业务授权。工具不可用、权限/认证/网络/状态/校验失败时停止对应步骤，不通过 CLI 绕过。
+Git/GitHub 写操作必须先满足工作流中的用户授权和执行层审批；已有授权在原范围内持续有效。操作优先使用能够满足需求的 MCP 工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，Code Agent 可按 [`MCP 优先与 CLI 补充`](skills/dev-workflow-standards/references/cli-fallback.md) 自行选择相关 CLI、组合必要命令，完成查询或已授权写入，无须仅因工具缺口再问授权。工作流顺序、必要检查、沙箱和审批继续生效；工具/服务实际发生连接、权限、认证、网络、状态或校验失败时保留现场，不换入口绕过。服务本身仍只接受固定领域参数，不提供任意 shell、git、gh 或项目测试命令。
 
 已在当前 checkout 开始工作、需要从当前 HEAD 原地建立工作分支时，使用 `create_repository_branch`。它支持 detached HEAD 和普通分支，保留已暂存、未暂存及未跟踪内容；只新增本地分支并改变 HEAD，不创建其他 checkout。它与切换已有分支的 `switch_repository_branch`、创建新目录的 `create_repository_worktree` 分别适用不同场景。参数、OID 并发条件、Hook 限制和失败后的回读要求见 [`MCP 工具目录`](skills/dev-workflow-standards/references/mcp-tools.md#原地创建工作分支)。
 
-只读按完整子命令、参数、配置和副作用判定：`status` 避免可选 index 写回，差异展示禁用外部 diff/textconv，`fetch` 仍属本地写入；REST 显式 GET，GraphQL 审阅 query/mutation；凭据、文件输出和复合步骤不自动豁免。这是 Agent 操作规范，不是新增命令解析器。用户全局 AGENTS 或已安装 Skill 仍有限制时继续遵守并报告；本仓库修改不自动更新全局规则或重载已安装服务。
+只读按 [`只读查询规约`](skills/dev-workflow-standards/references/read-only-queries.md) 核对完整子命令、参数、配置和副作用：`status` 避免可选 index 写回，差异展示禁用外部 diff/textconv，`fetch` 仍属本地写入；REST 查询显式 GET，GraphQL 审阅 query/mutation；凭据、文件输出和复合步骤不自动豁免。这是 Agent 操作规范，不是新增命令解析器。用户全局 AGENTS 或已安装 Skill 仍有限制时继续遵守并报告；本仓库修改不自动更新全局规则或重载已安装服务。
 
 ### MCP 客户端可见的使用说明
 

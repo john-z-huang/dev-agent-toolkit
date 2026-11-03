@@ -1,6 +1,6 @@
 # MCP 工具目录
 
-本项目支持通过本机 Codex 配置使用 Python MCP 服务 `dev-workflow-standards-tools`。固定写操作和强制审计/检查只用本表的专用工具，不传 shell、git、gh 或测试命令。信息查询优先使用 MCP 或已授权 Connector；未覆盖的只读查询按 [`read-only-queries.md`](read-only-queries.md) 使用 CLI，不替代门禁或绕过失败。所有 repo-bound 工具都要求本次目标仓库的绝对 `repo_path`，且只在该 Git 根目录/worktree 内操作；不要假设 MCP 进程启动目录就是目标项目。
+本项目支持通过本机 Codex 配置使用 Python MCP 服务 `dev-workflow-standards-tools`。操作优先选择本表中覆盖需求的工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 自行用 CLI 补足查询或已授权写入，保留必要检查，不绕过实际失败。MCP 仍只接受领域参数，不传 shell、git、gh 或测试命令。所有 repo-bound 工具都要求本次目标仓库的绝对 `repo_path`，且只在该 Git 根目录/worktree 内操作；不要假设 MCP 进程启动目录就是目标项目。
 
 只读工具带 `read_only_hint`；其他工具带写入/破坏性注解，Codex 服务配置为 `default_tools_approval_mode="writes"`。这些确认与注解不取代 Skill 中的用户授权前置条件。`gh` 工具使用本机已授权的 GitHub CLI，不接受或输出令牌。
 
@@ -110,6 +110,6 @@
 
 ## 明确未封装的操作
 
-当前没有首次添加 `upstream` remote、完整初始化个人维护基线与 tracking、GitHub branch protection/rulesets、复制 Hook 资产、空远端 bootstrap、跨 worktree 恢复未跟踪文件、部分 hunk 暂存、revert，或检查/升级本地 Serena uv 工具的 MCP 工具。原地创建当前 HEAD 的分支不补齐这些初始化操作。未覆盖的信息查询（如 branch protection/rulesets 回读）可按只读规约使用已授权 Connector 或 CLI；这不替代强制门禁。未封装的写操作仍须保留现场并按恢复流程报告，不用原始命令或通用执行器绕过。CLI 豁免不增加 MCP 参数或执行能力。
+当前没有首次添加 `upstream` remote、完整初始化个人维护基线与 tracking、GitHub branch protection/rulesets、复制 Hook 资产、空远端 bootstrap、跨 worktree 恢复未跟踪文件、部分 hunk 暂存、revert，或检查/升级本地 Serena uv 工具的 MCP 工具。原地创建当前 HEAD 的分支不补齐这些初始化操作。上述能力缺口按 [`cli-fallback.md`](cli-fallback.md) 自行使用相关 CLI 补足，包括既有授权内的写操作，无须仅因缺工具再次索取授权。工具的安全拒绝和执行失败不属于能力缺口；换入口不省略门禁、审批或结果回读，也不增加 MCP 参数或执行能力。
 
 同样不封装代码编辑、项目自定义测试、任意脚本和需要产品/架构判断的冲突解决。
