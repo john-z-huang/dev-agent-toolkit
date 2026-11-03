@@ -1,6 +1,6 @@
 # Git Worktree 工作流
 
-仅当用户在当前指令中明确要求 worktree 时适用；remote、GitHub 交付、分支或并行任务都不会单独触发。固定写操作和强制 Git 门禁用 [`mcp-tools.md`](../references/mcp-tools.md) 指定的工具；补充只读查询按 [`read-only-queries.md`](../references/read-only-queries.md) 处理，不能代替成功同步。操作细节与例外见 [`worktree.md`](../references/worktree.md)；Fork 拓扑见 [`fork-maintenance.md`](../references/fork-maintenance.md)。
+仅当用户在当前指令中明确要求 worktree 时适用；remote、GitHub 交付、分支或并行任务都不会单独触发。下文操作优先使用 [`mcp-tools.md`](../references/mcp-tools.md) 指定的工具；未提供工具或功能未覆盖时按 [`cli-fallback.md`](../references/cli-fallback.md) 补足，保留必要检查和授权，不能代替成功同步。只读细节见 [`read-only-queries.md`](../references/read-only-queries.md)。操作细节与例外见 [`worktree.md`](../references/worktree.md)；Fork 拓扑见 [`fork-maintenance.md`](../references/fork-maintenance.md)。
 
 原始工作区只用于同步基线和管理 worktree。需求代码、测试、文档、暂存与提交都在对应需求 worktree 中完成。同步、隔离、清理均须符合用户授权及项目权限；创建 worktree 不自动授权提交或 GitHub 操作。
 
@@ -40,8 +40,8 @@
 
 在需求 worktree 中实现并按要求验证。只有用户授权暂存和提交时，才用 `stage_repository_paths` 指定完整文件，再用 `commit_repository_changes` 提交；工具只支持整文件暂存。多个 worktree 可以并行实现，但共享同一基线的交付必须串行：先完成一个工作项的验证、提交、推送和 PR 集成，再回原始工作区快进同步实际 base；随后在下一个需求 worktree 调用 `rebase_repository_branch`，传入该 worktree 的 `repo_path`、当前 `branch_name` 和已同步的 `base_branch`，再重验。冲突需要新业务或架构决定时先暂停。
 
-合并后默认保留 worktree 与本地分支，不 checkout、pull、merge、rebase、delete 或移除已集成的需求 worktree。只有用户另行明确要求移除 worktree 时才调用 `remove_repository_worktree`；它只移除干净的 worktree 目录，不删除分支。若需清理分支，另按 [`verification-and-cleanup.md`](verification-and-cleanup.md) 中的 PR 清理工具处理。若对应工具不可用，停止并报告，不用手写删除命令替代。
+合并后默认保留 worktree 与本地分支，不 checkout、pull、merge、rebase、delete 或移除已集成的需求 worktree。只有用户另行明确要求移除 worktree 时才调用 `remove_repository_worktree`；它只移除干净的 worktree 目录，不删除分支。若需清理分支，另按 [`verification-and-cleanup.md`](verification-and-cleanup.md) 中的 PR 清理工具处理。对应工具未暴露时，可按 CLI 补充规约完成已授权清理，仍须核实干净状态、准确路径、分支与 OID；工具拒绝或状态不明时停止。
 
 ## 空远端例外
 
-远端确认为空、没有默认分支或没有 PR base 时，先按用户授权处理最小 bootstrap；bootstrap 不得包含需求内容。当前 MCP 工具不覆盖的 bootstrap 操作必须停止并报告所缺的专用能力，不得把需求文件混入初始化提交。
+远端确认为空、没有默认分支或没有 PR base 时，先按用户授权处理最小 bootstrap；bootstrap 不得包含需求内容。当前 MCP 未覆盖的初始化操作可按 CLI 补充规约执行；回读核实默认分支与 PR base 后恢复标准流程，不得把需求文件混入初始化提交。

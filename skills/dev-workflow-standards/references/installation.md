@@ -70,4 +70,4 @@ uv tool dir --bin
 
 原 `dev-workflow-standards-tools` 命令仍直接启动 stdio MCP。Skill 管理入口是另一个命令，不向该入口加入隐式安装动作。MCP 注册、环境变量名称转发及审批继续遵循原规则。
 
-需要源码安装配置脚本时，按仓库 [README 的 Codex 安装说明](https://github.com/john-z-huang/dev-workflow-standards#codex-中安装) 使用 `scripts/setup-codex-mcp.py`；该脚本属于源码开发资产，不包含在 Skill 快照中。完整仓库结构和 Hook/历史兼容脚本见 [项目仓库](https://github.com/john-z-huang/dev-workflow-standards)。独立 Skill 不依赖这些脚本才能加载；固定操作仍按 [MCP 工具目录](mcp-tools.md) 调用已注册服务。
+需要源码安装配置脚本时，按仓库 [README 的 Codex 安装说明](https://github.com/john-z-huang/dev-workflow-standards#codex-中安装) 使用 `scripts/setup-codex-mcp.py`；该脚本属于源码开发资产，不包含在 Skill 快照中。完整仓库结构和 Hook/历史兼容脚本见 [项目仓库](https://github.com/john-z-huang/dev-workflow-standards)。独立 Skill 不依赖这些脚本才能加载；固定操作优先按 [MCP 工具目录](mcp-tools.md) 调用已注册服务，未提供工具或功能未覆盖时按 [CLI 补充规约](cli-fallback.md) 在任务授权内完成。

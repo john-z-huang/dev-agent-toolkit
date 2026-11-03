@@ -1,6 +1,6 @@
 # PR 合并后的本地清理工具
 
-统一使用 `cleanup_merged_pr_local_branch` 清理已合并 PR 的本地 head 分支。调用前必须明确得到用户对同步 base 和删除该本地分支的授权；PR 已合并不代表已授权清理。
+优先使用 `cleanup_merged_pr_local_branch` 清理已合并 PR 的本地 head 分支。工具未暴露时，可按 [`cli-fallback.md`](cli-fallback.md) 用 CLI 完成同样的核验与清理，保留本文的顺序、干净状态及 OID 条件；工具实际拒绝不能绕过。调用前必须明确得到用户对同步 base 和删除该本地分支的授权；PR 已合并不代表已授权清理。
 
 参数为 `repo_path`、`pr_number`，可选 `repo`、`branch_name` 和 `merged_head_oid`。工具会确认工作区干净和 PR 已合并，切换到 PR 实际 base，以 fast-forward-only 同步 `origin`，然后优先尝试普通分支删除。它不删除远端分支或 worktree。
 

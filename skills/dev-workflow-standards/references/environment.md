@@ -1,8 +1,8 @@
 # Git 写操作与 Codex 审批
 
-固定写操作和强制审计/检查由 MCP 专用工具执行；查询优先使用专用 MCP 或已授权 Connector，未覆盖的只读查询按 [`read-only-queries.md`](read-only-queries.md) 使用 CLI，无须逐次申请额外的业务授权。Codex MCP 配置使用 `default_tools_approval_mode="writes"`，让写工具在执行前进入 Codex 审批流程。工具审批与用户意图授权是独立前置条件；既有授权在原范围内持续有效，没有相应授权不调用写工具。
+操作优先使用覆盖需求的 MCP 工具或已授权 Connector；没有对应工具、工具未暴露或功能未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 自行用 CLI 补足查询或已授权写入，无须仅因换入口再次请求授权。只读细节见 [`read-only-queries.md`](read-only-queries.md)。Codex MCP 配置使用 `default_tools_approval_mode="writes"`，让写工具在执行前进入 Codex 审批流程；CLI 遵守宿主命令审批和沙箱规则。执行层审批与用户意图授权是独立前置条件，二者均须满足。
 
-只读 CLI 不替代规定门禁，不在工具拒绝后更换路径或执行器绕过审批。查询未覆盖可按只读规约处理；必需工具缺失或执行失败时保留现场，说明已完成步骤、失败原因及缺少条件。`fetch`、index/refs/配置修改均为本地写入；只读也可以联网，仍受宿主审批和沙箱限制。
+CLI 补足须保留必要检查的目的与通过条件，不在工具拒绝后更换路径或执行器绕过审批。实际执行失败、必要检查无法完成或效果不明时保留现场，说明已完成步骤、失败原因及缺少条件。`fetch`、index/refs/配置修改均为本地写入；只读也可以联网，仍受宿主审批和沙箱限制。
 
 本服务提供固定路径暂存和提交工具 `stage_repository_paths`、`commit_repository_changes`，但不提供任意命令或项目自定义测试工具。调用只读工具 `check_staged_changes` 时传入 `repo_path`，检查暂存区空白问题；是否运行项目测试按项目要求和用户指示处理。
 

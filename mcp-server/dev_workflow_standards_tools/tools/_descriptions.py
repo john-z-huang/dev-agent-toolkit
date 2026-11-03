@@ -5,7 +5,24 @@ from __future__ import annotations
 
 SERVER_DESCRIPTION = (
     "本地开发工作流 MCP 服务：提供固定范围的 Git、GitHub 与 worktree 操作，及用于路由、检查和起草的只读辅助工具。"
+    "优先使用覆盖需求的 MCP 工具；未提供工具或功能未覆盖时，Agent 可在既有任务授权内自行使用 CLI 补足。"
     "辅助结果不构成执行授权；写操作和外部操作仍须遵循用户授权及具体工具的副作用边界。"
+)
+
+CLI_FALLBACK_DESCRIPTION = (
+    "优先使用能够完整完成所需操作的 MCP 工具或已授权 Connector。没有对应工具、工具未暴露或功能/参数未覆盖时，"
+    "Code Agent 可在当前任务授权和已核实的目标范围内自行选择相关 CLI、组合必要命令，完成查询或已授权写入；"
+    "无须仅因工具缺口再次请求人工授权。例：首次配置 upstream、部分 hunk 暂存、Hook 文件复制、修改 PR base。"
+    "只补足缺少的步骤，其余继续优先使用工具；CLI 由宿主执行，不把命令传入本服务的领域参数。\n\n"
+    "CLI 继续遵守工作流顺序、必要检查的目的和通过条件、用户授权、宿主 approval、sandbox 及更高优先级限制。"
+    "门禁工具未暴露时须核验同样的必要事实和规则；无法完成必要检查就停止，不声称未运行的 MCP/API 校验通过。"
+    "写入不因换入口而豁免授权或审批；已有授权在原范围内持续有效，不自动扩大到新动作。"
+    "明确绝对仓库根路径、文件/分支及远端 owner/repo；保留用户改动、正常 hooks、快进与非强推规则。"
+    "按完整命令及复合步骤判断副作用，执行后回读路径、内容、OID/状态，记录入口选择理由和实际验证。\n\n"
+    "能力缺口不包括工具或服务实际发生的连接、权限、认证、网络、仓库状态、参数校验或规则检查失败；"
+    "不得换 CLI、旧结果或兼容脚本跳过失败条件。超时、部分成功或写入不明时先只读回读，禁止盲目重试。"
+    "CLI 不可用、目标或副作用不明、必要检查无法完成或缺少实际授权时，保留现场并报告最小阻塞；独立工作可继续。"
+    "工具的安全限制和拒绝不能解释为功能缺口，不关闭 hooks、不绕过审批或泄露凭据。"
 )
 
 OPENAI_NETWORK_DESCRIPTION = (
@@ -21,11 +38,13 @@ SERVER_INSTRUCTIONS = """
 
 **选择与顺序**
 
-起草 Issue/PR 前先收集最小充分的真实项目事实与来源指针，再调用 `generate_skill_content`，无需先写整篇正文。通用事实包括用户目标/受众、背景/组件、路径/符号、范围/非目标、约束和关联项；事实、反馈、推测与建议分开。Issue 先区分缺陷与功能/变更请求：描述实际/期望/影响或目标/动机，环境与复现仅提交已知证据。PR 提供具体前后行为、已完成 diff/文件摘要及原因、实际验证命令/结果和未运行项、已知兼容风险与关联 Issue。缺失和冲突如实标注，不要求全仓库/完整会话或敏感配置。标题和自然语言正文默认中文，英文材料/模板/Agent 请求不构成其他语言授权；明确用户语言要求须通过 language_override 引用 user_provided 指令原文。技术原文保留。工具不自行读取项目上下文；Issue/PR 经生成与语义审查两次固定 gpt-6-luna Responses.parse 请求，ok=true 仍须检查 quality_status/adoptable 并人工审阅，needs_revision 不可直接发布，审查异常失败关闭。后续 Memory、Git、Issue/PR 写入继续使用相应专用工具并满足既有授权。
+起草 Issue/PR 前先收集最小充分的真实项目事实与来源指针，再调用 `generate_skill_content`，无需先写整篇正文。通用事实包括用户目标/受众、背景/组件、路径/符号、范围/非目标、约束和关联项；事实、反馈、推测与建议分开。Issue 先区分缺陷与功能/变更请求：描述实际/期望/影响或目标/动机，环境与复现仅提交已知证据。PR 提供具体前后行为、已完成 diff/文件摘要及原因、实际验证命令/结果和未运行项、已知兼容风险与关联 Issue。缺失和冲突如实标注，不要求全仓库/完整会话或敏感配置。标题和自然语言正文默认中文，英文材料/模板/Agent 请求不构成其他语言授权；明确用户语言要求须通过 language_override 引用 user_provided 指令原文。技术原文保留。工具不自行读取项目上下文；Issue/PR 经生成与语义审查两次固定 gpt-6-luna Responses.parse 请求，ok=true 仍须检查 quality_status/adoptable 并人工审阅，needs_revision 不可直接发布，审查异常失败关闭。后续 Memory、Git、Issue/PR 写入优先使用相应专用工具；能力缺口按下述 CLI 规则补足，仍须满足既有授权。
 
-**只读查询的覆盖边界**
+**MCP 优先与 CLI 补充**
 
-优先使用已可用且覆盖所需查询的 MCP 工具或已授权 Connector。若它们没有覆盖当前只读查询，可在当前任务和目标仓库范围内使用受限的 `git`/`gh` CLI 读取；无需为每次这类只读查询重复询问业务授权。各工作流指定的审计和检查门禁仍须在规定步骤完成；补充查询可收集后续门禁所需事实，但不能替代门禁或把失败门禁判为通过。缺少覆盖与工具不可用、权限/认证/网络/仓库状态/参数校验失败是不同情况；失败时不得改走 CLI 绕过门禁或失败原因。只读查询仍受适用的宿主 approval、sandbox 和更高优先级约束；这些约束不因只读性质豁免。
+""" + CLI_FALLBACK_DESCRIPTION + """
+
+**只读 CLI 的额外边界**
 
 只读必须按完整子命令、参数、配置和副作用判断，不得按 `git`/`gh` 前缀推定。`--no-pager` 是 Git 全局选项，须放在子命令前；`git status` 使用 `--no-optional-locks`；`diff`、`log`、`show` 子命令使用 `--no-ext-diff --no-textconv` 并限制输出范围/长度；branch、tag 仅用 `--list`，remote 用 `git remote` 列举。`git fetch` 会写本地 remote refs，不属于只读豁免。`gh issue/pr view` 与受支持的 issue/pr list 查询须显式指定 `--repo owner/repo`；`gh repo view` 使用位置参数 `owner/repo`，不可将 `--repo` 当作该命令的选项。`gh api` REST 不使用 `--repo` 选项；请求必须显式 `--method GET`，在已知查询 endpoint 中指定仓库（例如 `/repos/owner/repo/...`），并核实 endpoint 确为只读；`-f`/`-F` 等参数可能隐式选择 POST，不能将其视为 GET。GraphQL 仅限明确审阅过的 query；mutation 或动态/未知操作不在范围内。环境 helper、pager、alias 或 lazy fetch 可能产生副作用；无法确认完整行为时停止该查询。凭据读取、文件输出、下载、复合命令及其全部副作用需分别评估；本规则不授权这些操作，也不提供任意命令执行器。写入仍需用户对该写入的意图授权及适用的 Codex approval；既有授权仅在其范围内持续有效。
 
@@ -61,7 +80,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     ) + OPENAI_NETWORK_DESCRIPTION,
     "check_staged_changes": (
         "对 repo_path 的暂存区运行固定 `git diff --cached --check`，检查空白错误；适用于 stage 后、commit 前。只读暂存内容，不运行测试或用户命令。"
-        "repo_path 必须是绝对仓库根目录。passed=true 表示该 Git 检查成功；否则检查 diagnostics/error/exit_code，再修复并重跑。无网络、无写入。额外只读查询按共享规则执行，不替代本工具，也不能将本工具失败或不可用当作 CLI 绕过理由。"
+        "repo_path 必须是绝对仓库根目录。passed=true 表示该 Git 检查成功；否则检查 diagnostics/error/exit_code，再修复并重跑。无网络、无写入。额外查询按共享规则执行；工具未暴露时可按相同空白检查条件用 CLI 补足，但本工具实际失败不能改走 CLI 绕过。"
     ),
     "stage_repository_paths": (
         "仅将 paths 明列的普通仓库相对文件路径加入 Git index，适用于确认最终 diff 后的精确暂存。先检查 repo_path 与 paths，并确认用户授权；不会自动加入其他文件。"

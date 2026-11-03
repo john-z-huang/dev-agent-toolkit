@@ -379,6 +379,7 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
 
     async def test_issue_pr_metadata_over_stdio_initialize_and_tools_list(self) -> None:
         from dev_workflow_standards_tools.services.ai_workflow import ContentGenerationRequest
+        from dev_workflow_standards_tools.tools._descriptions import CLI_FALLBACK_DESCRIPTION
 
         params = StdioServerParameters(
             command=sys.executable,
@@ -388,6 +389,7 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
         )
         async with asyncio.timeout(20), Client(params) as client:
             self.assertEqual(client.server_info.name, "dev-workflow-standards-tools")
+            self.assertIn(CLI_FALLBACK_DESCRIPTION, client.instructions)
             for phrase in ("Issue", "PR", "最小充分", "默认中文", "language_override", "needs_revision", "两次"):
                 self.assertIn(phrase, client.instructions)
             for phrase in ("httpx2.Client(trust_env=True)", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "重新加载"):

@@ -1,6 +1,6 @@
 # 专项操作工作流
 
-只在用户或项目明确要求时执行。固定 Git 写配置或文本转换使用 [`mcp-tools.md`](../references/mcp-tools.md) 点名的专用工具；补充只读查询按 [`read-only-queries.md`](../references/read-only-queries.md) 处理，不授权历史重写、配置修改或兼容脚本后备执行。
+只在用户或项目明确要求时执行。操作优先使用 [`mcp-tools.md`](../references/mcp-tools.md) 点名的对应工具；未提供工具或功能未覆盖时，按 [`cli-fallback.md`](../references/cli-fallback.md) 使用相关 CLI 或已审阅脚本。只读细节见 [`read-only-queries.md`](../references/read-only-queries.md)。入口变化不授权额外的历史重写、配置修改或外部操作。
 
 ## Hook
 
@@ -12,4 +12,4 @@
 
 ## 历史标题维护
 
-按 [`rewrite-weather-commit-subjects.md`](../references/rewrite-weather-commit-subjects.md) 检查历史提交标题维护的能力边界。当前 MCP 不提供旧标题转换或 Git 历史改写工具；仓库中的兼容脚本也不是交互式工作流的后备执行器。遇到此类请求时保留现场并报告缺少的专用能力，不以任意命令、脚本或其他工具替代。
+按 [`rewrite-weather-commit-subjects.md`](../references/rewrite-weather-commit-subjects.md) 核实历史提交标题维护的授权、范围及验证方案。当前 MCP 不提供对应工具；可按 CLI 补充规约使用相关命令或已审阅的兼容脚本，不因缺工具重复询问；历史重写及远端更新仍须各自的明确授权。

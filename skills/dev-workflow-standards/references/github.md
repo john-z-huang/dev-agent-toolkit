@@ -1,6 +1,6 @@
 # GitHub 操作策略
 
-固定写操作和强制 GitHub 门禁使用 [`mcp-tools.md`](mcp-tools.md) 中规定的工具；一般查询优先用专用 MCP 或当前已授权的 GitHub Connector/App，未覆盖的只读信息按 [`read-only-queries.md`](read-only-queries.md) 使用 CLI。禁止浏览器和浏览器自动化。服务器调用本机 `gh` 身份，不收集、不输出令牌。
+下文操作优先使用 [`mcp-tools.md`](mcp-tools.md) 中对应工具或当前已授权的 GitHub Connector/App；未提供工具或功能未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 补足查询或已授权写入，保留必要检查。只读细节见 [`read-only-queries.md`](read-only-queries.md)。禁止浏览器和浏览器自动化。服务器调用本机 `gh` 身份，不收集、不输出令牌。
 
 ## 授权、网络与身份
 
@@ -31,4 +31,4 @@
 
 ## 能力边界
 
-MCP 不提供 branch protection/rulesets 的增删改查、首次 upstream URL 配置或 GitHub 账号修复工具。保护规则回读等未覆盖的信息查询可按只读规约使用已授权 Connector 或显式 GET CLI；权限不足等失败仍须停止对应查询，不能把失败解释为无规则。未封装的写操作保留现场并报告，不使用原始命令或通用执行器绕过。
+MCP 不提供 branch protection/rulesets 的增删改查、首次 upstream URL 配置或 GitHub 账号修复工具。能力缺口可按 CLI 补充规约处理；保护规则回读遵守只读规约，修改须有对应授权并回读确认。权限/认证等实际失败仍须先处理原因，不能换入口绕过或把失败解释为无规则；不通过打印 token 修复账号。

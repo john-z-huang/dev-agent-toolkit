@@ -1,9 +1,9 @@
 # 暂存区检查
 
-提交前检查暂存区是否包含 Git 空白错误。获得用户暂存授权后，调用 MCP 工具 `stage_repository_paths`，传入 `repo_path` 和 `paths` 按显式完整文件路径暂存，再调用 `check_staged_changes` 并传入 `repo_path`；该检查只读取暂存区并执行空白检查，不运行测试，也不判断文件是否属于当前需求。暂存工具不支持部分 hunk；若同一文件含有需要保留的其他改动则停止。
+提交前检查暂存区是否包含 Git 空白错误。获得用户暂存授权后，优先调用 MCP 工具 `stage_repository_paths`，传入 `repo_path` 和 `paths` 按显式完整文件路径暂存，再调用 `check_staged_changes` 并传入 `repo_path`；该检查只读取暂存区并执行空白检查，不运行测试，也不判断文件是否属于当前需求。暂存工具不支持部分 hunk；若同一文件含有需要保留的其他改动，可按 [`cli-fallback.md`](cli-fallback.md) 用 Git CLI 精确暂存本任务 hunk，逐项核对完整 staged diff 和路径集合，保留其他改动。工具未暴露时，CLI 仍须完成必要检查；实际失败不能绕过。
 
 提交授权具备且分支、提交信息、暂存范围与适用检查均通过后，调用 MCP 工具 `commit_repository_changes`，传入 `repo_path`、`message` 和 `expected_paths` 完成提交。该工具会再次核对路径集合、提交信息规则和暂存区空白检查，不接收任意命令。
 
 若项目需要测试，先按项目文档确定合适的验证范围。只有用户要求测试或验证时才运行项目测试；本 Skill MCP 服务不接受任意测试命令。
 
-Git Hook 集成见 [`hooks.md`](hooks.md)。Hook 调用的本地脚本可继续用于自动校验；交互式工作流应使用 MCP 工具。
+Git Hook 集成见 [`hooks.md`](hooks.md)。Hook 调用的本地脚本可继续用于自动校验；交互式工作流优先使用覆盖需求的 MCP 工具。

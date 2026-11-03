@@ -1,6 +1,6 @@
 # GitHub 交付工作流
 
-固定写操作和强制 GitHub 门禁使用 [`mcp-tools.md`](../references/mcp-tools.md) 中点名的工具；查询优先用 MCP 或已授权 Connector，未覆盖的只读信息按 [`read-only-queries.md`](../references/read-only-queries.md) 使用 CLI。禁止浏览器/浏览器自动化。加载本工作流本身不授予 GitHub 写入权限；用户明确要求推送时，按本流程补齐缺失 Issue、推送分支并创建关联 PR，不再另行询问，但不自动合并或关闭 PR。
+下文操作优先使用 [`mcp-tools.md`](../references/mcp-tools.md) 中对应工具或已授权 Connector；未提供工具或功能未覆盖时，按 [`cli-fallback.md`](../references/cli-fallback.md) 自行用 CLI 补足，保留必要检查和授权。只读细节见 [`read-only-queries.md`](../references/read-only-queries.md)。禁止浏览器/浏览器自动化。加载本工作流本身不授予 GitHub 写入权限；用户明确要求推送时，按本流程补齐缺失 Issue、推送分支并创建关联 PR，不再另行询问，但不自动合并或关闭 PR。
 
 操作策略见 [`github.md`](../references/github.md)、Fork 拓扑见 [`fork-maintenance.md`](../references/fork-maintenance.md)、合并策略见 [`squash-merge.md`](../references/squash-merge.md)。
 
@@ -20,7 +20,7 @@
 - 先确认目标仓库、Issue/PR、base/head；不猜 owner、用户名、编号或权限。
 - 当前 checkout 处于 detached HEAD，或用户授权从当前 HEAD 新建需求分支时，使用 `create_repository_branch` 原地建分支并保留现有内容；随后核对当前分支与 HEAD OID，再进入提交和推送门禁。此操作不创建新 worktree，也不自动同步、暂存、提交或推送；工具失败不改用手写 `git switch -c`。
 - 网络或认证失败时按 [`recovery-and-exceptions.md`](recovery-and-exceptions.md) 停止。令牌不得输出、回显、插值、记录、写入或要求用户粘贴；不得因 CLI 受阻改用浏览器。
-- 个人 Fork 的 remote、个人维护分支和保护规则按 [`fork-maintenance.md`](../references/fork-maintenance.md) 判定；保护规则等未覆盖的信息可按只读规约回读。写工具或强制门禁工具未提供时仍停止并报告，不手写命令绕过。
+- 个人 Fork 的 remote、个人维护分支和保护规则按 [`fork-maintenance.md`](../references/fork-maintenance.md) 判定；未覆盖的查询和已授权写操作可按 CLI 补充规约完成，必要门禁无法完成或实际执行失败时停止依赖该条件的操作。
 
 ## 2. 准备 Issue
 
@@ -33,7 +33,7 @@
 
 ## 3. 推送
 
-推送前确认用户已授权，且仓库、`repo_path`、分支、remote、开放 Issue、label、本人 assignee、适用验证、提交范围和堆叠 PR base 均正确。提交须已通过 `stage_repository_paths` 与 `commit_repository_changes`。调用 `push_issue_branch_to_origin` 将已提交的当前分支推送到 `origin`；该工具只允许非强制推送，并核验 Issue 前置条件。Fork 的同步 `main` 使用单独的 `push_fork_main_fast_forward`，不得把需求分支推到 `main`。
+推送前确认用户已授权，且仓库、`repo_path`、分支、remote、开放 Issue、label、本人 assignee、适用验证、提交范围和堆叠 PR base 均正确。暂存与提交优先通过 `stage_repository_paths` 与 `commit_repository_changes`；按 CLI 补足时须满足相同的内容、路径和检查条件。调用 `push_issue_branch_to_origin` 将已提交的当前分支推送到 `origin`；该工具只允许非强制推送，并核验 Issue 前置条件。Fork 的同步 `main` 使用单独的 `push_fork_main_fast_forward`，不得把需求分支推到 `main`。
 
 ## 4. 创建/检查 PR
 
