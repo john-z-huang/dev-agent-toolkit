@@ -10,28 +10,32 @@
 
 仓库可以位于任意开发目录。Skill 的唯一指令源在 [`skills/dev-workflow-standards/`](skills/dev-workflow-standards/)，构建时封装进发布包，安装后为普通文件快照，不引用开发仓库。
 
-从本地源码构建 wheel 和 sdist（默认先构建 sdist，再从它构建 wheel）：
+以下构建、安装和更新命令均在本仓库根目录执行。先构建 wheel 和 sdist（默认先构建 sdist，再从它构建 wheel）：
 
 ```text
 uv build ./mcp-server --out-dir ./dist
 ```
 
-取得构建产物后，在任意目录安装工具；以下 wheel 路径替换为实际绝对路径。本项目不假定已有公开包索引。
+从 `./dist/` 安装构建产物；以下示例对应当前版本 `0.2.0`，版本变更时使用该目录中实际生成的 wheel 文件名。本项目不假定已有公开包索引。
 
-```text
-uv tool install /absolute/path/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
-dev-workflow-standards skills install --dry-run
-dev-workflow-standards skills install
-dev-workflow-standards skills show
+```bash
+uv tool install ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
+"$(uv tool dir --bin)/dev-workflow-standards" skills install --dry-run
+"$(uv tool dir --bin)/dev-workflow-standards" skills install
+"$(uv tool dir --bin)/dev-workflow-standards" skills show
 ```
 
-默认目标为 `~/.agents/skills/dev-workflow-standards-skill`；`--target /absolute/path/dev-workflow-standards-skill` 可指定完整目标目录。旧项目路径 `~/.agents/skills/dev-workflow-standards` 及会覆盖它的目标受到保护，即使显式指定或已有受管清单也不能作为安装/更新目标；指向同一位置的链接不能绕过保护。首次安装仍拒绝所有已有目标，不会自动迁移、覆盖或删除旧项目。`~/.codex/skills` 不作为默认自定义安装位置，显式选择兼容路径时也执行同样的保护检查。
+Skill 的安装、更新和查看均使用上述显式入口，定位到 `uv tool` 安装的完整发行包，避免裸命令被 `PATH` 中的其他同名入口、别名或命令缓存影响。路径外的双引号用于保留目录中的空格。
 
-安装软件包不会自动更新已安装指令。升级工具后，显式运行：
+默认目标为 `~/.agents/skills/dev-workflow-standards-skill`；`--target` 可指定仓库外的独立目标目录。旧项目路径 `~/.agents/skills/dev-workflow-standards` 及会覆盖它的目标受到保护，即使显式指定或已有受管清单也不能作为安装/更新目标；指向同一位置的链接不能绕过保护。首次安装仍拒绝所有已有目标，不会自动迁移、覆盖或删除旧项目。`~/.codex/skills` 不作为默认自定义安装位置，显式选择兼容路径时也执行同样的保护检查。
 
-```text
-dev-workflow-standards skills update --dry-run
-dev-workflow-standards skills update
+源码或文档变更后，在仓库根目录重新构建并安装 wheel，再显式更新已安装指令；安装软件包本身不会更新 Skill 快照：
+
+```bash
+uv build ./mcp-server --out-dir ./dist
+uv tool install --force ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
+"$(uv tool dir --bin)/dev-workflow-standards" skills update --dry-run
+"$(uv tool dir --bin)/dev-workflow-standards" skills update
 ```
 
 显式目标安装的，查看和更新也要传同一 `--target`。更新只接受本工具管理且未修改的完整安装；用户修改、额外内容、链接或特殊文件都会阻止覆盖。macOS/Linux 通过原子目录发布保全原安装，不支持的文件系统/平台不降级执行。预览不写文件，独立 Skill 安装离线且不注册 MCP、不读取 OpenAI 凭据、不安装 Hook。旧版共存、中断残留和人工迁移边界见 [完整安装说明](skills/dev-workflow-standards/references/installation.md)。
@@ -162,7 +166,7 @@ uv run --managed-python -- python -m unittest discover -s ../tests -v
 
 构建测试会在临时目录生成并解包 sdist、重建 wheel、安装到隔离环境后运行 CLI，不会写入现有用户 Skill 目录。
 
-`uv sync` 的可编辑开发环境不提供已封装的 Skill 快照；安装命令需从完整 wheel 安装的工具运行。资源缺失时安装器会拒绝执行，不从源码目录回退读取。
+项目 `uv run` 使用可编辑开发环境时会导入源码包，Skill 资源定位可能落在没有封装资源的源码目录。Skill 管理命令应使用 `"$(uv tool dir --bin)/dev-workflow-standards"` 明确选择从完整 wheel 安装的工具。若出现“发布包缺少 Skill 资源”，先按 [命令入口排查](skills/dev-workflow-standards/references/installation.md#包资源缺失与命令入口排查) 核对实际入口；资源缺失时安装器会拒绝执行，不从源码目录回退读取。
 
 ### OpenAI 官方 API 冒烟测试
 

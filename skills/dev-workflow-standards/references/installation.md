@@ -4,38 +4,65 @@ Skill 指令从发布包复制为普通文件快照。开发仓库可以放在�
 
 ## 安装发布包
 
-使用已取得并核验版本的 wheel；不假定本项目已有公开包索引。以下路径替换为实际构建产物：
+以下构建、安装和更新命令均在本仓库根目录执行。先构建完整 wheel，再从 `./dist/` 安装；示例对应当前版本 `0.2.0`，版本变更时使用该目录中实际生成的 wheel 文件名。本项目不假定已有公开包索引。
 
-```text
-uv tool install /absolute/path/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
-dev-workflow-standards skills install --dry-run
-dev-workflow-standards skills install
-dev-workflow-standards skills show
+```bash
+uv build ./mcp-server --out-dir ./dist
+uv tool install ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
+"$(uv tool dir --bin)/dev-workflow-standards" skills install --dry-run
+"$(uv tool dir --bin)/dev-workflow-standards" skills install
+"$(uv tool dir --bin)/dev-workflow-standards" skills show
 ```
 
-默认目标为 `~/.agents/skills/dev-workflow-standards-skill`。`--target /absolute/path/dev-workflow-standards-skill` 指定完整目标目录；支持显式选择兼容目录，但不默认写入 `~/.codex/skills`，也不覆盖任何已有目标。路径不得含 `..`、符号链接祖先或位于 Git checkout 内。父目录可由正式安装创建；预览和查看不创建目录或锁文件。目录后缀不改变 `SKILL.md` 中的技能名称，源码指令目录也保持不变。
+安装、更新和查看 Skill 时均通过 `uv tool dir --bin` 定位工具入口，明确使用从完整 wheel 安装的版本，避免依赖 Shell 对裸命令的解析。保留完整路径外的双引号，以支持包含空格的目录。
+
+默认目标为 `~/.agents/skills/dev-workflow-standards-skill`。`--target` 可指定仓库外的独立目标目录；支持显式选择兼容目录，但不默认写入 `~/.codex/skills`，也不覆盖任何已有目标。路径不得含 `..`、符号链接祖先或位于 Git checkout 内。父目录可由正式安装创建；预览和查看不创建目录或锁文件。目录后缀不改变 `SKILL.md` 中的技能名称，源码指令目录也保持不变。
 
 命令离线读取包资源，不读取 OpenAI 凭据、不调用 OpenAI、不注册 MCP、不修改 Codex 配置，也不复制或启用 Hook。安装器写入资源、受管清单及同目标的持久锁文件。macOS/Linux 使用原子目录发布；其他平台或不支持原子操作的文件系统拒绝写入，不退回非原子覆盖。
 
 ## 显式更新
 
-先按原安装来源升级软件包，例如 `uv tool install --force /absolute/path/new-version.whl`；这一步不会更新已安装 Skill。之后执行：
+源码或文档变更后，在仓库根目录重新构建并更新工具。先按实际构建产物更新 wheel，再显式更新已安装 Skill；软件包安装不会自动更新 Skill 快照：
 
-```text
-dev-workflow-standards skills update --dry-run
-dev-workflow-standards skills update
-dev-workflow-standards skills show
+```bash
+uv build ./mcp-server --out-dir ./dist
+uv tool install --force ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
+"$(uv tool dir --bin)/dev-workflow-standards" skills update --dry-run
+"$(uv tool dir --bin)/dev-workflow-standards" skills update
+"$(uv tool dir --bin)/dev-workflow-standards" skills show
 ```
 
 使用显式目标安装的，更新和查看时继续传入同一 `--target`。查看输出包含包版本及已安装版本。重复 `install` 会拒绝已有目标；重复 `update` 在内容相同时返回 `unchanged`。源码文档变化不会影响已安装快照；相同包版本也会比较内容校验和。
 
 更新要求原清单归属正确，且全部文件与清单一致。用户修改、缺失文件、额外文件或目录、硬链接、符号链接和特殊文件均会阻止更新。未知旧目录没有受管清单，不会被自动接管。完整性清单用于检测损坏和修改，不是来源签名或授权凭证；安装包来源仍需用户核验。
 
+## 包资源缺失与命令入口排查
+
+“发布包缺少 Skill 资源；请从完整 wheel 安装工具”表示当前导入的 Python 包无法读取 `skill_bundle/manifest.json` 或清单中的资源文件。该检查先于目标 Skill 目录检查，不能仅凭此错误认定已安装的 Skill 文档损坏。
+
+先通过 uv 工具的明确入口执行只读预览；原安装使用了显式 `--target` 时，继续传入同一目标：
+
+```bash
+"$(uv tool dir --bin)/dev-workflow-standards" skills update --dry-run
+```
+
+若该预览成功而裸命令失败，应在原报错终端检查同名命令的解析。即使没有激活虚拟环境，也可能因 `PATH` 顺序、别名、函数或命令缓存选中另一份安装。Zsh 中可先查看命令类型、搜索路径及 uv 工具目录：
+
+```zsh
+whence -w dev-workflow-standards
+whence -pa dev-workflow-standards
+uv tool dir --bin
+```
+
+项目的可编辑安装会导入源码包；即使 `site-packages` 中存在构建生成的资源副本，资源查找仍可能指向不含 `skill_bundle` 的源码目录，从而出现相同报错。Skill 管理应使用上面的完整发行包入口，开发环境中的 `uv run` 不用于执行这些安装管理操作。
+
+若明确的 uv 工具入口也失败，再检查该工具的安装来源和包内资源，按已核验的完整 wheel 重新安装。不要通过删除目标 Skill、手动复制资源或改动受管清单来跳过检查。
+
 ## 现有 Skill 和中断处理
 
 已有 `~/.agents/skills/dev-workflow-standards` 是受保护的旧项目路径，不会被自动迁移、覆盖或删除。即使显式传入该路径、它的子路径或会覆盖它的父目录，或目录中已有受管清单，也会拒绝操作；解析到同一旧项目位置的目标同样受保护。使用新的默认目录 `~/.agents/skills/dev-workflow-standards-skill` 安装独立快照。避免同时让 Codex 加载两份同名 Skill；现有绝对路径引用不会自动调整。人工迁移和全局指令变更需另行确认。
 
-安装/更新使用同目标的合作进程锁，竞争时失败而非排队覆盖。原子交换前后正式目录均为完整快照；强制终止可能留下 `.名称.skill-stage-*` 副本。先用 `skills show` 检查正式安装并人工核对副本，再决定如何处理；工具不自动清理未知残留。锁文件保留以维持同一锁身份，不应在安装进程运行时删除。
+安装/更新使用同目标的合作进程锁，竞争时失败而非排队覆盖。原子交换前后正式目录均为完整快照；强制终止可能留下 `.名称.skill-stage-*` 副本。先用 `"$(uv tool dir --bin)/dev-workflow-standards" skills show` 检查正式安装并人工核对副本，再决定如何处理；工具不自动清理未知残留。锁文件保留以维持同一锁身份，不应在安装进程运行时删除。
 
 合作进程锁不能阻止外部编辑器或恶意进程写文件；更新期间应停止其他写入者。发布前核对快照，交换后检测到旧目录变化会撤回并保留现场。此机制不承诺断电持久化或对恶意并发写入者的沙箱隔离。
 
