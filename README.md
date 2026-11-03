@@ -4,6 +4,8 @@
 
 工作流判断与开发文案生成通过 OpenAI Python SDK 完成：判断使用 Decisions API，生成使用 Responses API。所有请求固定为 `gpt-6-luna`，强制在调用时读取 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`；缺少任意配置即拒绝请求，不使用默认凭据、默认地址或其他模型。Decisions 使用接口自身机制，生成按任务复杂度显式指定推理强度，默认 `medium`。
 
+统一客户端为每次调用显式注入 `httpx2.Client(trust_env=True)`，读取服务进程的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（支持小写形式）。配置适用代理且目标未命中 `NO_PROXY` 时，请求通过代理；未配置代理时按库默认直连。代理配置或连接失败会返回安全错误，不回退直连。代理地址和认证信息不应写入仓库或日志。
+
 ## 独立安装 Skill
 
 仓库可以位于任意开发目录。Skill 的唯一指令源在 [`skills/dev-workflow-standards/`](skills/dev-workflow-standards/)，构建时封装进发布包，安装后为普通文件快照，不引用开发仓库。
@@ -44,7 +46,7 @@ dev-workflow-standards skills update
 uv run --managed-python -- scripts/setup-codex-mcp.py --install
 ```
 
-脚本从自身位置定位 `mcp-server/`，不依赖调用时的工作目录。它默认处理 `dev-workflow-standards-tools`，将 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL` 两个名称合并到该服务的 `env_vars`。只有变量名会写入配置，脚本不读取或打印这两个变量的值，不发起 OpenAI 请求。
+脚本从自身位置定位 `mcp-server/`，不依赖调用时的工作目录。它默认处理 `dev-workflow-standards-tools`，将 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 及上述四个代理变量的大写、小写名称合并到该服务的 `env_vars`。只有变量名会写入配置，脚本不读取或打印配置值，不发起 OpenAI 请求。
 
 可先预览安装和配置计划；`--install --dry-run` 不运行安装或注册命令，也不读写配置：
 
@@ -134,7 +136,7 @@ Git/GitHub 写操作必须先满足工作流中的用户授权和执行层审批
 
 MCP 的分支名、提交信息和 Issue/PR 策略检查在本地硬校验通过后调用 Decisions；API 失败不能返回通过。原始本地校验服务、Hook、Git 写工具的前置检查及不联网的会话辅助工具保持确定性执行。API 工具不执行生成内容里的命令，不自动创建 Issue/PR 或保存 Memory。
 
-MCP 进程必须能继承上述两个环境变量；不要把真实值写入仓库。API 只接收调用者显式提交的必要事实，不自动发送整个仓库或会话。输入字段、Prompt 边界、返回结果与推理强度配置见 [`references/openai-workflow-tools.md`](skills/dev-workflow-standards/references/openai-workflow-tools.md)。
+MCP 进程必须能继承上述两个 OpenAI 环境变量；需要代理时还须继承对应代理变量，配置后重新加载服务。不要把真实值写入仓库。API 只接收调用者显式提交的必要事实，不自动发送整个仓库或会话。输入字段、Prompt 边界、返回结果与推理强度配置见 [`references/openai-workflow-tools.md`](skills/dev-workflow-standards/references/openai-workflow-tools.md)。
 
 若手动运行成功，但 Codex 调用返回 `missing_api_key`，先检查上面的 `env_vars` 转发配置、Codex 主进程的变量存在性，以及服务是否已重新加载。uv tool 安装提供独立的执行环境，不会替 MCP 客户端补齐凭据。`missing_api_key` 表示服务进程中的 Key 缺失或为空，请求尚未发送；Key 检查先于 Base URL，因此两项都缺失时也只返回 `missing_api_key`。Key 存在而 Base URL 缺失时返回 `missing_base_url`。排查时只检查存在性和非空状态，不输出配置值；不要通过给服务增加凭据文件回退来绕过环境要求。
 
@@ -161,6 +163,21 @@ uv run --managed-python -- python -m unittest discover -s ../tests -v
 构建测试会在临时目录生成并解包 sdist、重建 wheel、安装到隔离环境后运行 CLI，不会写入现有用户 Skill 目录。
 
 `uv sync` 的可编辑开发环境不提供已封装的 Skill 快照；安装命令需从完整 wheel 安装的工具运行。资源缺失时安装器会拒绝执行，不从源码目录回退读取。
+
+### OpenAI 官方 API 冒烟测试
+
+`tests/openai_official_smoke.py` 使用统一的 httpx2 OpenAI 客户端发起一次最小 Responses 请求，固定 `gpt-6-luna`、`medium` 推理强度和 512 token 输出上限。只有显式传入 `--live` 才联网并产生实际 API 用量；不传参数输出 `skipped`，退出码为 2。常规离线测试只测试该入口的行为，不调用真实 API。
+
+在 `mcp-server/` 目录运行，先加载已配置的 Shell 环境：
+
+```bash
+source ~/.zshrc
+uv run --frozen -- python ../tests/openai_official_smoke.py --live
+```
+
+测试按原拼写读取 `OPENAI_API_KEY_OFFICAL` 和 `OPENAI_BASE_URL_OFFICAL`，任一缺失或为空就停止，不能回退到其他配置。入口只在调用期间将它们映射为统一客户端要求的 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，之后恢复原环境；生产客户端的配置规则保持不变。代理继续读取当前进程的标准代理变量，遵循 `NO_PROXY`。
+
+输出仅含安全 JSON 状态、固定请求模型、成功时的 token 计数或失败分类，不输出真实配置、响应正文或原始异常。请求不重试、不切换模型；只有完整、未拒绝、模型匹配且结构正确的响应才返回 `success` 和退出码 0，失败退出码为 1。
 
 ### Codex SDK 集成测试
 

@@ -55,6 +55,27 @@ def configured_env(**overrides: str) -> dict[str, str]:
 
 
 class OpenAIClientTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.http_clients: list[Mock] = []
+
+        def make_http_client(**kwargs: object) -> Mock:
+            client = Mock()
+            client.trust_env = kwargs.get("trust_env")
+            self.http_clients.append(client)
+            return client
+
+        client_patcher = patch.object(
+            openai_client.httpx2, "Client", side_effect=make_http_client
+        )
+        client_patcher.start()
+        self.addCleanup(client_patcher.stop)
+        self.addCleanup(self.close_http_clients)
+
+    def close_http_clients(self) -> None:
+        for client in self.http_clients:
+            if not client.close.called:
+                client.close()
+
     def test_missing_or_blank_environment_prevents_client_creation(self) -> None:
         cases = [
             {"OPENAI_API_KEY": "", "OPENAI_BASE_URL": BASE_URL_A},
@@ -68,6 +89,10 @@ class OpenAIClientTests(unittest.TestCase):
                 with self.assertRaises(openai_client.OpenAIWorkflowError):
                     openai_client.create_decision([], [])
                 factory.assert_not_called()
+                with patch.object(openai_client.httpx2, "Client") as http_factory:
+                    with self.assertRaises(openai_client.OpenAIWorkflowError):
+                        openai_client.create_decision([], [])
+                    http_factory.assert_not_called()
 
     def test_bad_base_url_is_rejected_without_echoing_it(self) -> None:
         for url in (
@@ -91,9 +116,15 @@ class OpenAIClientTests(unittest.TestCase):
         first.decisions.create.return_value = answer
         second = Mock()
         second.decisions.create.return_value = answer
-        with patch.dict(os.environ, configured_env(), clear=True), patch.object(
-            openai_client, "OpenAI", side_effect=[first, second]
-        ) as factory:
+        transport_a = Mock()
+        transport_b = Mock()
+        with (
+            patch.dict(os.environ, configured_env(), clear=True),
+            patch.object(openai_client, "OpenAI", side_effect=[first, second]) as factory,
+            patch.object(
+                openai_client.httpx2, "Client", side_effect=[transport_a, transport_b]
+            ) as transport_factory,
+        ):
             openai_client.create_decision([], [])
             os.environ["OPENAI_API_KEY"] = API_KEY_B
             os.environ["OPENAI_BASE_URL"] = BASE_URL_B
@@ -106,9 +137,20 @@ class OpenAIClientTests(unittest.TestCase):
         for call in factory.call_args_list:
             self.assertEqual(call.kwargs["timeout"], openai_client.OPENAI_TIMEOUT_SECONDS)
             self.assertEqual(call.kwargs["max_retries"], 0)
-            self.assertEqual(set(call.kwargs), {"api_key", "base_url", "timeout", "max_retries"})
+            self.assertEqual(
+                set(call.kwargs),
+                {"api_key", "base_url", "timeout", "max_retries", "http_client"},
+            )
+        self.assertEqual(factory.call_args_list[0].kwargs["http_client"], transport_a)
+        self.assertEqual(factory.call_args_list[1].kwargs["http_client"], transport_b)
+        self.assertEqual(transport_factory.call_count, 2)
+        self.assertTrue(
+            all(call.kwargs == {"trust_env": True} for call in transport_factory.call_args_list)
+        )
         first.close.assert_called_once()
         second.close.assert_called_once()
+        transport_a.close()
+        transport_b.close()
 
     def test_secret_or_endpoint_in_payload_is_blocked_before_client_creation(self) -> None:
         for sensitive_value in (API_KEY_A, BASE_URL_A):
@@ -143,7 +185,7 @@ class OpenAIClientTests(unittest.TestCase):
                 openai_client.create_decision([], [])
         self.assertEqual(raised.exception.error_code, "sensitive_value_in_response")
 
-    def test_log_records_redact_current_key_and_endpoint_from_child_loggers_and_exceptions(self) -> None:
+    def test_log_records_redact_current_api_and_proxy_settings(self) -> None:
         stream = StringIO()
         handler = logging.StreamHandler(stream)
         handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
@@ -158,11 +200,14 @@ class OpenAIClientTests(unittest.TestCase):
             root_logger.removeHandler(existing_handler)
         root_logger.addHandler(handler)
         try:
-            with patch.dict(os.environ, configured_env(), clear=True):
+            proxy_setting = "http://proxy-user:proxy-pass@proxy.example.invalid:8123"
+            with patch.dict(os.environ, configured_env(http_proxy=proxy_setting), clear=True):
                 logger.info("request configuration %s", API_KEY_A)
                 logger.debug("selected endpoint %s", BASE_URL_A)
+                logger.debug("selected proxy %s", proxy_setting)
+                logger.debug("connect_tcp.started host=%r port=%s", "proxy.example.invalid", "8123")
                 try:
-                    raise RuntimeError(f"transport failed for {API_KEY_A} at {BASE_URL_A}")
+                    raise RuntimeError(f"transport failed for {API_KEY_A} at {BASE_URL_A} via {proxy_setting}")
                 except RuntimeError:
                     logger.exception("request failed")
             output = stream.getvalue()
@@ -171,7 +216,8 @@ class OpenAIClientTests(unittest.TestCase):
             self.assertIn("RuntimeError", output)
             self.assertNotIn(API_KEY_A, output)
             self.assertNotIn(BASE_URL_A, output)
-            self.assertEqual(output.count("[REDACTED]"), 4)
+            self.assertNotIn(proxy_setting, output)
+            self.assertEqual(output.count("[REDACTED]"), 8)
         finally:
             root_logger.removeHandler(handler)
             for existing_handler in previous_root_handlers:

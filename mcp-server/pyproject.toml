@@ -3,7 +3,7 @@ name = "dev-workflow-standards-tools"
 version = "0.2.0"
 description = "Dedicated MCP tools for deterministic dev-workflow-standards operations"
 requires-python = ">=3.11"
-dependencies = ["mcp>=2,<3", "pydantic>=2,<3", "openai>=3.37,<4"]
+dependencies = ["mcp>=2,<3", "pydantic>=2,<3", "openai>=3.37,<4", "httpx2>=2.16,<3"]
 
 [dependency-groups]
 codex-test = [

@@ -390,7 +390,16 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             self.assertEqual(client.server_info.name, "dev-workflow-standards-tools")
             for phrase in ("Issue", "PR", "最小充分", "默认中文", "language_override", "needs_revision", "两次"):
                 self.assertIn(phrase, client.instructions)
+            for phrase in ("httpx2.Client(trust_env=True)", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "重新加载"):
+                self.assertIn(phrase, client.instructions)
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+        for name in (
+            "check_branch_names", "check_commit_message", "audit_issue_pr_policy",
+            "decide_skill_workflow", "decide_codex_session_action", "generate_skill_content",
+        ):
+            for phrase in ("httpx2.Client(trust_env=True)", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"):
+                self.assertIn(phrase, tools[name].description, name)
+            self.assertNotIn("proxy", tools[name].input_schema.get("properties", {}))
         tool = tools["generate_skill_content"]
         for phrase in ("前后行为", "复现", "实际验证", "user_provided", "默认中文", "adoptable", "quality_review", "不会读写", "OPENAI_BASE_URL"):
             self.assertIn(phrase, tool.description)
