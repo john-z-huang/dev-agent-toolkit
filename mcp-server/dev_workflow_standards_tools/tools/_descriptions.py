@@ -8,6 +8,13 @@ SERVER_DESCRIPTION = (
     "辅助结果不构成执行授权；写操作和外部操作仍须遵循用户授权及具体工具的副作用边界。"
 )
 
+OPENAI_NETWORK_DESCRIPTION = (
+    "所有 OpenAI 请求经统一 httpx2.Client(trust_env=True)，每次创建客户端时读取进程环境的 "
+    "HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY（含小写形式），不接受工具参数覆盖代理。"
+    "NO_PROXY 匹配时绕过代理，未配置代理时按库默认直连；代理初始化或连接失败返回安全错误，不重试直连。"
+    "Codex stdio 启动前须转发所需代理变量名；配置变更后重新加载服务，不提交或回显真实代理值。"
+)
+
 
 SERVER_INSTRUCTIONS = """
 本地开发工作流 MCP 工具按以下组选择，不是通用 shell、任意 Git 命令或授权来源。所有 `repo_path` 均须显式给出目标仓库的绝对根路径；不要把子目录、另一个 worktree 或相邻仓库混作目标。先用只读检查和状态审计确认范围，写操作只有在用户明确授权并由 Codex writes approval 放行后才能调用。
@@ -34,10 +41,10 @@ SERVER_INSTRUCTIONS = """
 5. 提交前先 `check_branch_names`、`check_commit_message`，再精确 `stage_repository_paths`；暂存后、提交前调用 `check_staged_changes` 并核验 staged paths，才考虑 `commit_repository_changes`。commit 会运行正常 Git hooks（可能执行仓库配置的检查）；工具不绕过 hooks。
 6. GitHub 流程可先 `list_github_issue_labels` 与 `audit_issue_pr_policy`，再按授权创建 Issue、推送分支、创建 PR、合并。创建工具若返回 `created=true, ok=false`，资源可能已创建但回读未确认；先人工/只读回读，不要盲目重试。合并后可用 `cleanup_merged_pr_local_branch`；它会联网核验 PR 并同步 base，只有合并前记录的 head OID 与本地分支 OID 精确相同才允许 `git branch -D`，否则不强制删除。
 7. Codex session fact helpers 只处理调用方提供的元数据和文本：先由宿主读取、核实原会话，再排序或准备摘要 payload。它们不读取宿主 history，不调用 Serena，不写 Memory；`prepare_codex_session_memory` 的 payload 不是授权。
-8. 六个可联网 OpenAI 入口分两组：`check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 在本地硬检查通过后调用 Decisions；`decide_skill_workflow`、`decide_codex_session_action` 调用 Decisions；`generate_skill_content` 调用 Responses.parse。三个检查工具的 `decision` 仅为 `compliant`、`requires_fix`、`insufficient_evidence`；前三个只能把已检查事实交给模型作补充判断；后三个分别给出路由建议、历史动作建议、候选文本。生成支持 issue、pr、commit_message、plan、handoff、session_summary 六种 kind。只有进程环境中的 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL` 会在每次请求时读取，工具参数不能指定凭据、端点或模型，固定模型为 `gpt-6-luna`。缺配置、服务拒绝、refusal、结构无效或输出不完整均是失败/需复核，不是通过；候选和建议都要 Agent 审查，不会授予 Git 或 Memory 权限。
+8. 六个可联网 OpenAI 入口分两组：`check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 在本地硬检查通过后调用 Decisions；`decide_skill_workflow`、`decide_codex_session_action` 调用 Decisions；`generate_skill_content` 调用 Responses.parse。三个检查工具的 `decision` 仅为 `compliant`、`requires_fix`、`insufficient_evidence`；前三个只能把已检查事实交给模型作补充判断；后三个分别给出路由建议、历史动作建议、候选文本。生成支持 issue、pr、commit_message、plan、handoff、session_summary 六种 kind。凭据与端点仅从进程环境中的 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL` 在每次请求时读取，工具参数不能指定凭据、端点或模型，固定模型为 `gpt-6-luna`。缺配置、服务拒绝、refusal、结构无效或输出不完整均是失败/需复核，不是通过；候选和建议都要 Agent 审查，不会授予 Git 或 Memory 权限。
 
 所有响应按各工具说明的采用条件处理：`ok`/`passed`/`created`/`committed`/`merged` 有不同含义，不能只看其中一个字段；部分动作失败后先读回状态，再决定下一步。错误边界、网络访问和副作用以具体工具描述为准。
-""".strip()
+""".strip() + "\n\n**OpenAI 网络代理**\n\n" + OPENAI_NETWORK_DESCRIPTION
 
 
 TOOL_DESCRIPTIONS: dict[str, str] = {
@@ -46,12 +53,12 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "不能据此推断分支已存在、已推送或适合合并。repo_path 必须为目标仓库绝对根目录；同时提供 branch_names 与 repo_path 时只检查所列名字。"
         "逐项看 checks[].passed/errors；本地结果字段 local_passed=true 才表示本地硬规则通过。通过后还会联网调用 Decisions，结果可能有 decision/ai_status/error_code，顶层 passed 是本地与 AI 合并结果。"
         "只读 Git；本地失败会跳过 API，不改分支。最小示例：{\"branch_names\":[\"feat/synthetic\"]}。"
-    ),
+    ) + OPENAI_NETWORK_DESCRIPTION,
     "check_commit_message": (
         "检查完整提交信息的主题格式、中文说明和禁止署名；适合提交前验证，不用于解释 Git 状态。message 是完整 message，可含正文；空行及左侧去空格后以 # 开头的注释行会在本地检查时忽略。"
         "先看 local_passed/errors；只有 local_passed=true 才表示本地硬检查通过，之后才联网请求 Decisions，且模型仍可返回 requires_fix/insufficient_evidence。顶层 passed 是本地与 AI 合并结果，只有 passed=true 可采用为检查通过。"
         "不读写仓库；本地失败不联网。示例：{\"message\":\"docs: 更新合成说明\"}。"
-    ),
+    ) + OPENAI_NETWORK_DESCRIPTION,
     "check_staged_changes": (
         "对 repo_path 的暂存区运行固定 `git diff --cached --check`，检查空白错误；适用于 stage 后、commit 前。只读暂存内容，不运行测试或用户命令。"
         "repo_path 必须是绝对仓库根目录。passed=true 表示该 Git 检查成功；否则检查 diagnostics/error/exit_code，再修复并重跑。无网络、无写入。额外只读查询按共享规则执行，不替代本工具，也不能将本工具失败或不可用当作 CLI 绕过理由。"
@@ -125,7 +132,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "audit_issue_pr_policy": (
         "联网只读检查用户指定的 GitHub Issue/PR 状态及可选 PR base/head、Issue 关闭引用；适合创建 PR 前按请求范围核验。至少给 issue_number 或 pr_number；expected_base/head 仅可与 pr_number 一起使用。Issue-only 与 PR-only 均有效。"
         "只读审计本身会联网查询 GitHub；local_passed=true 表示审计符合本地策略并允许继续调用 OpenAI Decisions，local_passed=false 只阻止 OpenAI 请求，不表示此前没有查询 GitHub。顶层 passed 表示本地审计与 AI 决策均通过；同时检查 decision/ai_status/error_code。只查开放状态、显式期望的 base/head，并仅在同时给 issue_number 与 pr_number 时查 Closes/Fixes/Resolves 引用；不查 CI、labels、mergeability。只读，不修改 GitHub。若需额外只读查询且本工具未覆盖，可按共享规则使用受限 gh CLI；REST `gh api` 须显式 `--method GET`，在已知 endpoint 路径中指明 owner/repo（不是 `--repo` 选项）；GraphQL 限已审阅 query。参数、副作用不明或写入操作不适用。"
-    ),
+    ) + OPENAI_NETWORK_DESCRIPTION,
     "cleanup_merged_pr_local_branch": (
         "PR 已合并后，将本地仓库切到 PR base、快进同步 origin/base，再删除本地 PR head；只用于用户明确授权的合并后清理，不会合并 PR 或删除远端分支。"
         "联网读取 PR 并要求 MERGED、工作区干净；repo_path 为绝对仓库根路径。branch_name 可省略（使用 PR head），若给出必须匹配；merged_head_oid 应为合并前记录的 OID。先尝试安全 `-d`；仅普通删除失败且所给 OID 与当前本地分支 OID 完全相同才用 `-D`。"
@@ -179,11 +186,11 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "decide_skill_workflow": (
         "按固定优先级 blocked > explicit_worktree > github_delivery > special_operations > verification_only > standard-development 给出路由建议；可选workflow为 standard-development、worktree-development、github-delivery、special-operations、verification-and-cleanup、recovery-and-exceptions、clarify。只有 worktree-development 且 github_delivery=true 时 follow_up_workflow 才为 github-delivery，否则为 null。request.user_request 描述请求，五个布尔值由调用方预先分类且是真正路由依据；无 repo_path 本身不是澄清理由。"
         "查看 ok/workflow/follow_up_workflow；ok=true 仍是待 Agent 审查的建议，不执行步骤或授予授权。缺 API 配置、拒绝或无效响应看 error_code 并失败关闭。会联网调用 Decisions；不会 Git/Memory 写入。示例：{\"request\":{\"user_request\":\"实现功能\",\"blocked\":false,\"explicit_worktree\":false,\"github_delivery\":false,\"special_operations\":false,\"verification_only\":false}}。"
-    ),
+    ) + OPENAI_NETWORK_DESCRIPTION,
     "decide_codex_session_action": (
         "依据调用方已知的来源可用性/读取程度/相关性和持久化许可，分别建议 lookup_action 与 persistence_action；适合宿主决定先读历史、查项目、澄清、阻塞或等待证据。它不读取 history，也不写 Memory。"
         "request 的 relevant_facts_found=null 表示未知，false 表示已核实无相关事实；new_fact_origin 区分原会话、当前会话、无来源。lookup_action 枚举为 read_history/query_project/clarify/blocked：来源无关或已读且无事实时 query_project；来源不可读时 blocked；未读完或已找到相关事实时 read_history（可依据已读证据继续，无需重复读取）；已读但相关性未知时 clarify。persistence_action 为 create_summary/update_summary/skip_persistence/await_source_evidence：原会话证据完整且相关、允许持久化时按既有摘要选择创建或更新；当前会话/无来源、未许可或无相关事实时跳过；许可下来源不可读/未读完/相关性未知时等待证据。ok=true 且两项动作符合 facts 才可作为建议，仍需 Agent 审查。通过 Decisions 联网；无会话/Git/Memory副作用。示例：{\"request\":{\"user_request\":\"查背景\",\"has_relevant_sources\":false,\"history_accessible\":false,\"history_fully_read\":false,\"relevant_facts_found\":null,\"persistence_allowed\":false,\"existing_summary\":false,\"new_fact_origin\":\"none\"}}。"
-    ),
+    ) + OPENAI_NETWORK_DESCRIPTION,
     "generate_skill_content": (
         "为 issue、pr、commit_message、plan、handoff 或 session_summary 生成结构化候选文本，适合已有明确证据、需要起草而非执行时。request.evidence 必须非空；每项 origin 标明来源，ref 唯一。session_summary 必须提供 source.created_at 与 source.title；source.thread_id 可从 source_link 推导；只接受对应 thread 的 provided_session 证据。"
         "调用前按类型准备事实，不必先写正文：通用为目标/受众、背景/组件、路径/符号指针、范围/非目标、约束和关联项；每项标明事实/推测、来源和缺失/冲突。Issue区分缺陷/功能请求，给实际/期望/影响或能力/动机，复现和环境仅限已知；PR给前后行为、已完成diff/文件摘要与原因、实际验证命令/结果和未运行项、已知兼容风险及关联Issue。不提交全仓库、完整会话或敏感配置。"
@@ -192,7 +199,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "通过统一客户端Responses.parse联网调用OpenAI；每次强制读取OPENAI_API_KEY与OPENAI_BASE_URL，显式传SDK且固定gpt-6-luna。Issue/PR生成后再做一次有界语义审查，其余kind一次请求。不会读写文件/仓库、Memory、会话、执行Git/GitHub或候选动作；仅处理传入事实，后续写入另需授权。"
         "Issue示例：{\"request\":{\"kind\":\"issue\",\"user_request\":\"为维护者起草导出功能需求\",\"evidence\":[{\"reference_id\":\"U1\",\"content\":\"用户希望导出筛选结果，避免手动复制；仅涉及报表组件。验收条件尚未确认。\",\"origin\":\"user_provided\"}]}}。"
         "PR示例：{\"request\":{\"kind\":\"pr\",\"user_request\":\"为评审者起草说明\",\"evidence\":[{\"reference_id\":\"D1\",\"content\":\"src/report.py的diff将空输入从抛错改为返回空列表，避免空报表失败；范围仅该函数。执行python -m unittest tests.test_report：通过。未运行集成测试；关联#12；暂无已知兼容风险。\",\"origin\":\"current_observation\"}]}}。以上路径/编号/结果均为合成示例，实际调用必须替换为已核实事实。"
-    ),
+    ) + OPENAI_NETWORK_DESCRIPTION,
 }
 
 

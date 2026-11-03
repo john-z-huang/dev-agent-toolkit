@@ -8,6 +8,8 @@
 
 以下工具通过 OpenAI Python SDK 调用固定的 `gpt-6-luna`，每次强制读取并显式使用 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，不提供模型或配置覆盖参数。API 工具具有 `open_world_hint=true`、`idempotent_hint=false`；只读注解表示不修改本地或 GitHub 资源，不表示没有外部 API 请求。接口失败、未知分支、拒绝或未完成的生成不能当作成功结果。
 
+所有 OpenAI 请求共用显式注入的 `httpx2.Client(trust_env=True)`，读取 MCP 进程的标准代理环境变量（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及小写形式）。配置适用代理且未匹配 `NO_PROXY` 时通过代理；无代理配置时按库默认直连，代理失败不回退直连。Codex 启动时须转发所需变量名并重新加载服务，详见 [代理与环境传递](openai-workflow-tools.md#codex-stdio-环境传递与排查)。
+
 | 工具 | 输入 | 返回 |
 |---|---|---|
 | `decide_skill_workflow` | 强类型 `request`：用户请求、明确 worktree、GitHub 交付、仅验证、特殊操作和阻塞条件 | Decisions 固定选项中的工作流分支，供 Agent 核对后采用。 |

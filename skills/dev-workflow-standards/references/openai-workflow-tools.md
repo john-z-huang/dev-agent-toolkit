@@ -5,6 +5,7 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 ## 配置与请求边界
 
 - 每次实际请求均从本地环境读取 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，两者都必须非空，并显式传给 SDK。缺少任意一项即停止请求，不使用 SDK 的默认凭据或地址，不从工具参数、其他变量或配置文件补齐。
+- 所有 Decisions 和 Responses 请求共用 `httpx2.Client(trust_env=True)`，每次调用新建并显式传入 SDK，结束后释放；SDK 初始化失败也关闭已创建的 HTTP 客户端。代理从服务进程的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（含小写形式）读取，选择及绕过规则遵循 httpx2；不接受工具参数覆盖代理。未配置代理时按库默认直连，目标匹配 `NO_PROXY` 时绕过代理；代理配置或连接失败不会回退直连。
 - 代码、文档和日志不得包含真实凭据或端点值。错误只返回安全分类，不输出原始异常、请求头、响应正文或环境变量值。工具不能让调用者覆盖模型、凭据或端点。
 - 所有请求固定使用 `gpt-6-luna`。判断使用 `client.decisions.create`；生成使用 `client.responses.parse` 和结构化输出，不回退到其他模型或接口。
 - Decisions 当前没有推理强度参数，判断使用 Decisions 自身机制，不发送不支持的 `reasoning` 参数；生成显式指定强度：提交信息为 `low`，计划和历史会话摘要为 `high`，其余为 `medium`，默认值为 `medium`。
@@ -14,13 +15,15 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 
 ### Codex stdio 环境传递与排查
 
-安装为 uv tool 后，服务仍只读取自身进程的环境变量。Codex 主进程需要持有非空的 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，并在 `[mcp_servers.dev-workflow-standards-tools]` 中通过 `env_vars` 显式允许转发这两个名称。使用源码仓库的 setup 脚本时，这一步会自动完成，无需手动修改 TOML；脚本入口与独立 Skill 安装的区别见 [安装说明](installation.md#mcp-与源码辅助脚本)，字段语义见 [Codex MCP 官方说明](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)。终端中手动运行成功，只能证明该次进程拿到了配置，不能证明 Codex 启动的 MCP 子进程也收到了配置。
+安装为 uv tool 后，服务仍只读取自身进程的环境变量。Codex 主进程需要持有非空的 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，并在 `[mcp_servers.dev-workflow-standards-tools]` 中通过 `env_vars` 显式允许转发这两个名称。需要网络代理时，还应转发 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及其小写名称，使已配置的值进入 MCP 子进程。使用更新后的源码 setup 脚本时，这些名称会自动合并；已有注册可用下述 `--env-only` 补齐。脚本入口与独立 Skill 安装的区别见 [安装说明](installation.md#mcp-与源码辅助脚本)，字段语义见 [Codex MCP 官方说明](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)。终端中手动运行成功，只能证明该次进程拿到了配置，不能证明 Codex 启动的 MCP 子进程也收到了配置。
 
-需要用源码辅助脚本修复已有注册时，在源码仓库根目录运行 `uv run --managed-python -- scripts/setup-codex-mcp.py --env-only`；可添加 `--dry-run` 只检查不写入，或用 `--server NAME`、`--config PATH` 指定目标。脚本只合并变量名，保留其他配置，不读取凭据值，也不发起 API 请求。它不会替调用进程加载凭据、启用额外授权或修改 MCP 的请求配置规则。
+需要用源码辅助脚本修复已有注册时，在源码仓库根目录运行 `uv run --managed-python -- scripts/setup-codex-mcp.py --env-only`；可添加 `--dry-run` 只检查不写入，或用 `--server NAME`、`--config PATH` 指定目标。脚本只合并变量名，保留其他配置，不读取凭据或代理值，也不发起 API 请求。它不会替调用进程加载凭据、配置代理服务、启用额外授权或修改 MCP 的请求配置规则。
 
 更改配置后须重新加载 MCP 服务，必要时退出后重开客户端以重新创建进程。`env_vars` 不会读取 Shell 配置文件或 `.env` 文件，也不会让已运行的子进程自动获得新变量；本服务不增加凭据文件、其他变量或默认地址回退。
 
 `missing_api_key` 和 `missing_base_url` 都是在创建 SDK 客户端、发送请求之前返回的本地配置错误。服务先检查 Key，再检查 Base URL；两项都缺失或为空时，先返回 `missing_api_key`，不代表 Base URL 已通过检查。排查仅记录进程或配置位置及变量是否存在、是否非空，不输出真实值；配置修复后再用最小必要事实验证请求。
+
+代理配置无效或客户端初始化失败返回 `client_initialization_failed`；请求超时返回 `api_timeout`，代理/网络连接失败通常返回 `api_connection_failed`，代理返回的 HTTP 错误可表现为 `api_status_error`。这些分类不包含原始异常或代理认证信息；排查时核对代理可用性、变量是否传入，以及目标是否被 `NO_PROXY` 排除，不以错误触发直连重试。
 
 ## 判断工具与硬校验
 

@@ -49,7 +49,7 @@ class EnvOnlyTests(unittest.TestCase):
             data = tomlkit.parse(text)
             server = data["mcp_servers"][setup.DEFAULT_SERVER]
             self.assertEqual(
-                server["env_vars"], ["KEEP", "OPENAI_API_KEY", "OPENAI_BASE_URL"]
+                server["env_vars"], ["KEEP", *setup.DEFAULT_ENV_NAMES]
             )
             self.assertEqual(server["approval"], "writes")
             self.assertEqual(server["env"], {"EXISTING": "kept"})
@@ -62,7 +62,7 @@ class EnvOnlyTests(unittest.TestCase):
             path = config(
                 Path(directory) / "custom.toml",
                 '[mcp_servers.demo]\ncommand = "runner"\nargs = []\n'
-                'env_vars = ["OPENAI_API_KEY", "OPENAI_BASE_URL"]\n',
+                'env_vars = ["' + '", "'.join(setup.DEFAULT_ENV_NAMES) + '"]\n',
             )
             before, mtime = path.read_bytes(), path.stat().st_mtime_ns
             with (
@@ -161,7 +161,7 @@ class EnvOnlyTests(unittest.TestCase):
                 setup._merge_config(path, "demo")
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual(path.stat().st_mtime_ns, mtime)
-            complete = prefix + 'env_vars=["OPENAI_API_KEY","OPENAI_BASE_URL"]\n'
+            complete = prefix + 'env_vars=[' + ','.join(f'"{name}"' for name in setup.DEFAULT_ENV_NAMES) + ']\n'
             path.write_text(complete, encoding="utf-8")
             before, mtime = path.read_bytes(), path.stat().st_mtime_ns
             self.assertFalse(setup._merge_config(path, "demo"))
@@ -280,7 +280,7 @@ class RegistrationTests(unittest.TestCase):
         parsed = tomllib.loads(self.config.read_text(encoding="utf-8"))
         self.assertEqual(
             parsed["mcp_servers"][setup.DEFAULT_SERVER]["env_vars"],
-            ["OPENAI_API_KEY", "OPENAI_BASE_URL"],
+            list(setup.DEFAULT_ENV_NAMES),
         )
         add_call = next(call for call, _env in self.calls if "add" in call)
         self.assertEqual(add_call[-2:], ["--", str(self.exe.resolve())])
@@ -314,7 +314,7 @@ class RegistrationTests(unittest.TestCase):
         parsed = tomllib.loads(self.config.read_text(encoding="utf-8"))
         server = parsed["mcp_servers"][setup.DEFAULT_SERVER]
         self.assertEqual(server["approval"], "writes")
-        self.assertEqual(server["env_vars"], ["OPENAI_API_KEY", "OPENAI_BASE_URL"])
+        self.assertEqual(server["env_vars"], list(setup.DEFAULT_ENV_NAMES))
 
     def test_replace_restores_stdio_settings_after_destructive_upsert(self) -> None:
         config(
@@ -360,7 +360,7 @@ class RegistrationTests(unittest.TestCase):
         ]
         self.assertTrue(server["enabled"])
         self.assertEqual(
-            server["env_vars"], ["KEEP", "OPENAI_API_KEY", "OPENAI_BASE_URL"]
+            server["env_vars"], ["KEEP", *setup.DEFAULT_ENV_NAMES]
         )
         self.assertEqual(server["env"], {"EXISTING": "safe"})
         self.assertEqual(server["default_tools_approval_mode"], "writes")

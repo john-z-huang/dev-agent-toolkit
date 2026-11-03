@@ -10,6 +10,8 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 from urllib.parse import urlsplit
 
+import httpx2
+
 from openai import (
     APIConnectionError,
     APIStatusError,
@@ -29,8 +31,31 @@ _LOG_REDACTION_MARKER = "[REDACTED]"
 
 
 def _redact_log_text(value: str) -> str:
-    """Redact current SDK credentials/endpoints without retaining them between records."""
-    for secret in (os.environ.get("OPENAI_API_KEY", "").strip(), os.environ.get("OPENAI_BASE_URL", "").strip()):
+    """Redact current API and proxy settings without retaining them between records."""
+    env_names = (
+        "OPENAI_API_KEY", "OPENAI_BASE_URL",
+        "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+        "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+    )
+    secrets: list[str] = [os.environ.get(name, "").strip() for name in env_names]
+    proxy_names = (
+        "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+        "http_proxy", "https_proxy", "all_proxy",
+    )
+    for name in proxy_names:
+        proxy = os.environ.get(name, "").strip()
+        if not proxy:
+            continue
+        try:
+            parsed_proxy = urlsplit(proxy if "://" in proxy else f"http://{proxy}")
+            secrets.extend((parsed_proxy.hostname or "", str(parsed_proxy.port or "")))
+            if parsed_proxy.username:
+                secrets.append(parsed_proxy.username)
+            if parsed_proxy.password:
+                secrets.append(parsed_proxy.password)
+        except ValueError:
+            continue
+    for secret in secrets:
         if secret:
             value = value.replace(secret, _LOG_REDACTION_MARKER)
     return value
@@ -121,15 +146,23 @@ def _make_client(payload: Any) -> tuple[OpenAI, str, str]:
         raise OpenAIWorkflowError("request_too_large")
     if api_key in payload_text or base_url in payload_text:
         raise OpenAIWorkflowError("sensitive_value_in_request")
+    http_client: httpx2.Client | None = None
     try:
+        http_client = httpx2.Client(trust_env=True)
         client = OpenAI(
             api_key=api_key,
             base_url=base_url,
             timeout=OPENAI_TIMEOUT_SECONDS,
             max_retries=0,
+            http_client=http_client,
         )
         return client, api_key, base_url
     except Exception:
+        if http_client is not None:
+            try:
+                http_client.close()
+            except Exception:
+                pass
         raise OpenAIWorkflowError("client_initialization_failed") from None
 
 
