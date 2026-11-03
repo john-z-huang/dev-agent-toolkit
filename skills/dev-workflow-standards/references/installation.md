@@ -46,11 +46,11 @@ uv tool install --force ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.w
 "$(uv tool dir --bin)/dev-workflow-standards" skills update --dry-run
 ```
 
-若该预览成功而裸命令失败，应在原报错终端检查同名命令的解析。即使没有激活虚拟环境，也可能因 `PATH` 顺序、别名、函数或命令缓存选中另一份安装。Zsh 中可先查看命令类型、搜索路径及 uv 工具目录：
+若该预览成功而裸命令失败，应在执行管理命令的 Bash 终端中检查同名命令的解析。即使没有激活虚拟环境，也可能因 `PATH` 顺序、别名、函数或命令缓存选中另一份安装。以下 Bash 命令分别查看命令类型、全部可执行文件路径及 uv 工具目录：
 
-```zsh
-whence -w dev-workflow-standards
-whence -pa dev-workflow-standards
+```bash
+type -t dev-workflow-standards
+type -a -p dev-workflow-standards
 uv tool dir --bin
 ```
 
