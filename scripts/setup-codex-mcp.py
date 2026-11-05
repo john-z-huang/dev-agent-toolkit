@@ -27,6 +27,7 @@ from tomlkit.exceptions import ParseError
 DEFAULT_SERVER = "dev-workflow-standards-tools"
 DEFAULT_ENV_NAMES = (
     "OPENAI_API_KEY", "OPENAI_BASE_URL",
+    "OPENAI_TIMEOUT_MAX_RETRIES",
     "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
     "http_proxy", "https_proxy", "all_proxy", "no_proxy",
 )

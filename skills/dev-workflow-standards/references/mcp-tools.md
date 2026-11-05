@@ -6,6 +6,8 @@
 
 ## OpenAI 判断与生成
 
+所有 Decisions、Responses 和输入审核请求共用 `OPENAI_TIMEOUT_SECONDS=180` 秒；仅请求超时在调用处立即串行重试，`OPENAI_TIMEOUT_MAX_RETRIES` 环境变量为非负整数，未设置默认 `5`、`0` 关闭，空值或非法值在请求前安全失败。默认最多 6 次 API 尝试，SDK 内部重试关闭；预算耗尽返回 `api_timeout`，其他错误不自动重试。Agent 不再叠加整工具重试，按恢复流程处理。MCP 外层工具时限须覆盖多阶段请求与各自重试；细则见 [请求边界](openai-workflow-tools.md#配置与请求边界)。
+
 以下工具通过 OpenAI Python SDK 调用固定的 `gpt-6-luna`，每次强制读取并显式使用 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，不提供模型或配置覆盖参数。API 工具具有 `open_world_hint=true`、`idempotent_hint=false`；只读注解表示不修改本地或 GitHub 资源，不表示没有外部 API 请求。接口失败、未知分支、拒绝或未完成的生成不能当作成功结果。
 
 所有 OpenAI 请求共用显式注入的 `httpx2.Client(trust_env=True)`，读取 MCP 进程的标准代理环境变量（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及小写形式）。配置适用代理且未匹配 `NO_PROXY` 时通过代理；无代理配置时按库默认直连，代理失败不回退直连。Codex 启动时须转发所需变量名并重新加载服务，详见 [代理与环境传递](openai-workflow-tools.md#codex-stdio-环境传递与排查)。

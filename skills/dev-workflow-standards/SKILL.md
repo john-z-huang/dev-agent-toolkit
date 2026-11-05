@@ -24,6 +24,8 @@ description: >-
 8. 工作流或会话事实存在语义分支、或需生成开发文案时，按 [`references/openai-workflow-tools.md`](references/openai-workflow-tools.md) 向专用 MCP 工具提交结构化事实、查询重点与输出要求。判断使用 Decisions API，生成使用 Responses API；核对返回结果后优化或采纳，不用模型结果替代本地硬校验或当前用户授权。
 9. 向外部 API 提供项目事实前，按 [`references/api-input-review.md`](references/api-input-review.md) 准备最小必要用途和完整内容。本服务的业务工具在统一客户端内自动审核实际出站内容，无需额外重复公开预检；其他调用方可使用 `check_api_input` 审核用途和拟发送的完整指令，并保证检查与发送内容一致。发现敏感内容、结果不确定或审核不可用时停止业务请求，按安全提示修订后重新审核。公开预检结果不能豁免服务端强制检查或后续内容变化。
 
+OpenAI/Decisions 请求统一等待超时为 180 秒，仅超时在调用处重试；`OPENAI_TIMEOUT_MAX_RETRIES` 未设置默认 5 次，0 关闭。工具最终返回 `api_timeout` 时内部预算已耗尽，按恢复流程处理，不叠加整工具自动重试；配置与失败边界见 [`OpenAI 请求边界`](references/openai-workflow-tools.md#配置与请求边界)。
+
 ## 授权边界
 
 - 加载本 Skill 不自动授权 Git 写入、Hook 配置、推送、Issue/PR、合并、删除、强制操作或历史重写。
