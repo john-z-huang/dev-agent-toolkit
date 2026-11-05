@@ -29,12 +29,17 @@ class SkillDistributionTests(unittest.TestCase):
             package.mkdir(parents=True)
             source = project / "skills" / "dev-workflow-standards"
             shutil.copytree(ROOT / "skills" / "dev-workflow-standards", source)
+            global_source = ROOT / "instructions" / "codex-global.md"
+            (project / "instructions").mkdir()
+            shutil.copy2(global_source, project / "instructions" / "codex-global.md")
             shutil.copytree(ROOT / "mcp-server" / "dev_workflow_standards_tools",
                             package / "dev_workflow_standards_tools",
                             ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "skill_bundle"))
             for name in ("pyproject.toml", "hatch_build.py"):
                 shutil.copy2(ROOT / "mcp-server" / name, package / name)
-            environment = {**os.environ, "OPENAI_API_KEY": "", "OPENAI_BASE_URL": ""}
+            global_home = (root / "user-home").resolve()
+            environment = {**os.environ, "OPENAI_API_KEY": "", "OPENAI_BASE_URL": "",
+                           "HOME": str(global_home)}
             environment.pop("PYTHONPATH", None)
 
             def run(argv, cwd=root, expected=0):
@@ -55,15 +60,20 @@ class SkillDistributionTests(unittest.TestCase):
                 extracted = root / f"extracted-{number}"
                 with tarfile.open(sdist) as archive:
                     self.assertTrue(any("skill-source/SKILL.md" in name for name in archive.getnames()))
+                    self.assertTrue(any(name.endswith("/global-instructions-source.md") for name in archive.getnames()))
                     self.assertFalse(any(".git/" in name or ".venv/" in name or "archive/" in name
                                          for name in archive.getnames()))
                     archive.extractall(extracted, filter="data")
                 rebuild_root = next(extracted.iterdir())
+                self.assertEqual((rebuild_root / "global-instructions-source.md").read_bytes(),
+                                 global_source.read_bytes())
                 # 重建位置旁边没有原仓库 skills 目录；仅使用 sdist 中的闭包。
                 run([sys.executable, "-m", "hatchling", "build", "-t", "wheel", "-d", str(artifacts)], rebuild_root)
                 wheel = next(artifacts.glob("*.whl"))
                 wheels.append(wheel)
                 with zipfile.ZipFile(wheel) as archive:
+                    global_resource = "dev_workflow_standards_tools/global_instructions/codex-global.md"
+                    self.assertEqual(archive.read(global_resource), global_source.read_bytes())
                     prefix = "dev_workflow_standards_tools/skill_bundle/"
                     manifest = json.loads(archive.read(prefix + "manifest.json"))
                     shipped = {name.removeprefix(prefix): archive.read(name)
@@ -123,6 +133,31 @@ class SkillDistributionTests(unittest.TestCase):
             (target / "user-notes.md").write_text("keep this")
             run([*args, "update", "--target", str(target)], expected=1)
             self.assertEqual((target / "user-notes.md").read_text(), "keep this")
+
+            # The isolated wheel contains the global template independently of
+            # the checkout. Required local links are satisfied only under the
+            # temporary HOME, and the command writes no real user files.
+            global_home.mkdir(parents=True, exist_ok=True)
+            global_skill = global_home / ".agents" / "skills" / "dev-workflow-standards-skill"
+            shutil.copytree(ROOT / "skills" / "dev-workflow-standards", global_skill)
+            rendered_source = global_source.read_text(encoding="utf-8").replace("{{HOME}}", str(global_home))
+            for link in re.findall(r"\]\(([^)]+)\)", rendered_source):
+                url = urlsplit(link)
+                if url.scheme or not url.path.startswith(str(global_home) + "/"):
+                    continue
+                dependency = Path(unquote(url.path))
+                dependency.parent.mkdir(parents=True, exist_ok=True)
+                if not dependency.exists():
+                    dependency.write_text("test local dependency\n", encoding="utf-8")
+            agent_args = [str(cli), "agents"]
+            agent_target = global_home / ".codex" / "AGENTS.md"
+            preview = json.loads(run([*agent_args, "update", "--dry-run"]).stdout)
+            self.assertEqual(preview["plan_action"], "create")
+            self.assertFalse(agent_target.parent.exists())
+            self.assertEqual(json.loads(run([*agent_args, "update"]).stdout)["status"], "updated")
+            self.assertTrue(agent_target.is_file())
+            show_agents = json.loads(run([*agent_args, "show"]).stdout)
+            self.assertEqual(show_agents["status"], "up_to_date")
 
 
 if __name__ == "__main__":

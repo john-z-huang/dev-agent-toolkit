@@ -42,6 +42,26 @@ uv tool install --force ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.w
 
 `dev-workflow-standards` 是独立管理入口；原 `dev-workflow-standards-tools` 仍直接启动 stdio MCP。安装 Skill 后，需要 MCP 功能的仍须按下一节注册服务。
 
+## 版本管理与更新全局 AGENTS.md
+
+全局指令的唯一源文件是 [`instructions/codex-global.md`](instructions/codex-global.md)，与仓库根目录的项目 `AGENTS.md` 分开维护。源文件中的 `{{HOME}}` 在更新时替换为当前用户的绝对主目录；不写入维护者的个人用户名。当前基线保留既有全局规则，仅修正为当前已安装 Skill 的入口和文档路径。规则变更应单独审阅。
+
+从仓库源文件预览并更新时，先按上文构建并安装包含本次修改的完整 wheel，再在仓库根目录执行：
+
+```bash
+"$(uv tool dir --bin)/dev-workflow-standards" agents show --source ./instructions/codex-global.md
+"$(uv tool dir --bin)/dev-workflow-standards" agents update --source ./instructions/codex-global.md --dry-run
+"$(uv tool dir --bin)/dev-workflow-standards" agents update --source ./instructions/codex-global.md --adopt
+```
+
+目标固定为当前用户的 `~/.codex/AGENTS.md`。首次接管已有文件须显式传入 `--adopt`；内容相同时只建立受管记录，不重写目标或创建备份，后续正常更新不需要该参数。不传 `--source` 时使用已安装发布包内的指令源，脱离开发仓库也能运行。`show` 返回状态和内容指纹，`--dry-run` 返回差异、冲突和预计备份名；两者均不创建目录、备份、锁文件或受管记录。正式更新前检查模板占位符及所引用的 Skill/文档；缺少依赖则停止，不自动安装或迁移 Skill。
+
+每次实际更新或覆盖已有目标前，默认将原文件逐字节备份到 `~/.codex/AGENTS_BAK_<秒级时间戳>.md`，其中时间戳为 Unix 秒数。备份失败或同一秒的备份名称已存在时停止，不覆盖旧备份、不增加后缀。目标不存在或内容相同时不创建备份。受管文件有本地修改时默认拒绝更新，审阅差异后可显式使用 `--replace-local`，仍须先备份。备份不会自动清理；需要恢复时先保留当前内容，再人工选择对应备份恢复。
+
+更新使用同目录临时文件原子替换目标，通过 `~/.codex/.AGENTS.md.global-agents.lock` 合作进程锁避免两个 CLI 同时更新，并以 `~/.codex/.AGENTS.md.dev-workflow-standards.json` 记录受管指纹。锁文件会保留以维持锁身份，不应在更新进程运行时删除。锁不阻止外部编辑器写入；更新期间应暂停其他写入者。目标与受管记录不能作为一个原子事务提交，发生中断或记录写入失败时应核对目标、受管记录和备份，不将失败视为成功。工具拒绝符号链接、硬链接和特殊文件，不修改其他 Codex 配置。
+
+安装软件包、更新 Skill 和更新全局指令是三个显式动作。更新全局指令不会注册 MCP 或启用 Hook，也不宣称当前运行会话已加载新规则；后续会话应使用更新后的指令。
+
 ## Codex 中安装
 
 推荐通过本仓库的 [Codex 安装配置脚本](scripts/setup-codex-mcp.py) 一次完成 uv tool 安装、MCP 注册和环境变量转发配置：
@@ -153,6 +173,7 @@ MCP 进程必须能继承上述两个 OpenAI 环境变量；需要代理时还�
 - `skills/dev-workflow-standards/workflows/`：场景判断、先后依赖、授权和完成条件。
 - `skills/dev-workflow-standards/references/`：按需加载的决策细节、独立安装说明和 MCP 工具映射。
 - `mcp-server/`：Python/uv MCP v2 stdio 服务和固定操作工具。
+- `instructions/codex-global.md`：版本化的全局指令源；通过独立 CLI 显式同步到用户目录。
 - `archive/mcp-server-ts/`：已归档且不再支持的历史 TypeScript MCP 实现；其历史说明见该目录的 [`README.md`](archive/mcp-server-ts/README.md)。
 - `scripts/`：Codex 安装配置脚本，以及供标准 Git Hook 集成使用的可移植校验资产；`.githooks/`：Hook 入口。
 
