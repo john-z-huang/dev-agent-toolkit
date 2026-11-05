@@ -22,6 +22,8 @@ from openai import (
     RateLimitError,
 )
 
+from . import api_input_policy
+
 
 MODEL_NAME = "gpt-6-luna"
 OPENAI_TIMEOUT_SECONDS = 30.0
@@ -96,15 +98,26 @@ _install_log_redaction()
 class OpenAIWorkflowError(Exception):
     """Sanitized API failure with no raw SDK exception or credential details."""
 
-    def __init__(self, error_code: str, status_code: int | None = None) -> None:
+    def __init__(
+        self,
+        error_code: str,
+        status_code: int | None = None,
+        *,
+        request_attempted: bool = False,
+        api_input_review: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(error_code)
         self.error_code = error_code
         self.status_code = status_code
+        self.request_attempted = request_attempted
+        self.api_input_review = api_input_review
 
     def as_result(self) -> dict[str, Any]:
         result: dict[str, Any] = {"error_code": self.error_code}
         if self.status_code is not None:
             result["status_code"] = self.status_code
+        if self.api_input_review is not None:
+            result["api_input_review"] = self.api_input_review
         return result
 
 
@@ -166,7 +179,7 @@ def _make_client(payload: Any) -> tuple[OpenAI, str, str]:
         raise OpenAIWorkflowError("client_initialization_failed") from None
 
 
-def _safe_api_error(error: Exception) -> OpenAIWorkflowError:
+def _safe_api_error(error: Exception, *, request_attempted: bool = False) -> OpenAIWorkflowError:
     if isinstance(error, AuthenticationError):
         code = "api_authentication_failed"
     elif isinstance(error, PermissionDeniedError):
@@ -182,21 +195,84 @@ def _safe_api_error(error: Exception) -> OpenAIWorkflowError:
     else:
         code = "api_request_failed"
     status = getattr(error, "status_code", None)
-    return OpenAIWorkflowError(code, status if isinstance(status, int) and not isinstance(status, bool) else None)
+    return OpenAIWorkflowError(
+        code,
+        status if isinstance(status, int) and not isinstance(status, bool) else None,
+        request_attempted=request_attempted,
+    )
 
 
-def _invoke(payload: Any, operation: Callable[[OpenAI], T]) -> T:
+def _invoke(
+    payload: Any,
+    operation: Callable[[OpenAI], T],
+    *,
+    purpose: str = "Assess structured development workflow facts under the supplied policy question.",
+    _skip_semantic_review: bool = False,
+) -> T:
+    payload_text = _payload_text(payload)
+    if len(payload_text.encode("utf-8", errors="replace")) > MAX_REQUEST_BYTES:
+        raise OpenAIWorkflowError("request_too_large")
+    # Delayed import keeps the one-way service -> client dependency intact. The reviewer
+    # uses this same boundary with a private recursion guard and cannot create a client itself.
+    from ..services.api_input_review import review_api_input
+
+    if not _skip_semantic_review:
+        review = review_api_input(purpose, payload_text)
+        if review.get("passed") is not True:
+            status = review.get("status")
+            error_code = review.get("error_code") or {
+                "blocked_local": "api_input_blocked_local",
+                "needs_revision": "api_input_needs_revision",
+                "insufficient_evidence": "api_input_insufficient_evidence",
+                "unavailable": "api_input_review_unavailable",
+            }.get(status, "api_input_review_unavailable")
+            details = {
+                key: review[key]
+                for key in (
+                    "status", "stage", "findings", "input_hash", "policy_version", "external_review_performed"
+                )
+                if key in review
+            }
+            api_status = review.get("api_status_code")
+            raise OpenAIWorkflowError(
+                error_code,
+                api_status if isinstance(api_status, int) and not isinstance(api_status, bool) else None,
+                api_input_review=details,
+            )
+    else:
+        local = api_input_policy.inspect_api_input(purpose, payload_text)
+        if not local["passed"]:
+            blocked = review_api_input(purpose, payload_text)
+            details = {
+                key: blocked[key]
+                for key in ("status", "stage", "findings", "input_hash", "policy_version", "external_review_performed")
+                if key in blocked
+            }
+            raise OpenAIWorkflowError(
+                blocked.get("error_code") or local.get("error_code") or "sensitive_input_detected",
+                api_input_review=details,
+            )
     client, api_key, base_url = _make_client(payload)
+    request_attempted = False
     try:
+        # From this point the SDK may have transmitted the request even when it later times out.
+        request_attempted = True
         response = operation(client)
         response_text = _payload_text(response.model_dump(mode="json") if hasattr(response, "model_dump") else response)
         if api_key in response_text or base_url in response_text:
             raise OpenAIWorkflowError("sensitive_value_in_response")
         return response
-    except OpenAIWorkflowError:
+    except OpenAIWorkflowError as error:
+        if request_attempted and not error.request_attempted:
+            raise OpenAIWorkflowError(
+                error.error_code,
+                error.status_code,
+                request_attempted=True,
+                api_input_review=error.api_input_review,
+            ) from None
         raise
     except Exception as error:
-        raise _safe_api_error(error) from None
+        raise _safe_api_error(error, request_attempted=request_attempted) from None
     finally:
         try:
             client.close()
@@ -204,12 +280,46 @@ def _invoke(payload: Any, operation: Callable[[OpenAI], T]) -> T:
             pass
 
 
-def create_decision(input: list[dict[str, str]], questions: list[dict[str, Any]]) -> Any:
+def create_decision(
+    input: list[dict[str, str]],
+    questions: list[dict[str, Any]],
+    *,
+    purpose: str = "Assess structured development workflow facts under the supplied decision question.",
+) -> Any:
     """Call the Decisions API without reasoning, store, or arbitrary option fields."""
-    payload = {"input": input, "questions": questions}
+    # Freeze one JSON-safe snapshot and send those exact copied values after the gate.
+    payload = {
+        "model": MODEL_NAME,
+        "input": json.loads(_payload_text(input)),
+        "questions": json.loads(_payload_text(questions)),
+    }
     return _invoke(
         payload,
-        lambda client: client.decisions.create(model=MODEL_NAME, input=input, questions=questions),
+        lambda client: client.decisions.create(
+            model=MODEL_NAME,
+            input=payload["input"],
+            questions=payload["questions"],
+        ),
+        purpose=purpose,
+    )
+
+
+def _create_policy_review_decision(*, purpose: str, content: str, questions: list[dict[str, Any]]) -> Any:
+    """Private semantic-review path: same client/config/local gates, without recursive review."""
+    payload = {
+        "model": MODEL_NAME,
+        "input": [{"role": "user", "content": content}],
+        "questions": json.loads(_payload_text(questions)),
+    }
+    return _invoke(
+        payload,
+        lambda client: client.decisions.create(
+            model=MODEL_NAME,
+            input=payload["input"],
+            questions=payload["questions"],
+        ),
+        purpose=purpose,
+        _skip_semantic_review=True,
     )
 
 
@@ -220,19 +330,48 @@ def parse_response(
     text_format: type,
     reasoning_effort: str,
     max_output_tokens: int,
+    purpose: str = "Generate a structured candidate from caller-provided source material.",
 ) -> Any:
     """Call Responses.parse with fixed model, explicit effort, and no storage/truncation."""
-    payload = {"instructions": instructions, "input": input}
+    if not hasattr(text_format, "model_json_schema"):
+        raise OpenAIWorkflowError("invalid_response_schema")
+    try:
+        schema = json.loads(_payload_text(text_format.model_json_schema()))
+        schema_snapshot = _payload_text(schema)
+    except Exception:
+        raise OpenAIWorkflowError("invalid_response_schema") from None
+
+    def frozen_model_json_schema(cls: type, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        # The SDK's parse helper derives its strict wire schema from this method. Return a fresh
+        # copy of the already checked snapshot so mutable class metadata cannot diverge mid-call.
+        return json.loads(schema_snapshot)
+
+    frozen_text_format = type(
+        f"{text_format.__name__}OutboundSnapshot",
+        (text_format,),
+        {"model_json_schema": classmethod(frozen_model_json_schema)},
+    )
+    payload = {
+        "model": MODEL_NAME,
+        "instructions": str(instructions),
+        "input": str(input),
+        "text_format": schema,
+        "reasoning": {"effort": str(reasoning_effort)},
+        "store": False,
+        "max_output_tokens": int(max_output_tokens),
+        "truncation": "disabled",
+    }
     return _invoke(
         payload,
         lambda client: client.responses.parse(
             model=MODEL_NAME,
-            instructions=instructions,
-            input=input,
-            text_format=text_format,
-            reasoning={"effort": reasoning_effort},
+            instructions=payload["instructions"],
+            input=payload["input"],
+            text_format=frozen_text_format,
+            reasoning=payload["reasoning"],
             store=False,
-            max_output_tokens=max_output_tokens,
+            max_output_tokens=payload["max_output_tokens"],
             truncation="disabled",
         ),
+        purpose=purpose,
     )

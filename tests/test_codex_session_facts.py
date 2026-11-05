@@ -415,12 +415,12 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
         self.assertTrue(tool.annotations.open_world_hint)
         self.assertFalse(tool.annotations.idempotent_hint)
 
-    async def test_all_32_tools_registered_with_described_schemas(self) -> None:
+    async def test_all_33_tools_registered_with_described_schemas(self) -> None:
         self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
         tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 32)
+        self.assertEqual(len(tools), 33)
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 32)
+        self.assertEqual(len(by_name), 33)
         for tool in tools:
             self.assertTrue(tool.description, tool.name)
 
@@ -445,6 +445,7 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             "decide_skill_workflow",
             "decide_codex_session_action",
             "generate_skill_content",
+            "check_api_input",
         }
         names = deterministic_names | ai_names
         self.assertTrue(names.issubset(by_name))

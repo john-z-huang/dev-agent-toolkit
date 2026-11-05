@@ -13,6 +13,9 @@ import tomllib
 import unittest
 from unittest.mock import patch
 
+from mcp import Client
+from dev_workflow_standards_tools.server import mcp
+
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("codex_sdk_smoke", Path(__file__).with_name("codex_sdk_smoke.py"))
@@ -49,11 +52,233 @@ class CodexSDKContractTests(unittest.TestCase):
         self.assertFalse(provider["requires_openai_auth"])
         self.assertEqual(provider["request_max_retries"], 0)
         self.assertEqual(environment["OPENAI_API_KEY"], configuration["OPENAI_API_KEY"])
-        self.assertEqual(config["mcp_servers"][smoke.SERVER]["enabled_tools"], [smoke.TOOL])
+        self.assertEqual(config["mcp_servers"][smoke.SERVER]["enabled_tools"], [smoke.TOOL, smoke.CHECK_API_TOOL])
         self.assertNotIn(configuration["OPENAI_API_KEY"], "\n".join(smoke.overrides(config)))
         # SDK 命令行覆盖值必须是合法 TOML，并保留全部受控字段。
         parsed = tomllib.loads("\n".join(smoke.overrides(config)))
         self.assertEqual(parsed, config)
+
+    def test_settings_uses_the_selected_installed_executable_directly(self):
+        executable = Path("/synthetic/uv/tools/server/bin/dev-workflow-standards-tools")
+        config, _ = smoke.settings(
+            Path("/synthetic/root"),
+            Path("/synthetic/site"),
+            {"OPENAI_API_KEY": "fake", "OPENAI_BASE_URL": "https://example.invalid/v1"},
+            server_executable=executable,
+        )
+        server = config["mcp_servers"][smoke.SERVER]
+        self.assertEqual(server["command"], str(executable))
+        self.assertEqual(server["args"], [])
+        self.assertIn(smoke.CHECK_API_TOOL, server["enabled_tools"])
+
+    def _check_api_input_schema(self):
+        fields = {
+            name: {"type": "string", "minLength": 1, "maxLength": smoke.API_FIELD_LIMIT}
+            for name in ("purpose", "content")
+        }
+        return {
+            "type": "object",
+            "properties": {"request": {"$ref": "#/$defs/ApiInputReviewRequest"}},
+            "required": ["request"],
+            "$defs": {
+                "ApiInputReviewRequest": {
+                    "type": "object",
+                    "properties": fields,
+                    "required": ["purpose", "content"],
+                    "additionalProperties": False,
+                },
+            },
+        }
+
+    def test_check_api_input_schema_requires_only_two_fields_and_no_extras(self):
+        schema = self._check_api_input_schema()
+        smoke.check_api_input_schema({"inputSchema": schema})
+        invalid = copy.deepcopy(schema)
+        invalid["$defs"]["ApiInputReviewRequest"]["required"] = ["purpose"]
+        with self.assertRaisesRegex(smoke.SmokeFailure, "check_api_input_schema_mismatch"):
+            smoke.check_api_input_schema({"inputSchema": invalid})
+        invalid = copy.deepcopy(schema)
+        invalid["$defs"]["ApiInputReviewRequest"]["additionalProperties"] = True
+        with self.assertRaisesRegex(smoke.SmokeFailure, "check_api_input_schema_mismatch"):
+            smoke.check_api_input_schema({"inputSchema": invalid})
+
+    def test_check_api_input_result_requires_local_absolute_path_block(self):
+        result = {
+            "isError": False,
+            "structuredContent": {
+                "passed": False,
+                "status": "blocked_local",
+                "stage": "local",
+                "external_review_performed": False,
+                "error_code": "sensitive_input_detected",
+                "findings": [{"field": "content", "rule_id": "path.absolute_local"}],
+            },
+        }
+        smoke.check_api_input_result(result)
+        for field, value in (("external_review_performed", True), ("status", "passed")):
+            invalid = copy.deepcopy(result)
+            invalid["structuredContent"][field] = value
+            with self.subTest(field=field), self.assertRaises(smoke.SmokeFailure):
+                smoke.check_api_input_result(invalid)
+
+    def test_sdk_driver_discovers_schema_and_calls_installed_issue_tool_locally(self):
+        schema = self._check_api_input_schema()
+        installed_executable = Path("/synthetic/uv/tools/server/bin/dev-workflow-standards-tools")
+        installed_info = {
+            "path": str(installed_executable),
+            "version": "0.2.0",
+            "module": "/synthetic/uv/tools/server/lib/site-packages/dev_workflow_standards_tools/server.py",
+        }
+
+        class FakeClient:
+            instances = []
+
+            def __init__(self, config):
+                self.config = config
+                self.requests = []
+                self.closed = False
+                self.instances.append(self)
+
+            def __enter__(self): return self
+            def __exit__(self, *args): self.close()
+            def close(self): self.closed = True
+            def initialize(self): pass
+
+            def thread_start(self, params):
+                return SimpleNamespace(
+                    model=smoke.MODEL,
+                    reasoning_effort=SimpleNamespace(value=smoke.EFFORT),
+                    model_provider="sdk_test",
+                    thread=SimpleNamespace(id="synthetic-thread"),
+                )
+
+            def request(self, method, params, response_model=None):
+                self.requests.append((method, params))
+                if method == "mcpServerStatus/list":
+                    return SimpleNamespace(data=[SimpleNamespace(
+                        name=smoke.SERVER,
+                        tools_error=None,
+                        tools={
+                            smoke.TOOL: {"name": smoke.TOOL, "inputSchema": {"type": "object"}},
+                            smoke.CHECK_API_TOOL: {"name": smoke.CHECK_API_TOOL, "inputSchema": schema},
+                        },
+                        server_capabilities={"tools": {}},
+                    )])
+                if params["tool"] == smoke.TOOL:
+                    return {
+                        "isError": False,
+                        "structuredContent": {
+                            "ok": True,
+                            "questions": smoke.ARGUMENTS["custom_questions"],
+                            "template": smoke.ARGUMENTS["custom_template"],
+                        },
+                    }
+                if params["tool"] == smoke.CHECK_API_TOOL:
+                    return {
+                        "isError": False,
+                        "structuredContent": {
+                            "passed": False,
+                            "status": "blocked_local",
+                            "stage": "local",
+                            "external_review_performed": False,
+                            "error_code": "sensitive_input_detected",
+                            "findings": [{"field": "content", "rule_id": "path.absolute_local"}],
+                        },
+                    }
+                raise AssertionError("unexpected tool")
+
+        modules = {
+            "openai_codex": SimpleNamespace(CodexConfig=lambda **kwargs: kwargs),
+            "openai_codex.client": SimpleNamespace(CodexClient=FakeClient),
+            "openai_codex.generated.v2_all": SimpleNamespace(
+                ListMcpServerStatusResponse=object,
+                McpServerToolCallResponse=object,
+            ),
+        }
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(sys.modules, modules):
+            result = smoke.execute_sdk(
+                Path(temporary),
+                Path(installed_info["module"]).parent.parent,
+                {"OPENAI_API_KEY": "fake", "OPENAI_BASE_URL": "https://example.invalid/v1"},
+                installed_info=installed_info,
+            )
+        client = FakeClient.instances[-1]
+        calls = [params for method, params in client.requests if method == "mcpServer/tool/call"]
+        self.assertEqual([call["tool"] for call in calls], [smoke.TOOL, smoke.CHECK_API_TOOL])
+        self.assertEqual(calls[-1]["arguments"], smoke.CHECK_API_ARGUMENTS)
+        self.assertIn(installed_info["path"], "\n".join(client.config["config_overrides"]))
+        server_env = "\n".join(client.config["config_overrides"])
+        self.assertIn('mcp_servers.dev-workflow-standards-tools.env.OPENAI_API_KEY=""', server_env)
+        self.assertIn('mcp_servers.dev-workflow-standards-tools.env.OPENAI_BASE_URL=""', server_env)
+        self.assertEqual(result["installed_version"], "0.2.0")
+        self.assertEqual(result["check_api_input_schema"], "passed")
+        self.assertEqual(result["check_api_input_local_call"], "passed")
+
+    def _fake_installed_entrypoint(self, root: Path) -> tuple[Path, Path, Path]:
+        binary_dir = root / "tool" / "bin"
+        binary_dir.mkdir(parents=True)
+        executable = binary_dir / "dev-workflow-standards-tools"
+        interpreter = binary_dir / "python"
+        managed_python = root / "managed-python" / "bin" / "python3.14"
+        managed_python.parent.mkdir(parents=True)
+        managed_python.write_text("synthetic managed interpreter\n", encoding="utf-8")
+        managed_python.chmod(0o755)
+        executable.write_text(
+            "#!/bin/sh\n"
+            f"'''exec' '{interpreter}' \"$0\" \"$@\"\n"
+            "' '''\n"
+            "from dev_workflow_standards_tools.server import main\n",
+            encoding="utf-8",
+        )
+        executable.chmod(0o755)
+        interpreter.symlink_to(managed_python)
+        module = root / "tool" / "lib" / "python3.14" / "site-packages" / "dev_workflow_standards_tools" / "server.py"
+        module.parent.mkdir(parents=True)
+        module.write_text("# synthetic installed module\n", encoding="utf-8")
+        return executable, interpreter, module
+
+    def test_installed_executable_is_resolved_to_its_versioned_uv_tool_package(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            executable, interpreter, module = self._fake_installed_entrypoint(Path(temporary))
+            with patch.object(smoke.subprocess, "run", return_value=SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"version": "0.2.0", "server": str(module)}),
+            )) as process:
+                installed = smoke.inspect_installed_executable(executable)
+                interpreter_is_symlink = interpreter.is_symlink()
+                interpreter_target_exists = interpreter.resolve().is_file()
+        self.assertEqual(installed["path"], str(executable.resolve()))
+        self.assertEqual(installed["version"], "0.2.0")
+        call = process.call_args
+        self.assertEqual(call.args[0][0], str(interpreter))
+        self.assertTrue(interpreter_is_symlink)
+        self.assertTrue(interpreter_target_exists)
+        self.assertEqual(call.args[0][1:3], ["-I", "-c"])
+        self.assertEqual(call.kwargs["env"], {"PATH": os.defpath})
+
+    def test_installed_version_mismatch_stops_before_sdk_startup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            executable, _, module = self._fake_installed_entrypoint(Path(temporary))
+            with patch.dict(os.environ, {"OPENAI_API_KEY": "fake", "OPENAI_BASE_URL": "https://example.invalid/v1"}, clear=True), \
+                 patch.object(smoke.subprocess, "run", return_value=SimpleNamespace(
+                     returncode=0,
+                     stdout=json.dumps({"version": "9.9.9", "server": str(module)}),
+                 )), patch.object(smoke, "execute_sdk") as sdk:
+                with self.assertRaisesRegex(smoke.SmokeFailure, "installed_package_mismatch"):
+                    smoke.run(installed_executable=executable)
+        sdk.assert_not_called()
+
+    def test_installed_mode_uses_exact_executable_and_skips_package_install(self):
+        executable = Path("/synthetic/uv/tools/server/bin/dev-workflow-standards-tools")
+        installed = {"path": str(executable), "version": "0.2.0", "module": "/synthetic/uv/tools/server/site-packages/dev_workflow_standards_tools/server.py"}
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "fake", "OPENAI_BASE_URL": "https://example.invalid/v1"}, clear=True), \
+             patch.object(smoke, "inspect_installed_executable", return_value=installed), \
+             patch.object(smoke, "execute_sdk", return_value={"ok": True}) as sdk, \
+             patch.object(smoke.subprocess, "run") as process:
+            self.assertEqual(smoke.run(installed_executable=executable), {"ok": True})
+        process.assert_not_called()
+        self.assertEqual(sdk.call_args.kwargs["installed_info"], installed)
+        self.assertEqual(sdk.call_args.args[1], Path(installed["module"]).parent.parent)
 
     def test_model_words_without_real_tool_event_cannot_pass(self):
         with self.assertRaisesRegex(smoke.SmokeFailure, "missing_actual_mcp_call"):
@@ -115,6 +340,15 @@ class CodexSDKContractTests(unittest.TestCase):
         self.assertFalse(any("codex" in item for item in project["project"]["dependencies"]))
         for source in (ROOT / "mcp-server" / "dev_workflow_standards_tools").rglob("*.py"):
             self.assertNotIn("openai_codex", source.read_text())
+
+
+class CodexSDKDiscoveredSchemaTests(unittest.IsolatedAsyncioTestCase):
+    async def test_helper_accepts_the_real_mcp_discovery_schema(self):
+        async with Client(mcp, raise_exceptions=True) as client:
+            listed = await client.list_tools()
+        tool = next(item for item in listed.tools if item.name == smoke.CHECK_API_TOOL)
+        actual_tool = tool.model_dump(mode="json", by_alias=True)
+        smoke.check_api_input_schema(actual_tool)
 
 
 if __name__ == "__main__":

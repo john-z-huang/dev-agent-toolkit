@@ -6,6 +6,8 @@ from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
 from ..services import ai_workflow
+from ..services.api_input_review import ApiInputReviewRequest
+from ..services import api_input_review
 from ..services.ai_workflow import (
     ContentGenerationRequest,
     SessionDecisionRequest,
@@ -29,6 +31,11 @@ def generate_skill_content(request: ContentGenerationRequest) -> dict:
     return ai_workflow.generate_skill_content(request)
 
 
+def check_api_input(request: ApiInputReviewRequest) -> dict:
+    """本地阻断凭据/路径后审查拟外发的完整purpose与content；只返回审核建议，不代发业务请求。"""
+    return api_input_review.check_api_input(request)
+
+
 def register_ai_workflow_tools(server: MCPServer) -> None:
     """注册只读但会访问外部 OpenAI API 的语义工具。"""
     annotations = ToolAnnotations(
@@ -37,5 +44,5 @@ def register_ai_workflow_tools(server: MCPServer) -> None:
         idempotent_hint=False,
         open_world_hint=True,
     )
-    for service in (decide_skill_workflow, decide_codex_session_action, generate_skill_content):
+    for service in (decide_skill_workflow, decide_codex_session_action, generate_skill_content, check_api_input):
         _register_adapter(server, service, annotations)

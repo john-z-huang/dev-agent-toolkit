@@ -13,6 +13,14 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 
 接口依据：[Decisions](https://developers.openai.com/api/docs/guides/decisions)、[创建判断](https://developers.openai.com/api/reference/resources/decisions/methods/create)、[结构化输出](https://developers.openai.com/api/docs/guides/structured-outputs)、[GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna)。
 
+### 项目数据使用与发送前审核
+
+在用户已授权的任务、数据和目的地范围内，允许提供完成任务必需的非敏感真实项目事实，无需对同一范围逐次重复确认。授权范围不能由配置存在、用途声明、模型判断或工具注解推断。只提交必要事实；将外发文本中的完整本机路径改为仓库相对路径，移除凭据、认证材料和无关日志。`repo_path` 等本地操作参数仍按其工具 Schema 传入，不能因外发文本规则擅自破坏本地路径要求。
+
+`check_api_input` 只接收用途 `purpose` 和完整指令 `content`，两者均审核；先运行本地静态检测，失败时不会创建 HTTP/SDK 客户端或发送审核请求，通过后才在已有外发授权内调用 Decisions。本服务也对真实业务请求的最终内容执行门禁，覆盖业务 Decisions、首次生成和二次质量审查，不依赖调用者是否先执行公开预检。检查与发送保持同一内容快照；内容变化后重新检查，不复用旧的通过结果。
+
+审核调用本身免于重复语义审核以避免递归，但仍受统一客户端的配置、本地检测和脱敏规则约束。审核拒绝、异常或结果不完整不能进入业务请求。新门禁会增加 API 调用，普通离线测试应分别模拟审核与业务请求。详细协议、状态及跨 MCP 服务边界见 [`API 输入审核`](api-input-review.md)。
+
 ### Codex stdio 环境传递与排查
 
 安装为 uv tool 后，服务仍只读取自身进程的环境变量。Codex 主进程需要持有非空的 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，并在 `[mcp_servers.dev-workflow-standards-tools]` 中通过 `env_vars` 显式允许转发这两个名称。需要网络代理时，还应转发 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及其小写名称，使已配置的值进入 MCP 子进程。使用更新后的源码 setup 脚本时，这些名称会自动合并；已有注册可用下述 `--env-only` 补齐。脚本入口与独立 Skill 安装的区别见 [安装说明](installation.md#mcp-与源码辅助脚本)，字段语义见 [Codex MCP 官方说明](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)。终端中手动运行成功，只能证明该次进程拿到了配置，不能证明 Codex 启动的 MCP 子进程也收到了配置。
