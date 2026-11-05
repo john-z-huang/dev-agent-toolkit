@@ -48,6 +48,7 @@
 | `check_staged_changes` | `repo_path` | 固定执行暂存区空白检查，不运行测试。 |
 | `audit_repository_state` | `repo_path` | 读取 Git 根目录、分支、状态、remote 名称及 GitHub Fork/default branch；不输出 remote URL。 |
 | `list_repository_worktrees` | `repo_path` | 读取 worktree 路径、HEAD 和分支。 |
+| `audit_worktree_base_sync` | `repo_path`, `base_ref`, `remote?` | 本地快照审计 head/base OID、merge-base、ahead/behind 和阻塞状态；`remote=null` 默认不联网、发布状态 unknown，提供已配置 remote 名称时 live 查询同名需求分支的发布状态，不 fetch。 |
 | `capture_untracked_file_manifest` | `repo_path` | 返回未忽略未跟踪普通文件的相对路径、SHA-256 和大小；不复制/保存；拒绝符号链接和特殊文件。 |
 | `list_github_issue_labels` | `repo_path`, `repo?` | 读取仓库最多 100 个现有 Issue label。 |
 | `audit_issue_pr_policy` | `repo_path`, `repo?`, `issue_number?`, `pr_number?`, `expected_base?`, `expected_head?` | 只读检查 Issue/PR 开放状态、PR base/head 和正文关联；至少提供 Issue 或 PR 编号。 |
@@ -64,12 +65,66 @@
 | `create_repository_branch` | `repo_path`, `branch_name`, `expected_head_oid?` | 从当前 HEAD 原地创建并切换新分支，支持 detached/普通分支及已有修改；以旧 OID 条件的 Git 引用事务保护，不创建其他 checkout。详细约束见下节。 |
 | `pull_origin_branch_fast_forward` | `repo_path`, `branch_name` | 当前同名分支执行 `origin` 快进拉取；tracked changes 时拒绝。 |
 | `fetch_upstream_branch` | `repo_path`, `branch_name` | 获取 `upstream` 的指定分支；要求 remote 已存在，不合并/推送。 |
+| `fetch_repository_branch` | `repo_path`, `remote`, `branch_name` | 获取已配置 remote 的指定分支对象与 FETCH_HEAD，校验不回退后按旧 OID 条件更新明确的 remote-tracking ref；不切换 checkout、不修改本地 base 分支、不合并/推送。采用成功回读的 `fetch_ref`、`fetched_oid` 和 `fetched_at`；失败也可能已获取对象/写入 FETCH_HEAD。 |
 | `merge_upstream_branch_fast_forward` | `repo_path`, `branch_name` | 将已获取的 `upstream` 同名分支快进合入当前同名分支；要求工作区干净。 |
-| `rebase_repository_branch` | `repo_path`, `branch_name`, `base_branch` | 将指定当前分支 rebase 到本地 base；要求两分支存在且工作区干净。冲突不自动继续或回滚。 |
+| `rebase_repository_branch` | `repo_path`, `branch_name`, `base_branch`, `expected_head_oid?`, `expected_base_oid?`, `old_base_oid?`, `remote?` | 当前干净需求分支 rebase 到核验的本地 base 引用或完整提交 OID；live 核验 remote 上同名分支未发布，已发布或未知时拒绝。可指定旧边界仅重放后续提交；冲突保留现场，不自动恢复。 |
+| `merge_repository_branch` | `repo_path`, `branch_name`, `base_ref`, `expected_head_oid`, `expected_base_oid`, `remote?` | 在准确需求 checkout 快进或普通 merge，保留已发布提交；要求显式预期 head/base OID，核对发布状态与远端 tip。冲突保留现场，不自动 rebase 或推送。 |
+| `continue_repository_merge` | `repo_path`, `operation_id`, `expected_current_head_oid`, `expected_state_fingerprint` | 核对本服务管理的merge记录及最新快照，要求已解决并正确暂存，再执行一次原生continue；不自动暂存或解决冲突。 |
+| `continue_repository_rebase` | 同上 | 核对受管理的简单rebase及最新快照，重新live核实记录中的remote同名分支未发布，再执行一次continue；可能停在下一冲突，不自动循环或skip。 |
+| `abort_repository_merge` | 上述四项及必填 `confirm_discard_resolution_work` | 明确授权撤销并确认丢弃本次解决内容后，离线执行一次原生merge abort；核对恢复原分支/head，不清理无关文件。 |
+| `abort_repository_rebase` | 同上 | 同样核对受管理rebase及丢弃范围，离线执行原生rebase abort；不以reset、stash或手工元数据改写作为后备。 |
 | `create_repository_worktree` | `repo_path`, `target_worktree_path`, `branch_name`, `base_branch` | 在不存在的绝对目标路径创建新分支/worktree；要求起点存在、分支合规且未被检出。 |
 | `remove_repository_worktree` | `repo_path`, `target_worktree_path`, `branch_name` | 按精确路径和分支身份移除干净 worktree；不删除本地分支或远端分支，不强制清理。 |
 | `copy_untracked_files_to_worktree` | `repo_path`, `target_worktree_path`, `manifest` | 从清单按相对路径复制到同仓库 worktree；复制前复核大小、指纹和未跟踪状态，拒绝覆盖/路径穿越/symlink。失败时可能已有部分文件复制，按返回清单检查。 |
 | `configure_project_hooks_path` | `repo_path` | 要求 `.githooks/pre-commit` 和 `commit-msg` 已存在，且配置未指向其他路径；设置仓库本地 `core.hooksPath`。不复制 Hook 资产。 |
+
+### 已有 worktree 的基线同步工具
+
+完整顺序和策略见 [`worktree-base-sync.md`](worktree-base-sync.md)：审计仓库/实际 PR base → 在授权内 fetch → 审计需求 checkout → 固定并复核 OID → 已发布 merge、未发布 rebase → 重新验证。所有这些工具均不调用 OpenAI、不读会话、不写 Memory；fetch/merge/rebase 不包含 GitHub 推送或 PR base 更新。
+
+- `base_ref` / rebase 的 `base_branch`：明确的本地分支、完整 `refs/heads/...`、`refs/remotes/...` 或完整提交 OID；不接受任意 revision 表达式或命令。使用刚获取的 `fetch_ref` 时同时传 `fetched_oid` 作为预期 base OID。直接使用 OID固定提交时，另行核对其来源引用是否已变化。
+- `remote`：已有配置的 remote 名称，不是 URL；审计默认 `null`，表示不联网而非“未发布”。rebase 的默认值为 `origin`；缺少配置、网络失败或结果未知时停止，不提供本地模式豁免。实际 live 查询仅核验该 remote 的同名分支；其他已知 PR、协作者和下游依赖仍由调用方核对。不要将 `null`、空字符串与省略混用。
+- `expected_head_oid` / `expected_base_oid`：完整 40/64 位十六进制提交 OID，merge 必填；rebase 可省略或 `null` 以兼容旧调用，但本流程必须提供刚核验的值。可选参数省略时使用调用时捕获的状态，不能据此声称比较过先前审计。写入前状态改变须重新审计。
+- `old_base_oid`：rebase 可省略或 `null`；提供时为已核验的旧父分支边界完整 OID，要求属于当前 head 的祖先，用于 `--onto`。工具校验祖先关系，不判断提交的业务归属或证明父 PR 已 squash 集成。
+- 审计关系状态为 `up_to_date`（head 包含 base）、`fast_forwardable`（head 落后且可快进）、`diverged`（双方各有独有提交）；`blocked` 表示状态不允许同步，`unknown` 表示所需事实无法确认。`ahead_by` / `behind_by` 相对于所给 base，不能当作相对于远端需求分支的计数。发布状态与提交图关系分别核对。
+- `ok=true` 仅表示对应工具的观测或动作及回读满足条件。snapshot/fetch 时间和 OID 不是远端永不变化的保证。失败先检查 `error_code`、冲突路径和 `needs_review`；已执行但回读失败不能当作未发生写入，不盲目重试。成功也不代表项目测试通过。
+- fetch 不依赖“没有 `+` 就不会回退”的假设：下载和最终 remote-tracking 引用更新分别核验。旧目标为符号引用、回退/分叉或条件更新时 OID 已改变均停止；下载阶段的对象和 FETCH_HEAD 副作用不自动回滚，也不代表最终目标引用已成功更新。
+- 写工具使用共同 Git 目录下的协作锁并在动作前复核状态；这不锁定所有外部 Git 进程或普通文件编辑。默认不更新其他分支，不隐式 stash；正常 hooks 继续执行。受限continue/abort需按下节单独决定和调用，不自动恢复，不封装自动冲突解决或强推。
+- 新同步工具的远端 Git 子进程禁止终端凭据提示，超时为 120 秒；超时返回安全错误而非原始远端异常。fetch 超时也可能留下下载对象或 FETCH_HEAD 变化，先回读，不自动重试整个工具。
+
+最小调用顺序（合成数据；执行前核对目标并满足写入授权）：
+
+```json
+{"repo_path":"/workspace/topic","remote":"origin","branch_name":"main"}
+```
+
+以上传给 `fetch_repository_branch`。采用返回的 `fetch_ref` 后审计：
+
+```json
+{"repo_path":"/workspace/topic","base_ref":"refs/remotes/origin/main","remote":"origin"}
+```
+
+已发布分支将审计得到的完整 `head_oid`、`base_oid` 分别传入 `merge_repository_branch` 的两个必填预期 OID；未发布分支将同样值传入 rebase，且将 `base_ref` 放入兼容参数 `base_branch`。不要复制示例路径或编造 OID。
+
+### 受管理操作的 continue/abort
+
+详细顺序见 [`worktree-recovery.md`](worktree-recovery.md)。服务在开始 merge/rebase 前建立当前 worktree Git 目录专属记录；冲突或结果不确定时保留。恢复前用固定 `base_oid` 作为 `base_ref` 调用审计，省略 `remote` 或传 `null`，读取 `recovery_context` 和 `current_state_fingerprint`。未完成操作使顶层同步 `status=blocked`；应单独核对恢复状态，不能要求它先变成 `up_to_date`。无记录、损坏、跨 worktree、未知复杂操作或原生状态不一致时不自动接管；任何恢复上下文本身都不提供写入授权。
+
+- 四个工具的 `repo_path` 都是准确 checkout 绝对根目录；`operation_id` 取最新 `recovery_context.operation_id`，不是自定义名称。`expected_current_head_oid` 取同一上下文的 `current_head_oid`，为当前完整 40/64 位提交 OID；rebase 中途可能是临时 detached HEAD，不能用 `original_head_oid` 代替。
+- `expected_state_fingerprint` 是重新审计得到的当前状态指纹，覆盖恢复记录、原生Git操作状态、index和相关工作目录内容；修改文件、暂存或操作状态变化后重新审计。指纹不是密码、全局锁或业务正确性证明，不能在其他checkout或其他操作上复用。
+- 操作 ID 为记录生成的规范 UUID，状态指纹为 64 位小写十六进制 SHA-256；不要自行生成或缩短。恢复校验有界：记录 256 KiB、单个原生元数据 1 MiB、index 16 MiB、单个工作文件 8 MiB、工作文件合计 32 MiB、4096 路径、20000 待重放提交；超限或无法安全读取不视为通过。
+- `confirm_discard_resolution_work` 是两个abort工具必填的布尔值，必须明确为 `true`。`false`、`null`、省略均不表示同意丢弃；工具参数不能替代用户对撤销和丢弃范围的实际授权。abort可能丢弃本次操作的已暂存及未暂存解决内容，不能用于只读探测。
+- continue只接受已解决并暂存、无未合并index和未暂存解决内容的受支持状态；不stage、不编辑、不skip、不接收任意Git参数或编辑器命令。rebase continue仅查询记录中的remote，不允许调用时改换查询对象；发布未知、联网失败或已发布均停止。abort不联网，远端不可用不妨碍满足本地条件的撤销。
+- `recovery_context.status` 为 `managed_in_progress` 时才有可核验的恢复目标；`none` 表示没有目标，`unmanaged` 表示原生操作不受本服务管理，`needs_review` 表示记录或原生状态无法安全匹配。查看 `ok`、`action_started`、`completed`、`aborted`、`still_in_progress`、`needs_review`、冲突路径及更新后的上下文。一次 rebase continue 可能停在下一冲突，必须重新审阅和决定；动作开始或创建了提交不表示最终回读通过，Git 回读通过也不代表项目测试或推送完成。失败或结果不确定先只读回读，不自动重试或补偿。
+- 所有恢复调用均写当前checkout/index/ref，continue可能创建提交，abort具有丢弃解决内容的破坏性，均需明确用户授权及宿主写入审批。恢复记录的创建/保留/清理由本地代码负责，不调用OpenAI、Session或Memory。正常hooks继续执行；continue-rebase会联网，其余恢复入口离线。支持边界以实际Schema、描述和安全错误为准。
+
+`abort_repository_merge` 的参数形状（全部为合成数据，不可代替实际审计值或用户丢弃授权）：
+
+```json
+{"repo_path":"/workspace/topic","operation_id":"00000000-0000-4000-8000-000000000072","expected_current_head_oid":"0123456789012345678901234567890123456789","expected_state_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","confirm_discard_resolution_work":true}
+```
+
+另一个 abort 工具使用相同参数；两个 continue 工具不接受丢弃确认参数，调用前必须完成相应的冲突解决与暂存，再重新审计。工具不提供恢复记录的自动接管、重建或跳过检查入口。
 
 ### 原地创建工作分支
 

@@ -33,6 +33,8 @@
 
 ## 3. 推送
 
+已有需求分支可能落后实际 PR base 时，先按 [`基线同步`](../references/worktree-base-sync.md) 获取、审计和按发布状态更新；已发布分支 merge，未发布分支 rebase，不强推。核验同步后 head/base 对应的检查结果；集成前 base 已变化时重新评估，不沿用失效证据。
+
 推送前确认用户已授权，且仓库、`repo_path`、分支、remote、开放 Issue、label、本人 assignee、适用验证、提交范围和堆叠 PR base 均正确。暂存与提交优先通过 `stage_repository_paths` 与 `commit_repository_changes`；按 CLI 补足时须满足相同的内容、路径和检查条件。调用 `push_issue_branch_to_origin` 将已提交的当前分支推送到 `origin`；该工具只允许非强制推送，并核验 Issue 前置条件。Fork 的同步 `main` 使用单独的 `push_fork_main_fast_forward`，不得把需求分支推到 `main`。
 
 ## 4. 创建/检查 PR

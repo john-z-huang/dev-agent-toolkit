@@ -34,6 +34,7 @@ NEED=<输入/授权/网络/认证/决定>  PRESERVED=<现场>
 - 目标路径已被主分支提供：不覆盖。
 - PR base/head/Issue 错误：停止推送/合并，使用已知编号和预期关系调用 `audit_issue_pr_policy`；修正已在授权范围内时，缺少 revert 或修改 PR base 工具可按 CLI 补充规约处理，之后重新审计。缺少新修正动作的授权时才请求最小决定。
 - Git 冲突需要新业务/架构决定：停止；只有已批准内容的机械冲突可解决。
+- 基线同步报告过期 head/base OID：重新审计来源和目标，不能重复旧写入。merge/rebase 冲突、执行失败或回读不确定时先核对结构化状态和冲突路径；不假定未写入、不自动重试/continue/abort/reset，不把已发布分支改用 rebase。只有明确需要继续或撤销时，按 [`受限恢复`](../references/worktree-recovery.md) 核对本服务的操作记录、最新head/状态指纹和内容范围；continue不自动暂存，abort需要对丢弃此次解决内容的明确授权及必填确认。无管理记录、复杂或不一致操作保持现场，不绕过拒绝。具体同步状态与重验要求见 [`基线同步`](../references/worktree-base-sync.md)。
 - Serena 未暴露、项目激活失败或语言服务器异常时，按 [`code-understanding.md`](../references/code-understanding.md) 降级到普通文件工具；若缺少调用链、类型关系或影响范围证据，停止并报告具体影响。
 
 ## 3. 修复并重验

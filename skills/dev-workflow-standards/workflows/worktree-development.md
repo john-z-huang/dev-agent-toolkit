@@ -13,7 +13,7 @@
 | 创建 worktree | 新目录和分支基于批准的最新基线 |
 | 携带未跟踪文件 | 按指纹安全复制，无覆盖 |
 | 在 worktree 中实现 | 代码修改和验证均位于需求 worktree |
-| 串行交付 | 一个工作项集成后，再同步基线和处理下一个 |
+| 串行交付 | 一个工作项集成后，按发布状态同步下一个需求分支并重验 |
 | 合并后状态 | 默认保留 worktree 与本地分支 |
 
 ## 1. 记录未跟踪文件
@@ -38,7 +38,11 @@
 
 ## 4. 实现与串行交付
 
-在需求 worktree 中实现并按要求验证。只有用户授权暂存和提交时，才用 `stage_repository_paths` 指定完整文件，再用 `commit_repository_changes` 提交；工具只支持整文件暂存。多个 worktree 可以并行实现，但共享同一基线的交付必须串行：先完成一个工作项的验证、提交、推送和 PR 集成，再回原始工作区快进同步实际 base；随后在下一个需求 worktree 调用 `rebase_repository_branch`，传入该 worktree 的 `repo_path`、当前 `branch_name` 和已同步的 `base_branch`，再重验。冲突需要新业务或架构决定时先暂停。
+在需求 worktree 中实现并按要求验证。只有用户授权暂存和提交时，才用 `stage_repository_paths` 指定完整文件，再用 `commit_repository_changes` 提交；工具只支持整文件暂存。
+
+多个 worktree 可以并行实现，共享同一目标基线的集成依次进行。一个 PR 集成后，按 [`已有 worktree 的基线同步`](../references/worktree-base-sync.md) 获取并固定实际 base OID，再审计接下来准备交付的需求 checkout：已发布分支采用 `merge_repository_branch`，已核实未发布的分支采用增强的 `rebase_repository_branch`。已包含 base 时无需修改，可快进时优先快进；不自动更新所有 worktree，不增加强推能力。同步后按新的 head/base OID 重验，集成前 base 又前进时重新评估。冲突或结果不确定时保留现场，工具不自动 continue/abort/reset。
+
+明确决定继续或撤销本服务发起的冲突操作时，按 [`受限恢复`](../references/worktree-recovery.md) 审计操作记录和最新快照后选择专用 continue/abort 工具；工具不解决冲突、不自动暂存、不调用 skip。未管理操作和不一致状态不自动接管。
 
 合并后默认保留 worktree 与本地分支，不 checkout、pull、merge、rebase、delete 或移除已集成的需求 worktree。只有用户另行明确要求移除 worktree 时才调用 `remove_repository_worktree`；它只移除干净的 worktree 目录，不删除分支。若需清理分支，另按 [`verification-and-cleanup.md`](verification-and-cleanup.md) 中的 PR 清理工具处理。对应工具未暴露时，可按 CLI 补充规约完成已授权清理，仍须核实干净状态、准确路径、分支与 OID；工具拒绝或状态不明时停止。
 
