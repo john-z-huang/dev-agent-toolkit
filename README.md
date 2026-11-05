@@ -4,6 +4,8 @@
 
 工作流判断与开发文案生成通过 OpenAI Python SDK 完成：判断使用 Decisions API，生成使用 Responses API。所有请求固定为 `gpt-6-luna`，强制在调用时读取 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`；缺少任意配置即拒绝请求，不使用默认凭据、默认地址或其他模型。Decisions 使用接口自身机制，生成按任务复杂度显式指定推理强度，默认 `medium`。
 
+`check_api_input` 默认允许向配置的审核服务发起外部 API 调用，无需前置审核、自我审核或逐次人工授权；它自身的本地敏感输入检测和配置检查仍先运行。当前任务所需项目内容通过完整输入审核后，允许向既定配置服务外发，无需重复确认。该规则同样适用于使用此入口的其他 MCP Server，不扩大 Git、Memory 或外部发布权限；用户明确禁止外发及更高优先级限制仍生效。完整协议及失败处理见 [API 输入审核](skills/dev-workflow-standards/references/api-input-review.md)。
+
 统一客户端为每次调用显式注入 `httpx2.Client(trust_env=True)`，读取服务进程的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（支持小写形式）。配置适用代理且目标未命中 `NO_PROXY` 时，请求通过代理；未配置代理时按库默认直连。代理配置或连接失败会返回安全错误，不回退直连。代理地址和认证信息不应写入仓库或日志。
 
 ## 独立安装 Skill
@@ -189,6 +191,8 @@ bash -c 'uv run --frozen -- python ../tests/openai_official_smoke.py --live'
 
 ### Codex SDK 集成测试
 
+联网审核模式将宿主已有的标准代理变量（含大小写）及 `SSL_CERT_FILE` 一并按名称转发给 MCP 子进程，使审核请求与 SDK 使用相同的网络环境；不会把实际代理值写入配置覆盖参数。失败诊断只保留已知安全的配置、连接、超时或审核状态分类，不输出原始异常、输入或配置值。
+
 Codex Python SDK 仅在 `codex-test` 测试依赖组中声明，测试驱动位于 `tests/codex_sdk_smoke.py`；运行时不导入 SDK，发布包不依赖 SDK，也不包含测试驱动。SDK 及匹配的 CLI 版本由 `mcp-server/uv.lock` 锁定。普通离线测试不安装该依赖组、不启动 Codex 或发起模型请求。
 
 先按上面的命令构建 wheel，再从 `mcp-server/` 执行：
@@ -207,4 +211,4 @@ uv run --locked --group codex-test -- python ../tests/codex_sdk_smoke.py --wheel
 
 所有 SDK 测试固定模型 `gpt-6-luna`、推理强度 `medium`，不接受命令行或环境变量覆盖，也不自动切换模型。两种模式都要求当前进程提供非空的 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL`；每次读取并显式配置测试 provider，不使用默认地址或其他登录凭据。真实值不写入仓库或配置文件，不输出原始 SDK/HTTP 错误。
 
-`--live` 会发起真实模型请求并产生相应费用。测试检查 Codex 回读的模型/推理强度、MCP 发现结果、直接调用结果及模型实际发出的 `item/completed` 工具调用事件；模型仅回复“测试通过”不会被采纳。失败不重试或回退；总时限为 120 秒。输出仅含安全状态、固定模型/强度和实际工具调用计数。普通离线测试另覆盖配置缺失时零启动、环境读取、模型限制、错误脱敏及发布包依赖隔离。
+`--live` 会发起真实模型请求，并向 MCP 子进程转发两项 API 环境变量名称，以最小合成项目事实直接调用一次 `check_api_input` 的语义审核，产生相应用量；不向配置覆盖参数写入真实凭据。普通模式仍不向 MCP 转发 API 配置，并验证敏感合成输入被本地拦截。测试检查 Codex 回读的模型/推理强度、MCP 发现结果、直接调用结果、语义审核实际执行标记与当前策略版本，以及模型实际发出的 `item/completed` 工具调用事件；模型仅回复“测试通过”不会被采纳。测试不模拟桌面宿主对真实私有项目数据的全部审批规则。失败不重试或回退；总时限为 120 秒。输出仅含安全状态、固定模型/强度和实际工具调用计数。普通离线测试另覆盖配置缺失时零启动、环境读取、模型限制、错误脱敏及发布包依赖隔离。

@@ -257,6 +257,22 @@ class ApiOutboundBoundaryTests(unittest.TestCase):
             patch.object(openai_client, "OpenAI", side_effect=self.fake_openai),
         )
 
+    def test_public_review_calls_api_once_without_prior_review_or_permission_field(self):
+        self.decision_results.append(_review_response())
+        http_patch, sdk_patch = self._patch_clients()
+        with _configured(), http_patch, sdk_patch:
+            result = api_input_review.check_api_input(api_input_review.ApiInputReviewRequest(
+                purpose="审核当前开发任务所需项目事实",
+                content="src/report.py 修复空输入处理，新增两个合成单元测试。",
+            ))
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["status"], "passed")
+        self.assertTrue(result["external_review_performed"])
+        self.assertEqual(len(self.http_clients), 1)
+        calls = [kwargs for args, kwargs in self.sdk_calls if not args]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual([q["name"] for q in calls[0]["questions"]], ["purpose", "content"])
+
     def test_final_business_decision_uses_two_client_calls_with_nonrecursive_review(self):
         self.decision_results.append(_review_response())
         http_patch, sdk_patch = self._patch_clients()
@@ -444,6 +460,24 @@ class ApiOutboundBoundaryTests(unittest.TestCase):
 
 
 class ApiInputReviewMcpTests(unittest.IsolatedAsyncioTestCase):
+    async def test_initialization_and_discovery_publish_default_network_permission(self):
+        async with Client(mcp, raise_exceptions=True) as client:
+            instructions = client.instructions
+            listed = await client.list_tools()
+        tool = next(item for item in listed.tools if item.name == "check_api_input")
+        self.assertIn("默认允许", instructions)
+        self.assertIn("无需前置审核", instructions)
+        self.assertIn("无需重复确认", instructions)
+        self.assertIn("默认允许", tool.description)
+        self.assertIn("无需前置审核", tool.description)
+        self.assertIn("不授权Git、Memory或外部发布", tool.description)
+        self.assertNotIn("审核通过不授权外发", tool.description)
+        schema_text = json.dumps(tool.input_schema, ensure_ascii=False)
+        self.assertIn("默认允许", schema_text)
+        self.assertIn("无需重复确认", schema_text)
+        self.assertTrue(tool.annotations.read_only_hint)
+        self.assertTrue(tool.annotations.open_world_hint)
+
     async def test_registered_schema_and_invalid_arguments_do_not_echo_or_log_values(self):
         with self.assertLogs("mcp.server.mcpserver.server", level="INFO") as logs:
             async with Client(mcp, raise_exceptions=True) as client:
