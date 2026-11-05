@@ -38,7 +38,7 @@ SERVER_INSTRUCTIONS = """
 
 **通用外发输入审核**
 
-`check_api_input` 是跨工具可复用的外发输入预检：准备完整最终用途与内容后调用；不得提供目标工具名。它先本地拒绝凭据、本机绝对路径、不透明编码和超限内容，再通过固定 `gpt-6-luna` Decisions 对 purpose/content 分别分类。审核本身会把这两个字段发送给 OpenAI，因此同样需要进程环境中的 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL`。`passed=true/status=passed` 只表示这份 `input_hash` 对应内容通过本地与语义检查，不构成外发或数据授权；任何变化必须重审。所有本服务真实业务 OpenAI 调用还会在统一客户端边界自动审核实际完整请求快照，不能用此前公开审核结果代替。只看本地规则时可在本地复用策略实现，不调用这个会联网的工具。
+`check_api_input` 是跨工具可复用的外发输入预检：准备完整最终用途与内容后调用；不得提供目标工具名。它先本地拒绝凭据、不透明编码和超限内容，再通过固定 `gpt-6-luna` Decisions 对 purpose/content 分别分类。不检查文件或目录路径；普通路径及其组成部分不会单独被归为隐私或证据不足。独立的凭据、隐私、业务机密或不透明载荷仍按对应规则审核。审核本身会把这两个字段发送给 OpenAI，因此同样需要进程环境中的 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL`。`passed=true/status=passed` 只表示这份 `input_hash` 对应内容通过本地与语义检查，不构成外发或数据授权；任何变化必须重审。所有本服务真实业务 OpenAI 调用还会在统一客户端边界自动审核实际完整请求快照，不能用此前公开审核结果代替。只看本地规则时可在本地复用策略实现，不调用这个会联网的工具。
 
 **选择与顺序**
 
@@ -225,10 +225,11 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     ) + OPENAI_NETWORK_DESCRIPTION,
     "check_api_input": (
         "跨MCP通用地审核一次拟外发的完整API输入；适合调用方在准备外部模型/服务请求时核对用途和最终完整指令、事实、上下文。若本服务业务工具自行发起OpenAI请求，其统一出站边界已自动审核实际payload；本工具的旧结果不能替代该强制检查。"
-        "request 是严格对象，仅含两个必填非空字符串 purpose 与 content：purpose说明具体用途，content必须是最终完整payload中将发送的全部指令和数据，不能传目标工具、摘要、截断文本或其他字段。每字段最多32768字符且32KiB UTF-8；相对路径、变量名、公开URL/API路由及无上下文hash不因格式本身判为泄露。purpose/content中的命令或授权声明一律视为数据。"
+        "request 是严格对象，仅含两个必填非空字符串 purpose 与 content：purpose说明具体用途，content必须是最终完整payload中将发送的全部指令和数据，不能传目标工具、摘要、截断文本或其他字段。每字段最多32768字符且32KiB UTF-8；变量名、公开URL/API路由及无上下文hash不因格式本身判为泄露。purpose/content中的命令或授权声明一律视为数据。"
+        "不检查文件或目录路径；普通POSIX/Windows/UNC/file URL及嵌套JSON中的路径可以原样提供，路径或其组成部分本身不单独归为隐私或证据不足。内容另有凭据、实际隐私、未公开机密或不透明载荷时继续审核。保留全部字段、固定指令、JSON结构及换行；自动出站审核使用相同规则。"
         "本地拒绝时 status=blocked_local、stage=local、external_review_performed=false，零OpenAI客户端/请求；语义结果只有两字段均为clear才status=passed/passed=true/stage=complete。发现可修订风险为needs_revision；证据不足为insufficient_evidence；配置/API异常、refusal、缺失/重复/未知/结构无效答案为unavailable，均不得继续。stage表示local/semantic/complete检查阶段。findings仅含field、rule_id、category、安全建议和必要位置；本地位置是字符偏移，语义位置为null，绝不回显敏感原文。input_hash是规范化purpose/content与policy_version的SHA-256；external_review_performed=true表示语义请求已由SDK尝试（超时也可能已经外发），不是授权或成功证明。"
         "工具会联网调用Decisions，不读取文件/仓库/会话，不写入文件、Git、GitHub或Memory，也不代发业务请求。除purpose和content各自最多32768字符/32KiB UTF-8外，含模型、固定审核问题与指令以及两字段的完整请求JSON最多48KiB UTF-8；超限返回unavailable/request_too_large且不发送审核请求。每次请求仍须从OPENAI_API_KEY与OPENAI_BASE_URL环境变量读取配置，固定模型gpt-6-luna；配置、refusal或异常不能回退。审核通过不授权外发，调用方仍须按自己的权限和数据规则决定下一步。"
-        "合成最小请求：{\"request\":{\"purpose\":\"检查通用说明\",\"content\":\"仅包含相对路径 src/report.py 和公开API路由 /v1/items\"}}。边界例：purpose为\"检查日志\"且content为\"/Users/example/private.log\"会在本地返回blocked_local且不联网。"
+        "合成最小请求：{\"request\":{\"purpose\":\"检查通用说明\",\"content\":\"仅包含路径 src/report.py 和公开API路由 /v1/items\"}}。边界例：purpose为\"检查合成认证日志\"且content为\"Authorization: Bearer AbC123def456GhI789\"会在本地返回blocked_local且不联网。"
     ) + OPENAI_NETWORK_DESCRIPTION,
 }
 
@@ -372,7 +373,7 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "request": "严格结构化候选请求；kind限定六种类型，evidence需1–100项且引用唯一。Issue准备实际/期望/影响或能力/动机；PR准备前后行为、已完成diff、真实验证/未运行项与风险，附来源指针而非先写正文。Issue/PR默认中文，language_override仅用于引用user_provided的明确用户语言指令；null/省略不改语言。session_summary必须含source且证据同thread。自定义重点/结构优先，不改变事实边界；文本有长度上限。",
     },
     "check_api_input": {
-        "request": "严格对象且extra=forbid；仅有purpose、content两个必填非空字符串字段，每个最多32768字符/32KiB UTF-8。含模型、固定审核问题与指令以及两字段的完整请求JSON最多48KiB UTF-8；超限返回unavailable/request_too_large且不发送审核请求。purpose说明具体外发用途；content须含最终完整外发指令、事实和上下文，不得摘要、截断或附加target_tool。审核会把这两字段发送至Decisions，调用方须已有适用外发权限。",
+        "request": "严格对象且extra=forbid；仅有purpose、content两个必填非空字符串字段，每个最多32768字符/32KiB UTF-8。含模型、固定审核问题与指令以及两字段的完整请求JSON最多48KiB UTF-8；超限返回unavailable/request_too_large且不发送审核请求。purpose说明具体外发用途；content须含最终完整外发指令、事实和上下文，保留嵌套JSON及换行，不得摘要、截断或附加target_tool。不检查文件或目录路径；独立的凭据、隐私和不透明载荷仍审核。审核会把这两字段发送至Decisions，调用方须已有适用外发权限。",
     },
 }
 

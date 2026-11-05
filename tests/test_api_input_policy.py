@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import json
+import os
 import unittest
 from unittest.mock import patch
 
@@ -49,28 +49,44 @@ class ApiInputPolicyTests(unittest.TestCase):
                 self.assertEqual(result["findings"][0]["category"], category)
                 self.assertNotIn(value, str(result))
 
-    def test_absolute_local_paths_are_blocked_without_matching_web_paths(self):
+    def test_file_directory_and_url_paths_do_not_create_local_findings(self):
         for path in (
             "/Users/alice/project/secrets.txt",
             "/home/alice/project/config.toml",
             "C:\\Users\\alice\\project\\secrets.txt",
             "\\\\server\\share\\private\\file.txt",
             "file:///Users/alice/project/file.txt",
+            "https://api.example.invalid/?path=/Users/alice/project/file.txt",
         ):
             with self.subTest(path_kind=path[:12]):
                 result = self.inspect("See " + path)
-                self.assertFalse(result["passed"])
-                self.assertEqual(result["findings"][0]["category"], "local_path")
-                self.assertEqual(result["findings"][0]["rule_id"], "path.absolute_local")
-        self.assertTrue(self.inspect("https://api.example.invalid/Users/alice/ordinary-route")["passed"])
-        query_path = self.inspect("https://api.example.invalid/?path=/Users/alice/project/file.txt")
-        self.assertEqual(query_path["findings"][0]["category"], "local_path")
-        serialized = json.dumps({"facts": {"path": r"C:\Users\alice\private.txt"}})
-        self.assertEqual(self.inspect(serialized)["findings"][0]["category"], "local_path")
-        serialized_unc = json.dumps(json.dumps({"facts": {"path": r"\\server\share\private.txt"}}))
-        self.assertEqual(self.inspect(serialized_unc)["findings"][0]["category"], "local_path")
-        serialized_lines = json.dumps(json.dumps({"instructions": "\n\nDeliverable-specific rules\n\nFor reviewers"}))
-        self.assertTrue(self.inspect(serialized_lines)["passed"])
+                self.assertTrue(result["passed"])
+                self.assertEqual(result["findings"], [])
+                both_fields = policy.inspect_api_input("Purpose refers to " + path, "Content refers to " + path)
+                self.assertTrue(both_fields["passed"])
+                self.assertEqual(both_fields["findings"], [])
+
+    def test_nested_and_malformed_json_paths_do_not_create_findings(self):
+        path = r"\\server\share\private\file.txt"
+        values = (
+            json.dumps({"facts": {"path": r"C:\Users\alice\private.txt"}}),
+            json.dumps(json.dumps({"facts": {"path": path}})),
+            json.dumps({path: "ordinary value", "path": "/Users/alice/file.txt"}),
+            json.dumps({"path": path})[:-1] + ',"path":"safe"}',
+            '{"path":"/Users/alice/file.txt"',
+            "[" * 20 + json.dumps(path) + "]" * 20,
+        )
+        for value in values:
+            with self.subTest(value=value[:40]):
+                result = self.inspect(value)
+                self.assertTrue(result["passed"])
+                self.assertEqual(result["findings"], [])
+
+    def test_credential_still_blocks_when_same_content_contains_path(self):
+        result = self.inspect(r"See C:\Users\alice\project\file.txt; token=synthetic-sensitive-token-value")
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["findings"][0]["category"], "credential")
+        self.assertTrue(all(item["category"] == "credential" for item in result["findings"]))
 
     def test_explicit_encoded_payload_is_bounded_and_rejected(self):
         result = self.inspect("base64: " + "YWJjZA==" * 8)
@@ -116,20 +132,21 @@ class ApiInputPolicyTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertEqual(result["findings"][0]["rule_id"], "credential.assignment")
 
+    def test_fields_report_only_safe_locations_and_rule_identifiers(self):
+        secret = "AbC123def456GhI789"
+        result = policy.inspect_api_input("Review", f"Before token={secret}")
+        finding = result["findings"][0]
+        self.assertEqual(finding["field"], "content")
+        self.assertEqual(finding["start"], len("Before "))
+        self.assertEqual(finding["rule_id"], "credential.assignment")
+        self.assertEqual(finding["category"], "credential")
+        self.assertNotIn(secret, str(finding))
+
     def test_unpaired_surrogate_fails_safely(self):
         result = self.inspect("bad \ud800 value")
         self.assertFalse(result["passed"])
         self.assertEqual(result["error_code"], "invalid_input")
         self.assertEqual(result["findings"][0]["rule_id"], "input.invalid_unicode")
-
-    def test_fields_report_only_safe_locations_and_rule_identifiers(self):
-        result = policy.inspect_api_input("Review", "Before /Users/alice/project/file.py")
-        finding = result["findings"][0]
-        self.assertEqual(finding["field"], "content")
-        self.assertEqual(finding["start"], len("Before "))
-        self.assertEqual(finding["rule_id"], "path.absolute_local")
-        self.assertNotIn("/Users/alice", str(finding))
-
 
 if __name__ == "__main__":
     unittest.main()

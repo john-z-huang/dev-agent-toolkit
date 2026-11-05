@@ -25,7 +25,7 @@ CHECK_API_TOOL = "check_api_input"
 CHECK_API_ARGUMENTS = {
     "request": {
         "purpose": "Review a synthetic request before external transmission",
-        "content": "See /Users/example/private.log",
+        "content": "Authorization: Bearer AbC123def456GhI789",
     }
 }
 API_FIELD_LIMIT = 32 * 1024
@@ -204,8 +204,8 @@ def check_api_input_result(value) -> None:
         or body.get("stage") != "local"
         or body.get("external_review_performed") is not False
         or not isinstance(findings, list)
-        or not any(item.get("field") == "content" and item.get("rule_id") == "path.absolute_local" for item in findings if isinstance(item, dict))
-        or "/Users/example/private.log" in json.dumps(body, ensure_ascii=False)
+        or not any(item.get("field") == "content" and item.get("rule_id") == "credential.bearer" for item in findings if isinstance(item, dict))
+        or "AbC123def456GhI789" in json.dumps(body, ensure_ascii=False)
     ):
         raise SmokeFailure("check_api_input_local_gate_failed")
 

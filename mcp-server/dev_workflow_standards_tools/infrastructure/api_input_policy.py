@@ -9,7 +9,7 @@ import re
 from typing import Any
 
 
-POLICY_VERSION = "2026-11-05.1"
+POLICY_VERSION = "2026-11-05.4"
 MAX_FIELD_BYTES = 32 * 1024
 MAX_FINDINGS = 20
 MAX_DECODE_BYTES = 8 * 1024
@@ -43,30 +43,6 @@ _CREDENTIAL_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ("credential.auth_url", "credential", re.compile(r"(?i)\b(?:https?|ftp)://[^\s/@]+@[^\s/]+")),
 )
 
-_LOCAL_PATH_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"(?i)\bfile://(?:localhost)?/(?:Users|home|private|tmp|var|etc|opt|Volumes|root|mnt|workspace|Library|Applications)/[^\s\"'<>]+"),
-    re.compile(r"(?<![A-Za-z0-9])/(?:Users|home|private|tmp|var|etc|opt|Volumes|root|mnt|workspace|srv|Library|Applications)/[^\s\"'<>]+"),
-    re.compile(r"(?<![A-Za-z0-9/])[A-Za-z]:(?:\\\\|\\|/)(?!/)(?:[^\\/\s:*?\"<>|]+(?:\\\\|\\|/))*[^\\/\s:*?\"<>|]+"),
-    re.compile(r"(?:\\\\){1,2}[A-Za-z0-9._-]+(?:\\\\|\\)[^\s\"'<>]+"),
-)
-_SERIALIZED_CONTROL_ESCAPE_PREFIX = re.compile(r"^\\{2,}(?P<escape>[nrtbf]|u[0-9a-f]{4})", re.IGNORECASE)
-
-
-def _looks_like_serialized_control_escape(value: str, start: int) -> bool:
-    prefix = value[start:]
-    marker = _SERIALIZED_CONTROL_ESCAPE_PREFIX.match(prefix)
-    if marker is None:
-        return False
-    tail = prefix[marker.end():]
-    slash_count = len(tail) - len(tail.lstrip("\\"))
-    remainder = tail[slash_count:]
-    repeated_escape = re.match(r"(?:[nrtbf]|u[0-9a-f]{4})", remainder, re.IGNORECASE)
-    if repeated_escape is not None and repeated_escape.group(0).casefold() == marker.group("escape").casefold():
-        return True
-    # A JSON-escaped quote following a control escape has an odd backslash run;
-    # a serialized UNC separator has an even run because each path slash is escaped.
-    return slash_count > 0 and slash_count % 2 == 1 and remainder.startswith(('"', "'", ",", ":", "}", "]"))
-
 _ENCODED_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)\b(?:base64(?:url)?|encoded|ciphertext|opaque[_ -]?payload)\s*[:=]\s*[\"']?([A-Za-z0-9+/=_-]{32,})"),
     re.compile(r"(?i)\bdata:[^,;\s]+(?:;[^,;\s]+)*;base64,([A-Za-z0-9+/=]{40,})"),
@@ -76,20 +52,6 @@ _ENCODED_PATTERNS: tuple[re.Pattern[str], ...] = (
 def _is_placeholder(value: str) -> bool:
     normalized = value.strip(" ._-/=\"'\\<>").casefold()
     return normalized in _PLACEHOLDERS or bool(_ENVIRONMENT_REFERENCE.fullmatch(normalized.upper()))
-
-
-def _inside_public_url(value: str, start: int) -> bool:
-    prefix = value[:start]
-    scheme_start = max(prefix.rfind("https://"), prefix.rfind("http://"), prefix.rfind("ftp://"))
-    if scheme_start < 0:
-        return False
-    url_start = max(prefix.rfind(" "), prefix.rfind("\n"), prefix.rfind("\t"), prefix.rfind('"'), prefix.rfind("'")) + 1
-    if scheme_start < url_start:
-        return False
-    # A path in a query value is still data being sent; ignore only a URL's ordinary route path.
-    query_start = value.find("?", scheme_start, start)
-    fragment_start = value.find("#", scheme_start, start)
-    return query_start < 0 and fragment_start < 0
 
 
 def _append_finding(
@@ -153,16 +115,6 @@ def inspect_api_input(purpose: Any, content: Any) -> dict[str, Any]:
                     continue
                 _append_finding(findings, field=field, start=match.start(), end=match.end(), rule_id=rule_id, category=category)
 
-        for pattern in _LOCAL_PATH_PATTERNS:
-            for match in pattern.finditer(value):
-                if _inside_public_url(value, match.start()):
-                    continue
-                # Multiple JSON serializations turn newline escapes into `\\n`. Those
-                # sequences can resemble a UNC host/share pair; they are not filesystem paths.
-                if _looks_like_serialized_control_escape(value, match.start()):
-                    continue
-                _append_finding(findings, field=field, start=match.start(), end=match.end(), rule_id="path.absolute_local", category="local_path")
-
         for pattern in _ENCODED_PATTERNS:
             for match in pattern.finditer(value):
                 blob = match.group(1)
@@ -188,7 +140,7 @@ def inspect_api_input(purpose: Any, content: Any) -> dict[str, Any]:
                                 break
 
     has_size_finding = any(item["category"] == "size_limit" for item in findings)
-    has_sensitive_finding = any(item["category"] in {"credential", "local_path", "opaque_or_encoded"} for item in findings)
+    has_sensitive_finding = any(item["category"] in {"credential", "opaque_or_encoded"} for item in findings)
     return {
         "passed": not findings and not invalid,
         "findings": findings,

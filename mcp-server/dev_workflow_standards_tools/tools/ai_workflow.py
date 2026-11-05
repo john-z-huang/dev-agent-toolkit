@@ -32,7 +32,7 @@ def generate_skill_content(request: ContentGenerationRequest) -> dict:
 
 
 def check_api_input(request: ApiInputReviewRequest) -> dict:
-    """本地阻断凭据/路径后审查拟外发的完整purpose与content；只返回审核建议，不代发业务请求。"""
+    """本地阻断凭据后审查拟外发的完整purpose与content；只返回审核建议，不代发业务请求。"""
     return api_input_review.check_api_input(request)
 
 
