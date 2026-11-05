@@ -134,6 +134,7 @@ Git/GitHub 写操作必须先满足工作流中的用户授权和执行层审批
 
 ### API 判断与生成工具
 
+- `check_api_input`：通用外发内容预检，请求仅包含 `purpose` 和 `content` 两个必填非空字符串；先在本地检测凭据、登录令牌和完整本机路径等，再调用 Decisions 审核。其他 MCP Server 可按相同协议使用，无需指定目标工具或仓库。
 - `decide_skill_workflow`：根据明确流程条件选择工作流。
 - `decide_codex_session_action`：判断查询历史、查询项目、澄清/阻塞，以及摘要创建、更新或跳过的分支。
 - `generate_skill_content`：根据证据、查询重点和用户格式生成 Issue、PR、提交信息、计划、交接或历史会话摘要候选内容。
@@ -141,6 +142,8 @@ Git/GitHub 写操作必须先满足工作流中的用户授权和执行层审批
 MCP 的分支名、提交信息和 Issue/PR 策略检查在本地硬校验通过后调用 Decisions；API 失败不能返回通过。原始本地校验服务、Hook、Git 写工具的前置检查及不联网的会话辅助工具保持确定性执行。API 工具不执行生成内容里的命令，不自动创建 Issue/PR 或保存 Memory。
 
 MCP 进程必须能继承上述两个 OpenAI 环境变量；需要代理时还须继承对应代理变量，配置后重新加载服务。不要把真实值写入仓库。API 只接收调用者显式提交的必要事实，不自动发送整个仓库或会话。输入字段、Prompt 边界、返回结果与推理强度配置见 [`references/openai-workflow-tools.md`](skills/dev-workflow-standards/references/openai-workflow-tools.md)。
+
+项目事实可在用户已经授权的任务、数据及目的地范围内用于这些 API 工具，不必对同一范围逐次重复授权。公开预检只审核给定内容；本服务仍在实际业务出站前强制检查最终请求，覆盖初次生成和后续质量审查，内容变化后重新检查。审核通过不扩大权限，也不保证宿主审批结果。输入协议、失败处理及其他服务的接入责任见 [`API 输入审核`](skills/dev-workflow-standards/references/api-input-review.md)。
 
 若手动运行成功，但 Codex 调用返回 `missing_api_key`，先检查上面的 `env_vars` 转发配置、Codex 主进程的变量存在性，以及服务是否已重新加载。uv tool 安装提供独立的执行环境，不会替 MCP 客户端补齐凭据。`missing_api_key` 表示服务进程中的 Key 缺失或为空，请求尚未发送；Key 检查先于 Base URL，因此两项都缺失时也只返回 `missing_api_key`。Key 存在而 Base URL 缺失时返回 `missing_base_url`。排查时只检查存在性和非空状态，不输出配置值；不要通过给服务增加凭据文件回退来绕过环境要求。
 

@@ -124,6 +124,10 @@ class OpenAIClientTests(unittest.TestCase):
             patch.object(
                 openai_client.httpx2, "Client", side_effect=[transport_a, transport_b]
             ) as transport_factory,
+            patch(
+                "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+                return_value={"passed": True},
+            ),
         ):
             openai_client.create_decision([], [])
             os.environ["OPENAI_API_KEY"] = API_KEY_B
@@ -159,7 +163,7 @@ class OpenAIClientTests(unittest.TestCase):
             ), patch.object(openai_client, "OpenAI") as factory:
                 with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
                     openai_client.create_decision([{"role": "user", "content": sensitive_value}], [])
-                self.assertEqual(raised.exception.error_code, "sensitive_value_in_request")
+                self.assertEqual(raised.exception.error_code, "sensitive_input_detected")
                 self.assertNotIn(sensitive_value, str(raised.exception))
                 factory.assert_not_called()
 
@@ -168,6 +172,9 @@ class OpenAIClientTests(unittest.TestCase):
         fake.decisions.create.side_effect = RuntimeError(f"{API_KEY_A} {BASE_URL_A}")
         with patch.dict(os.environ, configured_env(), clear=True), patch.object(
             openai_client, "OpenAI", return_value=fake
+        ), patch(
+            "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+            return_value={"passed": True},
         ):
             with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
                 openai_client.create_decision([], [])
@@ -180,6 +187,9 @@ class OpenAIClientTests(unittest.TestCase):
         fake.decisions.create.return_value = sensitive_response
         with patch.dict(os.environ, configured_env(), clear=True), patch.object(
             openai_client, "OpenAI", return_value=fake
+        ), patch(
+            "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+            return_value={"passed": True},
         ):
             with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
                 openai_client.create_decision([], [])
@@ -234,6 +244,9 @@ class OpenAIClientTests(unittest.TestCase):
         question = [{"type": "choice", "name": "q", "instructions": "fixed", "choices": [{"value": "compliant"}]}]
         with patch.dict(os.environ, configured_env(), clear=True), patch.object(
             openai_client, "OpenAI", return_value=fake
+        ), patch(
+            "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+            return_value={"passed": True},
         ):
             openai_client.create_decision([{"role": "user", "content": "{}"}], question)
         kwargs = fake.decisions.create.call_args.kwargs
@@ -247,6 +260,9 @@ class OpenAIClientTests(unittest.TestCase):
         schema = GeneratedContent
         with patch.dict(os.environ, configured_env(), clear=True), patch.object(
             openai_client, "OpenAI", return_value=fake
+        ), patch(
+            "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+            return_value={"passed": True},
         ):
             openai_client.parse_response(
                 instructions="fixed",
@@ -260,7 +276,7 @@ class OpenAIClientTests(unittest.TestCase):
         self.assertEqual(kwargs["reasoning"], {"effort": "medium"})
         self.assertFalse(kwargs["store"])
         self.assertEqual(kwargs["truncation"], "disabled")
-        self.assertEqual(kwargs["text_format"], schema)
+        self.assertEqual(kwargs["text_format"].model_json_schema(), schema.model_json_schema())
         self.assertNotIn("tools", kwargs)
         self.assertEqual(set(kwargs), {
             "model", "instructions", "input", "text_format", "reasoning", "store",
@@ -419,7 +435,9 @@ class DecisionAndValidationTests(unittest.TestCase):
             factory.assert_not_called()
             self.assertFalse(result["passed"])
             self.assertTrue(result["local_passed"])
-            self.assertEqual(result["error_code"], "sensitive_value_in_request")
+            self.assertEqual(result["error_code"], "sensitive_input_detected")
+            self.assertEqual(result["api_input_review"]["status"], "blocked_local")
+            self.assertTrue(result["api_input_review"]["findings"])
             self.assertNotIn(sensitive_value, json.dumps(result))
             self.assertNotIn("subject", result)
 

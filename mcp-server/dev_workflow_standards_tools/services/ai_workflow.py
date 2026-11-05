@@ -453,12 +453,17 @@ def _decision_questions(
     return prepared
 
 
-def _decisions(questions: list[dict[str, Any]], facts: dict[str, Any]) -> dict[str, str] | dict[str, Any]:
+def _decisions(
+    questions: list[dict[str, Any]],
+    facts: dict[str, Any],
+    *,
+    purpose: str = "Assess structured development workflow facts under the supplied decision question.",
+) -> dict[str, str] | dict[str, Any]:
     api_input = [{"role": "user", "content": _json(facts)}]
     try:
-        response = openai_client.create_decision(api_input, questions)
+        response = openai_client.create_decision(api_input, questions, purpose=purpose)
     except openai_client.OpenAIWorkflowError as error:
-        return {"error_code": error.error_code, **({"status_code": error.status_code} if error.status_code else {})}
+        return error.as_result()
 
     refusal = _get(response, "refusal")
     answers = _get(response, "answers")
@@ -507,15 +512,21 @@ def _validation_result(
         result["passed"] = False
         return result
     decision_questions = _decision_questions([question], rules)
-    answers = _decisions(decision_questions, facts)
+    answers = _decisions(
+        decision_questions,
+        facts,
+        purpose=f"Apply the supplied {question['name']} decision policy to local observations.",
+    )
     if "error_code" in answers:
-        if answers["error_code"] == "sensitive_value_in_request":
+        if answers["error_code"] == "sensitive_value_in_request" or answers["error_code"].startswith("api_input_") or answers["error_code"] in {"sensitive_input_detected", "request_too_large"}:
             return {
                 "passed": False,
                 "local_passed": local_passed,
                 "decision": None,
-                "ai_status": "failed",
+                "ai_status": "blocked_by_api_input_policy" if answers["error_code"].startswith("api_input_") or answers["error_code"] == "sensitive_input_detected" else "failed",
                 "error_code": answers["error_code"],
+                **({"api_input_review": answers["api_input_review"]} if isinstance(answers.get("api_input_review"), dict) else {}),
+                **({"api_status_code": answers["status_code"]} if answers.get("status_code") else {}),
                 "requires_agent_review": True,
             }
         result["passed"] = False
@@ -701,9 +712,19 @@ def decide_skill_workflow(request: WorkflowDecisionRequest) -> dict[str, Any]:
         },
     )
     questions = _decision_questions([question], _WORKFLOW_PROMPT)
-    response = _decisions(questions, facts)
+    response = _decisions(
+        questions,
+        facts,
+        purpose="Recommend the development workflow from the supplied user request and local route facts.",
+    )
     if "error_code" in response:
-        return {"ok": False, "error_code": response["error_code"], "requires_agent_review": True}
+        return {
+            "ok": False,
+            "error_code": response["error_code"],
+            **({"api_input_review": response["api_input_review"]} if isinstance(response.get("api_input_review"), dict) else {}),
+            **({"api_status_code": response["status_code"]} if response.get("status_code") else {}),
+            "requires_agent_review": True,
+        }
     choice = response["workflow"]
     expected = _workflow_expected(request)
     allowed = {expected, "clarify"}
@@ -783,9 +804,19 @@ def decide_codex_session_action(request: SessionDecisionRequest) -> dict[str, An
         ),
     ]
     questions = _decision_questions(questions)
-    response = _decisions(questions, facts)
+    response = _decisions(
+        questions,
+        facts,
+        purpose="Recommend history lookup and persistence actions from supplied source-state facts.",
+    )
     if "error_code" in response:
-        return {"ok": False, "error_code": response["error_code"], "requires_agent_review": True}
+        return {
+            "ok": False,
+            "error_code": response["error_code"],
+            **({"api_input_review": response["api_input_review"]} if isinstance(response.get("api_input_review"), dict) else {}),
+            **({"api_status_code": response["status_code"]} if response.get("status_code") else {}),
+            "requires_agent_review": True,
+        }
     lookup = response["lookup_action"]
     persistence = response["persistence_action"]
     if lookup != _session_expected_lookup(request) or persistence != _session_expected_persistence(request):
@@ -853,6 +884,7 @@ def _review_issue_pr(request: ContentGenerationRequest, generated: GeneratedCont
             text_format=ContentQualityReview,
             reasoning_effort="medium",
             max_output_tokens=2500,
+            purpose="Assess an Issue or PR candidate against the supplied request and cited evidence.",
         )
     except openai_client.OpenAIWorkflowError as error:
         return {"ok": False, **error.as_result()}
@@ -908,6 +940,7 @@ def generate_skill_content(request: ContentGenerationRequest) -> dict[str, Any]:
             text_format=GeneratedContent,
             reasoning_effort=effort,
             max_output_tokens=_MAX_OUTPUT_TOKENS[request.kind],
+            purpose=f"Generate a structured {request.kind} candidate from the supplied request and evidence.",
         )
     except openai_client.OpenAIWorkflowError as error:
         return {"ok": False, **error.as_result(), "requires_agent_review": True}

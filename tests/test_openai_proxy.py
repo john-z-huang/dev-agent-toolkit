@@ -155,7 +155,10 @@ class OpenAIProxyTests(unittest.TestCase):
         with patch.dict(os.environ, {
             "OPENAI_API_KEY": "sk-test-proxy-key-value",
             "OPENAI_BASE_URL": "https://api.synthetic.invalid/v1",
-        }, clear=True), client_patch:
+        }, clear=True), client_patch, patch(
+            "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+            return_value={"passed": True},
+        ):
             result = openai_client._invoke({"ok": True}, lambda _client: {"ok": True})
         self.assertEqual(result, {"ok": True})
         self.assertEqual(len(created), 1)
