@@ -102,7 +102,7 @@ class CodexSDKContractTests(unittest.TestCase):
         with self.assertRaisesRegex(smoke.SmokeFailure, "check_api_input_schema_mismatch"):
             smoke.check_api_input_schema({"inputSchema": invalid})
 
-    def test_check_api_input_result_requires_local_absolute_path_block(self):
+    def test_check_api_input_result_requires_credential_block(self):
         result = {
             "isError": False,
             "structuredContent": {
@@ -111,7 +111,7 @@ class CodexSDKContractTests(unittest.TestCase):
                 "stage": "local",
                 "external_review_performed": False,
                 "error_code": "sensitive_input_detected",
-                "findings": [{"field": "content", "rule_id": "path.absolute_local"}],
+                "findings": [{"field": "content", "rule_id": "credential.bearer"}],
             },
         }
         smoke.check_api_input_result(result)
@@ -182,7 +182,7 @@ class CodexSDKContractTests(unittest.TestCase):
                             "stage": "local",
                             "external_review_performed": False,
                             "error_code": "sensitive_input_detected",
-                            "findings": [{"field": "content", "rule_id": "path.absolute_local"}],
+                            "findings": [{"field": "content", "rule_id": "credential.bearer"}],
                         },
                     }
                 raise AssertionError("unexpected tool")

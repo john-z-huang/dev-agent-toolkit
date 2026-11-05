@@ -134,7 +134,7 @@ Git/GitHub 写操作必须先满足工作流中的用户授权和执行层审批
 
 ### API 判断与生成工具
 
-- `check_api_input`：通用外发内容预检，请求仅包含 `purpose` 和 `content` 两个必填非空字符串；先在本地检测凭据、登录令牌和完整本机路径等，再调用 Decisions 审核。其他 MCP Server 可按相同协议使用，无需指定目标工具或仓库。
+- `check_api_input`：通用外发内容预检，请求仅包含 `purpose` 和 `content` 两个必填非空字符串；先在本地检测凭据、登录令牌、不透明载荷及输入限制，再调用 Decisions 审核。不检查文件或目录路径；自动出站审核采用同一规则。其他 MCP Server 可按相同协议使用，无需指定目标工具或仓库。
 - `decide_skill_workflow`：根据明确流程条件选择工作流。
 - `decide_codex_session_action`：判断查询历史、查询项目、澄清/阻塞，以及摘要创建、更新或跳过的分支。
 - `generate_skill_content`：根据证据、查询重点和用户格式生成 Issue、PR、提交信息、计划、交接或历史会话摘要候选内容。

@@ -1,0 +1,22 @@
+{
+  "kind": "issue",
+  "user_request": "生成中文文档缺陷Issue：安装示例默认工作目录不清，且项目目录与解释器参数容易混淆。",
+  "evidence": [
+    {
+      "reference_id": "USER",
+      "content": "用户报告PR203合并后安装遇到文档问题，要求新建Issue。示例应默认从仓库根运行安装脚本，非根目录才说明绝对路径调用。用户希望通过uv工具目录查询自动找到Serena Python，不手查本机目录。",
+      "origin": "user_provided",
+      "source_thread_id": null
+    },
+    {
+      "reference_id": "FACT",
+      "content": "README、MCP开发指南及Memory工具指南的英中版本默认安装示例使用绝对脚本路径占位符，不能原样复制执行。代码已经通过uv tool dir查询工具目录并拼接Serena环境中的Python位置，通常无需手动提供解释器。参数--serena-project-root应指向已有Serena配置和Memory目录的目标项目，--serena-python仅是可选解释器覆盖；用户曾将解释器误传给项目参数。建议统一默认仓库根目录操作，明确绑定当前仓库或其他目标项目的区别；可选覆盖示例自动拼接工具目录并完整引用以支持空格。同步三对双语文档，保留既有显式绑定和路径检查。尚未修改本轮文档或运行校验。",
+      "origin": "current_observation",
+      "source_thread_id": null
+    }
+  ],
+  "focus_questions": null,
+  "output_format": "中文标题和Markdown正文：问题、现有代码行为、修订范围、建议验收。仅用自然语言与参数名，不提供路径或代码命令示例；实现时再补具体示例。不声称自动发现未实现，不编造测试。",
+  "language_override": null,
+  "source": null
+}
