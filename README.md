@@ -171,6 +171,8 @@ uv run --managed-python -- python -m unittest discover -s ../tests -v
 
 项目 `uv run` 使用可编辑开发环境时会导入源码包，Skill 资源定位可能落在没有封装资源的源码目录。Skill 管理命令应使用 `"$(uv tool dir --bin)/dev-workflow-standards"` 明确选择从完整 wheel 安装的工具。若出现“发布包缺少 Skill 资源”，先按 [命令入口排查](skills/dev-workflow-standards/references/installation.md#包资源缺失与命令入口排查) 核对实际入口；资源缺失时安装器会拒绝执行，不从源码目录回退读取。
 
+所有 OpenAI、Decisions 及输入审核 API 请求统一使用 `OPENAI_TIMEOUT_SECONDS=180.0` 秒。可选环境变量 `OPENAI_TIMEOUT_MAX_RETRIES` 配置超时后的重试次数，默认 `5`（首次加 5 次重试，最多 6 次），`0` 关闭；空值、负数或非整数在请求前失败。仅超时重试，其他错误不重试；SDK 内部重试关闭。setup 的 `env_vars` 同步该变量名，已有 MCP 进程须重新加载才能接收新配置；多阶段工具的外层时限需覆盖其请求与重试预算，见 [详细规则](skills/dev-workflow-standards/references/openai-workflow-tools.md#配置与请求边界)。
+
 ### OpenAI 官方 API 冒烟测试
 
 `tests/openai_official_smoke.py` 使用统一的 httpx2 OpenAI 客户端发起一次最小 Responses 请求，固定 `gpt-6-luna`、`medium` 推理强度和 512 token 输出上限。只有显式传入 `--live` 才联网并产生实际 API 用量；不传参数输出 `skipped`，退出码为 2。常规离线测试只测试该入口的行为，不调用真实 API。
@@ -183,7 +185,7 @@ bash -c 'uv run --frozen -- python ../tests/openai_official_smoke.py --live'
 
 测试按原拼写读取 `OPENAI_API_KEY_OFFICAL` 和 `OPENAI_BASE_URL_OFFICAL`，任一缺失或为空就停止，不能回退到其他配置。入口只在调用期间将它们映射为统一客户端要求的 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，之后恢复原环境；生产客户端的配置规则保持不变。代理继续读取当前进程的标准代理变量，遵循 `NO_PROXY`。
 
-输出仅含安全 JSON 状态、固定请求模型、成功时的 token 计数或失败分类，不输出真实配置、响应正文或原始异常。请求不重试、不切换模型；只有完整、未拒绝、模型匹配且结构正确的响应才返回 `success` 和退出码 0，失败退出码为 1。
+输出仅含安全 JSON 状态、固定请求模型、成功时的 token 计数或失败分类，不输出真实配置、响应正文或原始异常。请求仅在超时时按统一配置重试，不切换模型；只有完整、未拒绝、模型匹配且结构正确的响应才返回 `success` 和退出码 0，失败退出码为 1。
 
 ### Codex SDK 集成测试
 

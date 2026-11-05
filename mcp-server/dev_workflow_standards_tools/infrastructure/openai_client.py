@@ -26,7 +26,8 @@ from . import api_input_policy
 
 
 MODEL_NAME = "gpt-6-luna"
-OPENAI_TIMEOUT_SECONDS = 30.0
+OPENAI_TIMEOUT_SECONDS = 180.0
+DEFAULT_OPENAI_TIMEOUT_MAX_RETRIES = 5
 MAX_REQUEST_BYTES = 48 * 1024
 T = TypeVar("T")
 _LOG_REDACTION_MARKER = "[REDACTED]"
@@ -152,6 +153,19 @@ def _payload_text(payload: Any) -> str:
         raise OpenAIWorkflowError("invalid_request_payload") from None
 
 
+def _read_timeout_max_retries() -> int:
+    value = os.environ.get("OPENAI_TIMEOUT_MAX_RETRIES")
+    if value is None:
+        return DEFAULT_OPENAI_TIMEOUT_MAX_RETRIES
+    value = value.strip()
+    if not value or not value.isascii() or not value.isdecimal():
+        raise OpenAIWorkflowError("invalid_timeout_max_retries")
+    try:
+        return int(value)
+    except ValueError:
+        raise OpenAIWorkflowError("invalid_timeout_max_retries") from None
+
+
 def _make_client(payload: Any) -> tuple[OpenAI, str, str]:
     api_key, base_url = _read_configuration()
     payload_text = _payload_text(payload)
@@ -209,6 +223,7 @@ def _invoke(
     purpose: str = "Assess structured development workflow facts under the supplied policy question.",
     _skip_semantic_review: bool = False,
 ) -> T:
+    timeout_max_retries = _read_timeout_max_retries()
     payload_text = _payload_text(payload)
     if len(payload_text.encode("utf-8", errors="replace")) > MAX_REQUEST_BYTES:
         raise OpenAIWorkflowError("request_too_large")
@@ -252,32 +267,42 @@ def _invoke(
                 blocked.get("error_code") or local.get("error_code") or "sensitive_input_detected",
                 api_input_review=details,
             )
-    client, api_key, base_url = _make_client(payload)
     request_attempted = False
-    try:
-        # From this point the SDK may have transmitted the request even when it later times out.
-        request_attempted = True
-        response = operation(client)
-        response_text = _payload_text(response.model_dump(mode="json") if hasattr(response, "model_dump") else response)
-        if api_key in response_text or base_url in response_text:
-            raise OpenAIWorkflowError("sensitive_value_in_response")
-        return response
-    except OpenAIWorkflowError as error:
-        if request_attempted and not error.request_attempted:
-            raise OpenAIWorkflowError(
-                error.error_code,
-                error.status_code,
-                request_attempted=True,
-                api_input_review=error.api_input_review,
-            ) from None
-        raise
-    except Exception as error:
-        raise _safe_api_error(error, request_attempted=request_attempted) from None
-    finally:
+    for attempt in range(timeout_max_retries + 1):
         try:
-            client.close()
-        except Exception:
-            pass
+            client, api_key, base_url = _make_client(payload)
+        except OpenAIWorkflowError as error:
+            if request_attempted:
+                error.request_attempted = True
+            raise
+        try:
+            # A timed-out request may already have reached the API. Retry only this
+            # checked payload, not the surrounding review/generation workflow.
+            request_attempted = True
+            response = operation(client)
+            response_text = _payload_text(response.model_dump(mode="json") if hasattr(response, "model_dump") else response)
+            if api_key in response_text or base_url in response_text:
+                raise OpenAIWorkflowError("sensitive_value_in_response")
+            return response
+        except APITimeoutError as error:
+            if attempt == timeout_max_retries:
+                raise _safe_api_error(error, request_attempted=True) from None
+        except OpenAIWorkflowError as error:
+            if not error.request_attempted:
+                raise OpenAIWorkflowError(
+                    error.error_code,
+                    error.status_code,
+                    request_attempted=True,
+                    api_input_review=error.api_input_review,
+                ) from None
+            raise
+        except Exception as error:
+            raise _safe_api_error(error, request_attempted=True) from None
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
 
 
 def create_decision(

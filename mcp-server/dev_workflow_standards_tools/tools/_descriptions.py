@@ -26,6 +26,13 @@ CLI_FALLBACK_DESCRIPTION = (
 )
 
 OPENAI_NETWORK_DESCRIPTION = (
+    "所有 Decisions、Responses 与输入审核 API 请求统一使用 OPENAI_TIMEOUT_SECONDS=180 秒超时。"
+    "仅 SDK APITimeoutError 在调用处重试；OPENAI_TIMEOUT_MAX_RETRIES 环境变量配置非负整数重试次数，未配置默认5，0关闭，"
+    "空值或非法值返回 invalid_timeout_max_retries 且不发请求。不接受工具参数覆盖。"
+    "默认首次加5次重试，最多6次；超时后立即串行重试，每次新建客户端并重读当前凭据和端点，SDK内部重试关闭。"
+    "重试仅重发同一受检 API 请求，不重复整条工作流；其他错误不重试，耗尽返回 api_timeout。"
+    "工具返回超时失败时内部预算已耗尽，Agent不再叠加整工具自动重试。重试可能产生重复API用量；"
+    "MCP客户端需为多阶段审核/生成及其重试配置足够的tool_timeout_sec，180秒不代表整工具总时限。"
     "所有 OpenAI 请求经统一 httpx2.Client(trust_env=True)，每次创建客户端时读取进程环境的 "
     "HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY（含小写形式），不接受工具参数覆盖代理。"
     "NO_PROXY 匹配时绕过代理，未配置代理时按库默认直连；代理初始化或连接失败返回安全错误，不重试直连。"
@@ -218,7 +225,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "为 issue、pr、commit_message、plan、handoff 或 session_summary 生成结构化候选文本，适合已有明确证据、需要起草而非执行时。request.evidence 必须非空；每项 origin 标明来源，ref 唯一。session_summary 必须提供 source.created_at 与 source.title；source.thread_id 可从 source_link 推导；只接受对应 thread 的 provided_session 证据。"
         "调用前按类型准备事实，不必先写正文：通用为目标/受众、背景/组件、路径/符号指针、范围/非目标、约束和关联项；每项标明事实/推测、来源和缺失/冲突。Issue区分缺陷/功能请求，给实际/期望/影响或能力/动机，复现和环境仅限已知；PR给前后行为、已完成diff/文件摘要与原因、实际验证命令/结果和未运行项、已知兼容风险及关联Issue。不提交全仓库、完整会话或敏感配置。"
         "user_request定目标，focus_questions/output_format的用户重点/结构优先于默认；不增加事实。Issue/PR标题与自然语言正文默认中文，英文模板/错误/Agent请求不授权改语言，技术标识/路径/代码/错误原文保留。仅当用户明确要求其他语言时提供language_override={language,instruction_ref}，引用evidence内origin=user_provided的指令原文；省略/null用中文，其他kind禁止此字段。引用来源本地校验，指令语义由模型核对。"
-        "ok=true仅表示候选和审查返回有效，candidate.title/content是标题/正文（commit_message正文可空）；used_evidence_refs只列支撑内容的输入引用，missing_facts列必要缺失/冲突，review_notes列修订要点。Issue/PR另含quality_status=ready_for_agent_review或needs_revision、adoptable和quality_review（language_compliant/evidence_supported/coverage_sufficient为模型建议）。任何缺项或否定检查均不可直接采纳，修改/补证后再审阅；通过也不是发布授权。不以字数判质量。拒绝/截断/坏引用/本地commit失败/审查异常看error_code且不可采纳，无自动重试或换模型。"
+        "ok=true仅表示候选和审查返回有效，candidate.title/content是标题/正文（commit_message正文可空）；used_evidence_refs只列支撑内容的输入引用，missing_facts列必要缺失/冲突，review_notes列修订要点。Issue/PR另含quality_status=ready_for_agent_review或needs_revision、adoptable和quality_review（language_compliant/evidence_supported/coverage_sufficient为模型建议）。任何缺项或否定检查均不可直接采纳，修改/补证后再审阅；通过也不是发布授权。不以字数判质量。拒绝/截断/坏引用/本地commit失败/审查异常看error_code且不可采纳；仅底层请求超时按统一配置重试，不自动修复候选或换模型。"
         "通过统一客户端Responses.parse联网调用OpenAI；每次强制读取OPENAI_API_KEY与OPENAI_BASE_URL，显式传SDK且固定gpt-6-luna。Issue/PR生成后再做一次有界语义审查，其余kind一次请求。不会读写文件/仓库、Memory、会话、执行Git/GitHub或候选动作；仅处理传入事实，后续写入另需授权。"
         "Issue示例：{\"request\":{\"kind\":\"issue\",\"user_request\":\"为维护者起草导出功能需求\",\"evidence\":[{\"reference_id\":\"U1\",\"content\":\"用户希望导出筛选结果，避免手动复制；仅涉及报表组件。验收条件尚未确认。\",\"origin\":\"user_provided\"}]}}。"
         "PR示例：{\"request\":{\"kind\":\"pr\",\"user_request\":\"为评审者起草说明\",\"evidence\":[{\"reference_id\":\"D1\",\"content\":\"src/report.py的diff将空输入从抛错改为返回空列表，避免空报表失败；范围仅该函数。执行python -m unittest tests.test_report：通过。未运行集成测试；关联#12；暂无已知兼容风险。\",\"origin\":\"current_observation\"}]}}。以上路径/编号/结果均为合成示例，实际调用必须替换为已核实事实。"

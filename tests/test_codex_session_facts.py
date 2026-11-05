@@ -394,6 +394,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                 self.assertIn(phrase, client.instructions)
             for phrase in ("httpx2.Client(trust_env=True)", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "重新加载"):
                 self.assertIn(phrase, client.instructions)
+            for phrase in ("OPENAI_TIMEOUT_SECONDS=180", "OPENAI_TIMEOUT_MAX_RETRIES", "最多6次", "api_timeout"):
+                self.assertIn(phrase, client.instructions)
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
         for name in (
             "check_branch_names", "check_commit_message", "audit_issue_pr_policy",
@@ -402,6 +404,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             for phrase in ("httpx2.Client(trust_env=True)", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"):
                 self.assertIn(phrase, tools[name].description, name)
             self.assertNotIn("proxy", tools[name].input_schema.get("properties", {}))
+            for phrase in ("OPENAI_TIMEOUT_MAX_RETRIES", "180", "invalid_timeout_max_retries", "SDK内部重试关闭"):
+                self.assertIn(phrase, tools[name].description, name)
         tool = tools["generate_skill_content"]
         for phrase in ("前后行为", "复现", "实际验证", "user_provided", "默认中文", "adoptable", "quality_review", "不会读写", "OPENAI_BASE_URL"):
             self.assertIn(phrase, tool.description)
