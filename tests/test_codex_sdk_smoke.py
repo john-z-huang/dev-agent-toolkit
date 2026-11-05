@@ -24,6 +24,42 @@ spec.loader.exec_module(smoke)
 
 
 class CodexSDKContractTests(unittest.TestCase):
+    def test_live_review_forwards_names_without_putting_secrets_in_overrides(self):
+        configuration = {"OPENAI_API_KEY": "synthetic-key", "OPENAI_BASE_URL": "https://example.invalid/v1"}
+        config, _ = smoke.settings(Path("/synthetic/root"), Path("/synthetic/site"), configuration, live_review=True)
+        server = config["mcp_servers"][smoke.SERVER]
+        self.assertEqual(server["env_vars"], ["OPENAI_API_KEY", "OPENAI_BASE_URL", *smoke.NETWORK_ENV_VARS])
+        self.assertEqual(server["env"], {"OPENAI_TIMEOUT_MAX_RETRIES": "0"})
+        self.assertNotIn(configuration["OPENAI_API_KEY"], str(server))
+        self.assertNotIn(configuration["OPENAI_BASE_URL"], str(server))
+
+    def test_live_review_preserves_proxy_environment_without_serializing_values(self):
+        configuration = {"OPENAI_API_KEY": "synthetic-key", "OPENAI_BASE_URL": "https://example.invalid/v1"}
+        for name in smoke.NETWORK_ENV_VARS:
+            with self.subTest(name=name), patch.dict(os.environ, {name: "synthetic-network-value"}, clear=True):
+                config, environment = smoke.settings(Path("/synthetic/root"), Path("/synthetic/site"), configuration, live_review=True)
+                self.assertEqual(environment[name], "synthetic-network-value")
+                self.assertIn(name, config["mcp_servers"][smoke.SERVER]["env_vars"])
+                self.assertNotIn("synthetic-network-value", str(config))
+
+    def test_external_review_diagnostics_publish_only_known_safe_codes(self):
+        for code in ("api_connection_failed", "api_timeout", "missing_base_url", "model_refusal"):
+            with self.subTest(code=code), self.assertRaisesRegex(smoke.SmokeFailure, "^check_api_input_" + code + "$"):
+                smoke.check_api_input_external_result({"structuredContent": {"passed": False, "error_code": code}})
+        with self.assertRaisesRegex(smoke.SmokeFailure, "^check_api_input_unavailable$"):
+            smoke.check_api_input_external_result({"structuredContent": {
+                "passed": False, "status": "unavailable", "error_code": "synthetic-secret-error-text",
+            }})
+
+    def test_external_review_requires_real_attempt_and_current_complete_pass(self):
+        body = {"passed": True, "status": "passed", "stage": "complete", "external_review_performed": True,
+                "policy_version": "2026-11-05.5", "input_hash": "a" * 64, "findings": []}
+        smoke.check_api_input_external_result({"structuredContent": body})
+        smoke.check_api_input_external_result({"content": [{"type": "text", "text": json.dumps(body)}]})
+        for field, value in (("external_review_performed", False), ("passed", False), ("policy_version", "old"), ("findings", [{}])):
+            with self.subTest(field=field), self.assertRaises(smoke.SmokeFailure):
+                smoke.check_api_input_external_result({"structuredContent": {**body, field: value}})
+
     def test_missing_or_blank_config_stops_before_subprocess_or_sdk(self):
         cases = ({}, {"OPENAI_API_KEY": "fake", "OPENAI_BASE_URL": " "},
                  {"OPENAI_API_KEY": "", "OPENAI_BASE_URL": "https://example.invalid/v1"})

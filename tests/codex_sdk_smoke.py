@@ -28,7 +28,17 @@ CHECK_API_ARGUMENTS = {
         "content": "Authorization: Bearer AbC123def456GhI789",
     }
 }
+LIVE_REVIEW_ARGUMENTS = {
+    "request": {
+        "purpose": "审核合成开发事实",
+        "content": "src/example.py 对空列表返回空结果；此处仅为合成测试事实。",
+    }
+}
 API_FIELD_LIMIT = 32 * 1024
+NETWORK_ENV_VARS = (
+    "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY",
+    "https_proxy", "http_proxy", "all_proxy", "no_proxy", "SSL_CERT_FILE",
+)
 
 
 class SmokeFailure(Exception):
@@ -57,8 +67,9 @@ def settings(
     configuration: dict[str, str],
     *,
     server_executable: Path | None = None,
+    live_review: bool = False,
 ) -> tuple[dict, dict[str, str]]:
-    """SDK provider 仅使用显式环境配置，MCP 子进程不继承 API 配置。"""
+    """SDK provider 使用显式配置；仅 live 测试向 MCP 转发 API 变量名称。"""
     launcher = (
         "import sys;sys.path.insert(0," + repr(str(site)) + ");"
         "import dev_workflow_standards_tools as package;"
@@ -89,8 +100,8 @@ def settings(
             "command": server_command,
             "args": server_args,
             "enabled_tools": [TOOL, CHECK_API_TOOL],
-            "env_vars": [],
-            "env": {"OPENAI_API_KEY": "", "OPENAI_BASE_URL": ""},
+            "env_vars": ["OPENAI_API_KEY", "OPENAI_BASE_URL", *NETWORK_ENV_VARS] if live_review else [],
+            "env": {"OPENAI_TIMEOUT_MAX_RETRIES": "0"} if live_review else {"OPENAI_API_KEY": "", "OPENAI_BASE_URL": ""},
             "startup_timeout_sec": 30,
         }},
     }
@@ -100,7 +111,7 @@ def settings(
         "RUST_LOG": "off",
         **configuration,
     }
-    for name in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "all_proxy", "no_proxy", "SSL_CERT_FILE"):
+    for name in NETWORK_ENV_VARS:
         if name in os.environ:
             environment[name] = os.environ[name]
     return config, environment
@@ -210,6 +221,41 @@ def check_api_input_result(value) -> None:
         raise SmokeFailure("check_api_input_local_gate_failed")
 
 
+def check_api_input_external_result(value) -> None:
+    result = _mapping(value)
+    body = result.get("structuredContent") if result else None
+    if not isinstance(body, dict) and result:
+        for item in result.get("content", []):
+            if isinstance(item, dict) and item.get("type") == "text":
+                try:
+                    body = json.loads(item["text"])
+                except (ValueError, KeyError):
+                    continue
+                break
+    if isinstance(body, dict) and body.get("passed") is not True:
+        # Only publish known safe classifications, never arbitrary API/MCP text.
+        code = body.get("error_code")
+        if code in {
+            "missing_api_key", "missing_base_url", "client_initialization_failed",
+            "api_connection_failed", "api_timeout", "api_status_error",
+            "model_refusal", "invalid_decision_response", "request_too_large",
+        }:
+            raise SmokeFailure("check_api_input_" + code)
+        status = body.get("status")
+        if status in {"blocked_local", "needs_revision", "insufficient_evidence", "unavailable"}:
+            raise SmokeFailure("check_api_input_" + status)
+    if (
+        not result or result.get("isError") or result.get("error")
+        or not isinstance(body, dict)
+        or body.get("passed") is not True or body.get("status") != "passed"
+        or body.get("stage") != "complete" or body.get("external_review_performed") is not True
+        or body.get("policy_version") != "2026-11-05.5"
+        or not isinstance(body.get("input_hash"), str) or len(body["input_hash"]) != 64
+        or body.get("findings") != []
+    ):
+        raise SmokeFailure("check_api_input_external_review_failed")
+
+
 def check_turn(turn: dict) -> int:
     if turn.get("status") != "completed" or turn.get("error") is not None:
         raise SmokeFailure("model_turn_failed")
@@ -252,6 +298,7 @@ def execute_sdk(
         site,
         configuration,
         server_executable=Path(installed_info["path"]) if installed_info else None,
+        live_review=live,
     )
     (root / "codex-state").mkdir()
     workspace = root / "workspace"
@@ -308,6 +355,11 @@ def execute_sdk(
                 check_api_input_result(_mapping(api_input_call) or {})
                 calls = 0
                 if live:
+                    reviewed = client.request("mcpServer/tool/call", {
+                        "threadId": thread_id, "server": SERVER, "tool": CHECK_API_TOOL,
+                        "arguments": LIVE_REVIEW_ARGUMENTS,
+                    }, response_model=McpServerToolCallResponse)
+                    check_api_input_external_result(reviewed)
                     prompt = "Call " + TOOL + " exactly once with these arguments: " + json.dumps(ARGUMENTS) + ". Then reply OK. Do not answer without calling the tool."
                     turn = client.turn_start(thread_id, prompt, params={"model": MODEL, "effort": EFFORT})
                     client.register_turn_notifications(turn.turn.id)
@@ -331,6 +383,7 @@ def execute_sdk(
                     "direct_tool_call": "passed",
                     "check_api_input_schema": "passed",
                     "check_api_input_local_call": "passed",
+                    "check_api_input_external_review": "passed" if live else "not_run",
                     "model_test": "passed" if live else "not_run",
                     "actual_model_tool_calls": calls,
                 }

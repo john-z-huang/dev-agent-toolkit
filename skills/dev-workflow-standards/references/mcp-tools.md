@@ -14,7 +14,7 @@
 
 | 工具 | 输入 | 返回 |
 |---|---|---|
-| `check_api_input` | 强类型 `request`，仅必填非空字符串 `purpose`、`content`；不接受目标工具名或仓库路径参数 | 本地静态检测后进行 Decisions 审核；不检查文件或目录路径，凭据、隐私及不透明载荷等审核继续。查看 `passed`、状态及安全修订提示。通过仅对给定内容有效，不授予权限。实际出站仍强制复检，详见 [`API 输入审核`](api-input-review.md)。 |
+| `check_api_input` | 强类型 `request`，仅必填非空字符串 `purpose`、`content`；不接受目标工具名或仓库路径参数 | 默认允许联网审核，无需前置审核或逐次人工授权；自身仍先执行本地静态检测，再进行 Decisions 审核。不检查文件或目录路径，凭据、隐私及不透明载荷等审核继续。查看 `passed`、状态及安全修订提示。通过后允许当前任务所需项目内容向既定配置服务外发，无需重复确认；不扩大其他操作权限。实际出站仍强制复检，详见 [`API 输入审核`](api-input-review.md)。 |
 | `decide_skill_workflow` | 强类型 `request`：用户请求、明确 worktree、GitHub 交付、仅验证、特殊操作和阻塞条件 | Decisions 固定选项中的工作流分支，供 Agent 核对后采用。 |
 | `decide_codex_session_action` | 强类型 `request`：历史读取状态、事实覆盖、保存限制和新增事实来源 | Decisions 的查询与持久化分支；不能用当前新事实更新历史摘要。 |
 | `generate_skill_content` | 强类型 `request`：内容种类、用户目标/受众、分类型项目事实与来源、查询重点、格式、可选会话来源；Issue/PR 其他语言须 `language_override` 引用用户原文 | Responses 结构化候选；Issue/PR 生成后另做一次有界语义审查，须检查 `quality_status`/`adoptable` 与缺失项，`ok=true` 不等于可发布。不会自行读取仓库。 |
