@@ -66,6 +66,22 @@ uv tool dir --bin
 
 合作进程锁不能阻止外部编辑器或恶意进程写文件；更新期间应停止其他写入者。发布前核对快照，交换后检测到旧目录变化会撤回并保留现场。此机制不承诺断电持久化或对恶意并发写入者的沙箱隔离。
 
+## 全局 AGENTS.md 的独立更新
+
+仓库的 `instructions/codex-global.md` 维护全局指令源，根目录 `AGENTS.md` 继续维护本项目规则。全局源作为独立资源随完整 wheel 发布，不属于 Skill 快照；更新包和 Skill 都不会自动覆盖 `~/.codex/AGENTS.md`。
+
+在仓库根目录构建并更新已安装工具后，可先预览：
+
+```bash
+"$(uv tool dir --bin)/dev-workflow-standards" agents update --source ./instructions/codex-global.md --dry-run
+```
+
+核对差异后显式执行同一命令并去掉 `--dry-run`。首次接管已有文件须加 `--adopt`；受管文件被本地修改时，另用 `--replace-local` 表明已审阅并决定替换。不传 `--source` 时读取包内全局指令源。源文件只以 `{{HOME}}` 渲染当前用户主目录，必需 Skill 和文档缺失时停止，不自动迁移旧目录或改写模板规则。
+
+每次实际改变已有全局文件前，默认先把原字节备份到 `~/.codex/AGENTS_BAK_<Unix秒时间戳>.md`。备份失败或同秒名称冲突即停止，不覆盖已有备份；目标不存在、内容不变及只读预览不产生备份。备份由用户自行保留和选择恢复，不自动删除。目标文件、受管记录和锁仅服务于本次全局文件更新，不注册 MCP、不修改其他配置。更新期间停止外部编辑，发生中断时先核对实际目标、记录和备份再恢复；不要仅凭退出前的文字认定成功。
+
+详细命令和边界见 [仓库全局指令说明](https://github.com/john-z-huang/dev-workflow-standards#版本管理与更新全局-agentsmd)。
+
 ## MCP 与源码辅助脚本
 
 原 `dev-workflow-standards-tools` 命令仍直接启动 stdio MCP。Skill 管理入口是另一个命令，不向该入口加入隐式安装动作。MCP 注册、环境变量名称转发及审批继续遵循原规则。
