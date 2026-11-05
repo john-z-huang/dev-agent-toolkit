@@ -138,6 +138,10 @@ Git/GitHub 写操作必须先满足工作流中的用户授权和执行层审批
 
 已在当前 checkout 开始工作、需要从当前 HEAD 原地建立工作分支时，使用 `create_repository_branch`。它支持 detached HEAD 和普通分支，保留已暂存、未暂存及未跟踪内容；只新增本地分支并改变 HEAD，不创建其他 checkout。它与切换已有分支的 `switch_repository_branch`、创建新目录的 `create_repository_worktree` 分别适用不同场景。参数、OID 并发条件、Hook 限制和失败后的回读要求见 [`MCP 工具目录`](skills/dev-workflow-standards/references/mcp-tools.md#原地创建工作分支)。
 
+已有需求 worktree 落后实际 PR base 时，按 [`基线同步`](skills/dev-workflow-standards/references/worktree-base-sync.md) 使用 `fetch_repository_branch`、`audit_worktree_base_sync` 和对应同步工具。已发布分支 merge，未发布分支 rebase；固定并复核 head/base OID，保留冲突现场并重新验证。获取远端基线不切换其他 checkout；普通非强制推送规则继续生效。
+
+本服务发起的 merge/rebase 冲突可按 [`受限恢复`](skills/dev-workflow-standards/references/worktree-recovery.md) 显式继续或撤销。四个专用工具要求匹配当前 worktree 的管理记录、操作 ID 与最新状态快照；不自动解决或暂存冲突，也不调用 skip，abort 还要求确认丢弃本次冲突解决内容。手工、复杂或状态不明的操作不自动接管。
+
 只读按 [`只读查询规约`](skills/dev-workflow-standards/references/read-only-queries.md) 核对完整子命令、参数、配置和副作用：`status` 避免可选 index 写回，差异展示禁用外部 diff/textconv，`fetch` 仍属本地写入；REST 查询显式 GET，GraphQL 审阅 query/mutation；凭据、文件输出和复合步骤不自动豁免。这是 Agent 操作规范，不是新增命令解析器。用户全局 AGENTS 或已安装 Skill 仍有限制时继续遵守并报告；本仓库修改不自动更新全局规则或重载已安装服务。
 
 ### MCP 客户端可见的使用说明

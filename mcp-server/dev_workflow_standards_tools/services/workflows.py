@@ -33,6 +33,16 @@ from ..infrastructure.paths import _run_repo, _validated_repo_path
 from ..infrastructure.process import _run_fixed
 from ..policy import OID_PATTERN, REPO_PATTERN, WORK_BRANCH_PATTERN, branch_errors as _branch_errors
 from .validation import check_commit_message
+from .worktree_sync import (
+    abort_repository_merge,
+    abort_repository_rebase,
+    continue_repository_merge,
+    continue_repository_rebase,
+    audit_worktree_base_sync,
+    fetch_repository_branch,
+    merge_repository_branch,
+    rebase_repository_branch as _safe_rebase_repository_branch,
+)
 
 
 class ManifestEntry(BaseModel):
@@ -178,25 +188,25 @@ def merge_upstream_branch_fast_forward(repo_path: str, branch_name: str) -> dict
     return {"ok": result.returncode == 0, "repo_path": root, "branch_name": branch_name, "error": None if result.returncode == 0 else "git merge --ff-only 失败；保留现场"}
 
 
-def rebase_repository_branch(repo_path: str, branch_name: str, base_branch: str) -> dict[str, Any]:
-    """在明确授权后将当前 branch_name rebase 到已存在的本地 base_branch。要求工作区完全干净且当前分支匹配；副作用：改写当前分支提交历史。若冲突或失败立即停止，不自动 continue/abort/reset。需要 Codex writes approval。"""
-    root, error = _validated_repo_path(repo_path)
-    if error:
-        return {"ok": False, "error": error}
-    if (error := _valid_local_branch(root, branch_name)) or (error := _valid_local_branch(root, base_branch)):
-        return {"ok": False, "error": error}
-    if branch_name == base_branch or _current_branch(root) != branch_name:
-        return {"ok": False, "error": "当前分支必须等于 branch_name，且不能 rebase 到自身"}
-    for name in (branch_name, base_branch):
-        exists = _run_fixed(["git", "show-ref", "--verify", f"refs/heads/{name}"], cwd=root)
-        if exists.returncode != 0:
-            return {"ok": False, "error": f"本地分支不存在: {name}"}
-    clean = _require_clean_worktree(root)
-    if clean:
-        return {"ok": False, "error": clean}
-    result = _run_fixed(["git", "rebase", base_branch], cwd=root)
-    return {"ok": result.returncode == 0, "repo_path": root, "branch_name": branch_name, "base_branch": base_branch,
-            "error": None if result.returncode == 0 else "git rebase 失败或产生冲突；未执行后续恢复命令"}
+def rebase_repository_branch(
+    repo_path: str,
+    branch_name: str,
+    base_branch: str,
+    expected_head_oid: str | None = None,
+    expected_base_oid: str | None = None,
+    old_base_oid: str | None = None,
+    remote: str = "origin",
+) -> dict[str, Any]:
+    """仅 rebase 经 live remote 核实未发布的当前分支；保留旧调用前三个参数。"""
+    return _safe_rebase_repository_branch(
+        repo_path,
+        branch_name,
+        base_branch,
+        expected_head_oid,
+        expected_base_oid,
+        old_base_oid,
+        remote,
+    )
 
 
 def remove_repository_worktree(repo_path: str, target_worktree_path: str, branch_name: str) -> dict[str, Any]:

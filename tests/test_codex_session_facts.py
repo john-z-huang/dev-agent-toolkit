@@ -419,12 +419,12 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
         self.assertTrue(tool.annotations.open_world_hint)
         self.assertFalse(tool.annotations.idempotent_hint)
 
-    async def test_all_33_tools_registered_with_described_schemas(self) -> None:
+    async def test_all_40_tools_registered_with_described_schemas(self) -> None:
         self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
         tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 33)
+        self.assertEqual(len(tools), 40)
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 33)
+        self.assertEqual(len(by_name), 40)
         for tool in tools:
             self.assertTrue(tool.description, tool.name)
 
@@ -474,6 +474,30 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
         tools = {tool.name: tool for tool in await complete_server.list_tools()}
         for name in ("pull_origin_branch_fast_forward", "fetch_upstream_branch"):
             self.assertTrue(tools[name].annotations.open_world_hint)
+
+        self.assertTrue(tools["audit_worktree_base_sync"].annotations.read_only_hint)
+        self.assertTrue(tools["audit_worktree_base_sync"].annotations.open_world_hint)
+        for name in ("fetch_repository_branch", "merge_repository_branch", "rebase_repository_branch"):
+            self.assertFalse(tools[name].annotations.read_only_hint)
+            self.assertTrue(tools[name].annotations.open_world_hint)
+
+        audit_schema = tools["audit_worktree_base_sync"].input_schema
+        self.assertEqual(set(audit_schema["properties"]), {"repo_path", "base_ref", "remote"})
+        self.assertIn("null", str(audit_schema["properties"]["remote"]))
+        fetch_schema = tools["fetch_repository_branch"].input_schema
+        self.assertEqual(set(fetch_schema["properties"]), {"repo_path", "remote", "branch_name"})
+        merge_schema = tools["merge_repository_branch"].input_schema
+        self.assertTrue({"expected_head_oid", "expected_base_oid"}.issubset(merge_schema["required"]))
+        rebase_schema = tools["rebase_repository_branch"].input_schema
+        self.assertTrue({"expected_head_oid", "expected_base_oid", "old_base_oid", "remote"}.issubset(rebase_schema["properties"]))
+        for name, phrases in {
+            "audit_worktree_base_sync": ("publication_status=unknown", "不会 fetch", "ahead_by/behind_by"),
+            "fetch_repository_branch": ("FETCH_HEAD", "compare-and-swap", "不调用 OpenAI"),
+            "merge_repository_branch": ("expected_head_oid", "--no-overwrite-ignore", "普通 merge commit"),
+            "rebase_repository_branch": ("live 查询", "禁止 rebase", "old_base_oid"),
+        }.items():
+            for phrase in phrases:
+                self.assertIn(phrase, tools[name].description, (name, phrase))
 
         branch_tool = tools["create_repository_branch"]
         self.assertFalse(branch_tool.annotations.read_only_hint)

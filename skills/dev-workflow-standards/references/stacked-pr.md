@@ -18,3 +18,5 @@ main
 当前 MCP 服务不能列出未知 PR 编号；可按 [`read-only-queries.md`](read-only-queries.md) 使用已授权 Connector 或 `gh pr list` 发现编号，再调用规定的 `audit_issue_pr_policy` 门禁。服务不提供改 PR base、关闭错误 PR、revert、cherry-pick 或解决拓扑冲突的工具；需要这些写操作、无法确定对应 PR 或查询失败时，保留现场并报告，不以任意命令绕过。
 
 基础分支合并后，如需更新堆叠 PR 的 base，先由用户提供确切 PR 编号和新的 base，再按项目约定评估差异；目前没有自动更新 base 的工具。
+
+父 PR 合并后的需求分支迁移按 [`已有 worktree 的基线同步`](worktree-base-sync.md) 处理。特别是 squash 合并，必须核对父 PR 的实际合并结果、旧父分支提交边界和子需求范围；未发布子分支可用增强 rebase 的旧边界参数只重放自己的提交。已发布子分支采用 merge；如差异仍混入父需求或无法保持独立审查，报告拓扑问题并等待调整决定，不自动改写公开历史或强推。更新本地分支与更新远端 PR base 是不同操作，前者成功不表示后者已完成。

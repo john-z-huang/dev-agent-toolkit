@@ -41,7 +41,9 @@
 
 ## 并行工作与串行交付
 
-共享同一目标基线的工作项依次集成：完成一个 worktree 的验证、提交、推送和 PR 集成后，在原始工作区同步实际 base；再在下一个尚未交付的 worktree 用 `rebase_repository_branch` 指定当前 branch 与新 base，并重新验证。冲突需要新业务/架构决定时暂停；工具不会自动继续、abort 或 reset rebase。
+共享同一目标基线的工作项依次集成。一个 PR 集成后，按 [`已有 worktree 的基线同步`](worktree-base-sync.md) 获取实际 base 并审计接下来准备交付的 checkout；已发布分支 merge，已核实未发布分支 rebase，可快进时优先快进。该流程可直接从已有需求 worktree 进入，不创建新 worktree，也无需先切换另一个 checkout 更新本地 `main`。固定并复核 head/base OID，同步后重新验证；冲突或结果不确定时保留现场，不自动继续、abort、reset 或强推。
+
+用户明确选择继续或撤销本服务发起的操作时，改读 [`受限恢复`](worktree-recovery.md)；恢复记录不是授权，操作ID、head与最新状态指纹必须匹配，不能把别的worktree或手工操作当作当前恢复目标。
 
 已集成 worktree 默认保持原状。只有用户明确要求移除时，才调用 `remove_repository_worktree`；该工具只移除干净的指定 worktree 目录，不删本地分支或远端分支。清理分支另按 [`pr-merge-cleanup.md`](pr-merge-cleanup.md) 执行。
 

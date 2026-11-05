@@ -69,11 +69,12 @@ SERVER_INSTRUCTIONS = """
 1. `audit_repository_state` 核对指定仓库的本地状态和 remote 名称；随后按需使用 `list_repository_worktrees`、`check_branch_names`、`capture_untracked_file_manifest`、`check_staged_changes`。审计的 `ok=true` 仅表示本地 Git status/remotes 读取成功；`github` 仍可能为 null 且同时有 `github_error`，不能当作 GitHub 核验成功。
 2. 只有用户明确要求使用或创建 worktree 时才使用 worktree 流程：先 `create_repository_worktree`，然后如确需保留源仓库未跟踪文件，再 `capture_untracked_file_manifest` 并 `copy_untracked_files_to_worktree`。复制后检查结果再继续；失败返回也可能已部分复制，`copied` 只列确认完成项，工具不回滚，先检查目标，禁止盲目重跑覆盖。
 3. 选择分支操作时：`switch_repository_branch` 用于切换到已经存在的本地分支；`create_repository_branch` 用于在当前 HEAD commit 上新建分支并让当前 checkout 指向它；`create_repository_worktree` 用于新建另一个 checkout 并指定已核验的本地 base。`create_repository_branch` 保留 staged、unstaged、同文件混合修改和 untracked 文件；事务使用 `option no-deref` 更新 HEAD，保留旧分支的原始直接引用，不改工作区文件或 index。`expected_head_oid` 省略/null 时由工具捕获当前 HEAD，提供时只比较 HEAD commit OID；若 HEAD 符号目标变成另一个同 OID target 仍会接受。无效、unborn/non-commit HEAD、分支冲突、locked worktree、未合并 index、进行中的 merge/rebase/sequencer、Git 环境重定向变量或可执行 `reference-transaction` hook 会在写入前拒绝。能力探测排队后 abort，不提交 ref；仅当实际事务成功并回读确认 HEAD 与新分支同 OID、HEAD 指向新分支时 `ok=true`。`created=true` 可与回读失败并存；`created=null`/`needs_review=true` 表示事务失败后先检查 refs，不能直接盲目重试。此工具本地只写新分支 ref 和 HEAD（Git 可能维护 reflog），不 checkout、不触碰 index、不联网、不调用 OpenAI。
-4. 修改本地分支前核对状态；同步 upstream 时先 `fetch_upstream_branch`，再按需要调用 `merge_upstream_branch_fast_forward`。`pull_origin_branch_fast_forward` 和 `fetch_upstream_branch` 会访问 remote 网络。`rebase_repository_branch` 改写本地历史；remove 会删除 worktree 目录；这些操作都要求对应授权。
-5. 提交前先 `check_branch_names`、`check_commit_message`，再精确 `stage_repository_paths`；暂存后、提交前调用 `check_staged_changes` 并核验 staged paths，才考虑 `commit_repository_changes`。commit 会运行正常 Git hooks（可能执行仓库配置的检查）；工具不绕过 hooks。
-6. GitHub 流程可先 `list_github_issue_labels` 与 `audit_issue_pr_policy`，再按授权创建 Issue、推送分支、创建 PR、合并。创建工具若返回 `created=true, ok=false`，资源可能已创建但回读未确认；先人工/只读回读，不要盲目重试。合并后可用 `cleanup_merged_pr_local_branch`；它会联网核验 PR 并同步 base，只有合并前记录的 head OID 与本地分支 OID 精确相同才允许 `git branch -D`，否则不强制删除。
-7. Codex session fact helpers 只处理调用方提供的元数据和文本：先由宿主读取、核实原会话，再排序或准备摘要 payload。它们不读取宿主 history，不调用 Serena，不写 Memory；`prepare_codex_session_memory` 的 payload 不是授权。
-8. 其余六个可联网 OpenAI 入口分两组：`check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 在本地硬检查通过后调用 Decisions；`decide_skill_workflow`、`decide_codex_session_action` 调用 Decisions；`generate_skill_content` 调用 Responses.parse。三个检查工具的 `decision` 仅为 `compliant`、`requires_fix`、`insufficient_evidence`；前三个只能把已检查事实交给模型作补充判断；后三个分别给出路由建议、历史动作建议、候选文本。生成支持 issue、pr、commit_message、plan、handoff、session_summary 六种 kind。凭据与端点仅从进程环境中的 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL` 在每次请求时读取，工具参数不能指定凭据、端点或模型，固定模型为 `gpt-6-luna`。缺配置、服务拒绝、refusal、结构无效或输出不完整均是失败/需复核，不是通过；候选和建议都要 Agent 审查，不会授予 Git 或 Memory 权限。
+4. 已有需求 worktree 的基线同步：先按授权调用 `fetch_repository_branch` 获取确切远端分支，再用 `audit_worktree_base_sync` 审计所选 base 的 OID、提交关系及工作区状态；审计不会隐式 fetch，`remote=null` 表示离线快照且 publication 为 unknown。未发布的需求分支可用 `rebase_repository_branch`，工具会对默认 `origin`（或显式 configured remote）做 live `ls-remote` 并仅在确认同名分支不存在时继续；已发布分支用 `merge_repository_branch` 保留原 head，并在本地确认 remote tip 已被当前 head 包含。所有写工具均复核传入的 expected OID，重放边界必须是明确提交，冲突保留现场且没有自动恢复或推送。Fetch 会写 FETCH_HEAD/对象库，之后以 CAS 更新单个 remote-tracking ref；禁止强制更新、prune、标签、自动维护、checkout、merge 或 push。Remote Git 子进程最多等待120秒，使用 common-dir 协作锁；该锁只协调遵守它的同步工具，不阻止普通 Git、编辑器或文件修改。`pull_origin_branch_fast_forward` 与旧 `fetch_upstream_branch` 仍用于各自说明的简单 upstream 流程。所有 remote 操作会联网；同步工具的 Git 写入需要对应用户授权与 Codex writes approval。
+5. 修改本地分支前核对状态；同步 upstream 时可先 `fetch_upstream_branch`，再按需要调用 `merge_upstream_branch_fast_forward`。`pull_origin_branch_fast_forward` 和 `fetch_upstream_branch` 会访问 remote 网络。remove 会删除 worktree 目录；这些操作都要求对应授权。
+6. 提交前先 `check_branch_names`、`check_commit_message`，再精确 `stage_repository_paths`；暂存后、提交前调用 `check_staged_changes` 并核验 staged paths，才考虑 `commit_repository_changes`。commit 会运行正常 Git hooks（可能执行仓库配置的检查）；工具不绕过 hooks。
+7. GitHub 流程可先 `list_github_issue_labels` 与 `audit_issue_pr_policy`，再按授权创建 Issue、推送分支、创建 PR、合并。创建工具若返回 `created=true, ok=false`，资源可能已创建但回读未确认；先人工/只读回读，不要盲目重试。合并后可用 `cleanup_merged_pr_local_branch`；它会联网核验 PR 并同步 base，只有合并前记录的 head OID 与本地分支 OID 精确相同才允许 `git branch -D`，否则不强制删除。
+8. Codex session fact helpers 只处理调用方提供的元数据和文本：先由宿主读取、核实原会话，再排序或准备摘要 payload。它们不读取宿主 history，不调用 Serena，不写 Memory；`prepare_codex_session_memory` 的 payload 不是授权。
+9. 其余六个可联网 OpenAI 入口分两组：`check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 在本地硬检查通过后调用 Decisions；`decide_skill_workflow`、`decide_codex_session_action` 调用 Decisions；`generate_skill_content` 调用 Responses.parse。三个检查工具的 `decision` 仅为 `compliant`、`requires_fix`、`insufficient_evidence`；前三个只能把已检查事实交给模型作补充判断；后三个分别给出路由建议、历史动作建议、候选文本。生成支持 issue、pr、commit_message、plan、handoff、session_summary 六种 kind。凭据与端点仅从进程环境中的 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL` 在每次请求时读取，工具参数不能指定凭据、端点或模型，固定模型为 `gpt-6-luna`。缺配置、服务拒绝、refusal、结构无效或输出不完整均是失败/需复核，不是通过；候选和建议都要 Agent 审查，不会授予 Git 或 Memory 权限。
 
 所有响应按各工具说明的采用条件处理：`ok`/`passed`/`created`/`committed`/`merged` 有不同含义，不能只看其中一个字段；部分动作失败后先读回状态，再决定下一步。错误边界、网络访问和副作用以具体工具描述为准。
 """.strip() + "\n\n**OpenAI 网络代理**\n\n" + OPENAI_NETWORK_DESCRIPTION
@@ -128,15 +129,30 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "从已配置的 upstream 获取指定 branch_name，更新 remote-tracking 信息；适合随后检查或快进合并前，不会合并、推送或创建 remote。"
         "repo_path 为绝对仓库根目录；upstream 必须已存在，branch_name 格式有效。ok=true 表示 fetch 成功。会联网，不改工作区文件但更新本地 Git remote refs；这是本地写入，不属于只读 CLI 覆盖，需对应用户授权和 Codex writes approval。"
     ),
+    "audit_worktree_base_sync": (
+        "只读审计准确 worktree 的 HEAD、branch、base commit、merge-base、ahead/behind、dirty、操作中、detached 与锁定状态；适用于开始同步前核对本地快照。"
+        "base_ref 仅接受本地 refs/heads、refs/remotes 下的准确 ref、未带前缀的本地分支名或完整 commit OID，不接受任意 revision 表达式；不会 fetch。remote 省略/null 时不联网且 publication_status=unknown；指定已配置 remote 名称时仅 live 查询当前分支的同名远端 ref，网络/认证失败为 ok=false、status=unknown，不能推断为 unpublished。"
+        "ok=true 表示审计成功；status 为 up_to_date（base 已是 head 祖先）、fast_forwardable、diverged、blocked 或 unknown。ahead_by/behind_by 始终按 HEAD 相对 base 统计。只读本地 Git；remote 非空时 live 查询最多等待120秒并在 network_accessed 标明联网，不调用 OpenAI、Session 或 Memory。示例：{\"repo_path\":\"/workspace/repo-feature\",\"base_ref\":\"refs/remotes/origin/main\",\"remote\":\"origin\"}。"
+    ),
+    "fetch_repository_branch": (
+        "从已配置 remote 获取单个准确分支到 refs/remotes/<remote>/<branch>；用于基线核验前刷新远端分支。只接收 remote 名称和合法 branch_name，不接受 URL、任意 refspec 或 Git 参数。"
+        "工具先将精确分支 fetch 到 FETCH_HEAD/对象库，再拒绝 remote-tracking ref 回退，只在目标不存在或新 tip 为旧 tip 后代时用 OID compare-and-swap 更新该单个 ref。使用空 refmap、关闭 tags/prune/prune-tags/子模块/自动维护，不 checkout、merge、push 或更新其他分支。失败可能已写 FETCH_HEAD 或对象；查看 fetch_head_written、tracking_ref_updated、needs_review 和 error_code 后先只读核验。"
+        "remote fetch 最多等待120秒，并使用 common-dir 协作锁（不阻止其他 Git、编辑器或文件修改）；会联网并写本地 Git FETCH_HEAD/对象库及成功时单一 remote-tracking ref。工具不调用 OpenAI、Session 或 Memory。需对应用户授权与 Codex writes approval。"
+    ),
     "merge_upstream_branch_fast_forward": (
         "把已 fetch 的 `upstream/branch_name` 快进合入当前同名本地分支；只有明确授权同步且确认基点适合时使用。不会自行 fetch 或创建 merge commit。"
         "要求 branch_name 与当前分支一致、工作区完全干净、upstream 已配置且对应 remote ref 已存在；先单独调用 fetch_upstream_branch。ok=true 才表示本地快进完成。"
         "会改变本地分支和工作区；使用本地已取回 ref，不额外联网；需授权和 Codex writes approval。"
     ),
+    "merge_repository_branch": (
+        "将准确的当前需求分支与已核验 base 合并；用于已发布需求分支需要包含更新后的 base 时保留公开历史。不同于 merge_upstream_branch_fast_forward，本工具支持普通非快进 merge commit；不自动 fetch、push 或回退到 rebase。"
+        "branch_name 必须等于当前分支；base_ref 仅为准确本地 branch/remote-tracking ref 或完整 commit OID；expected_head_oid 与 expected_base_oid 必须提供准确 40/64 位 OID。remote 默认为 origin，必须是 configured remote；live 同名远端需求 ref 若存在，其 commit 必须本地可读且为当前 head 祖先，否则拒绝。调用前仍需核实已知 PR、协作者及下游消费者。"
+        "拒绝非空 branch.<current>.mergeOptions 配置，避免它改变合并策略；显式关闭 autostash/squash 并显式提交，使用 `git merge --ff --no-edit --no-overwrite-ignore`，能快进时快进，分叉时创建普通 merge commit。只拒绝与目标变更路径重叠的 ignored 未跟踪文件，正常 hooks 仍运行。ok=true/merged=true 才表示操作与 HEAD、父提交、干净状态回读全部通过；冲突保留现场、不自动 abort/reset/回滚。remote 检查最多等待120秒；写操作持有 common-dir 协作锁，但不能阻止其他 Git、编辑器或文件修改。会联网核验 remote 并修改当前 worktree/ref，可能写 merge commit；不调用 OpenAI、Session 或 Memory。需要用户授权和 Codex writes approval。"
+    ),
     "rebase_repository_branch": (
-        "将当前 branch_name rebase 到已存在的本地 base_branch；仅在明确授权改写历史时使用，不适合共享分支或未确认冲突处理方案的场景。"
-        "要求两个本地分支均有效且存在、当前分支匹配 branch_name、两分支不同、工作区完全干净。ok=true 表示 rebase 完成；失败/冲突时保留现场，不自动 continue/abort/reset。"
-        "改写本地提交历史，不联网；需明确授权及 Codex writes approval。示例：{\"repo_path\":\"/workspace/repo\",\"branch_name\":\"feat/synthetic\",\"base_branch\":\"main\"}。"
+        "将当前 branch_name rebase 到固定 base_branch；仅在指定 configured remote 的 live 查询确认该分支未发布、且用户明确授权改写私有历史时使用。已发布需求分支禁止 rebase；若远端分支存在、网络/认证结果未知或 remote 未配置则拒绝；不能把缺少 remote-tracking ref 当成未发布。"
+        "保留前三个参数兼容旧调用；expected_head_oid/expected_base_oid 非空时与当前 OID 精确比较；旧 base_branch 仅接受本地分支名、refs/heads、refs/remotes 准确 ref 或完整 commit OID。old_base_oid 可选，必须是当前 head 的祖先 commit；仅当已核实堆叠分支旧边界时才使用，工具不猜边界。"
+        "运行时禁用 autostash/updateRefs，不绕过正常 hooks；仅拒绝与基线或待重放提交路径重叠的 ignored 未跟踪文件。ok=true/rebased=true 才表示目标祖先、当前分支与干净工作区回读成功；冲突留在现场，返回冲突路径与 needs_review，不自动 continue/abort/reset/回滚。remote 检查最多等待120秒；写操作持有 common-dir 协作锁，但不能阻止其他 Git、编辑器或文件修改。会联网做发布检查并改写当前本地分支历史；不推送、不调用 OpenAI、Session 或 Memory。需要明确授权及 Codex writes approval。示例：{\"repo_path\":\"/workspace/repo\",\"branch_name\":\"feat/synthetic\",\"base_branch\":\"refs/remotes/origin/main\",\"expected_head_oid\":\"0123456789012345678901234567890123456789\",\"expected_base_oid\":\"abcdefabcdefabcdefabcdefabcdefabcdefabcd\",\"old_base_oid\":null,\"remote\":\"origin\"}。示例 OID 为合成格式值。"
     ),
     "remove_repository_worktree": (
         "移除指定的同仓库本地 worktree 目录；仅适用于用户明确要求删除该 worktree 且确认其中无须保留内容。不会删除本地或远端分支，不使用 force。"
@@ -278,14 +294,36 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "repo_path": "已配置 upstream remote 的仓库绝对根路径。",
         "branch_name": "要从 upstream 获取的远端分支名；只更新 remote-tracking 信息，不合并。",
     },
+    "audit_worktree_base_sync": {
+        "repo_path": "要审计的准确 worktree/Git 仓库绝对根目录，不接受子目录。",
+        "base_ref": "目标基线：本地分支名、refs/heads/<name>、refs/remotes/<remote>/<name> 的准确引用，或完整40/64位 commit OID；不接受任意 revision 表达式。",
+        "remote": "可选、已配置的 remote 名称。省略/null 表示纯本地快照且 publication_status=unknown、不联网；非空时联网查询当前分支的同名远端 ref，URL、未配置名称和查询失败均不视为 unpublished。",
+    },
+    "fetch_repository_branch": {
+        "repo_path": "目标 Git worktree 的绝对仓库根目录。",
+        "remote": "已配置 remote 的名称，不接受 remote URL；缺失或未配置会拒绝。",
+        "branch_name": "要从 remote 的 refs/heads 获取的合法分支名；工具只请求该分支并将成功 tip 更新至 refs/remotes/<remote>/<branch>。",
+    },
     "merge_upstream_branch_fast_forward": {
         "repo_path": "待快进同步的本地 worktree 绝对仓库根路径。",
         "branch_name": "必须与当前检出分支同名，且 upstream/<branch_name> 已由单独 fetch 获取。",
     },
+    "merge_repository_branch": {
+        "repo_path": "目标 Git worktree 的绝对仓库根目录。",
+        "branch_name": "必须与当前检出的本地分支完全相同。",
+        "base_ref": "待合并目标：本地分支名、refs/heads/<name>、refs/remotes/<remote>/<name> 的准确引用，或完整 commit OID；不接受任意 revision 表达式。",
+        "expected_head_oid": "必填的当前 HEAD commit OID；必须是40/64位十六进制，工具会在写入前重新比较。",
+        "expected_base_oid": "必填的 base commit OID；必须是40/64位十六进制，工具会重新解析 base_ref 并比较。",
+        "remote": "已配置 remote 名称，默认 origin；工具会联网核对当前需求分支同名远端 ref，不能传 URL。",
+    },
     "rebase_repository_branch": {
         "repo_path": "待 rebase 的 worktree 仓库绝对根路径。",
-        "branch_name": "必须是当前检出的本地源分支；工具会拒绝目标相同的 base。",
-        "base_branch": "已存在的本地目标基分支；不接受未验证的 remote ref。",
+        "branch_name": "必须是当前检出的本地需求分支；工具会对 configured remote 做 live 查询并拒绝已发布的同名分支。",
+        "base_branch": "目标基线：本地分支名、refs/heads/<name>、refs/remotes/<remote>/<name> 的准确引用，或完整 commit OID；不接受任意 revision 表达式。",
+        "expected_head_oid": "可选的预期 HEAD OID；null/省略时由工具捕获当前值，非空时必须是40/64位十六进制且与当前 HEAD 精确匹配。",
+        "expected_base_oid": "可选的预期 base OID；null/省略时由工具捕获当前值，非空时必须是40/64位十六进制且与解析出的 base 精确匹配。",
+        "old_base_oid": "可选的已核验旧边界 commit OID，须为当前 head 祖先；仅用于堆叠分支迁移，提供后只重放该边界之后的提交。null/省略不推测旧边界。",
+        "remote": "已配置 remote 名称，默认 origin；缺失、未配置、网络或认证结果未知时均拒绝 rebase。",
     },
     "remove_repository_worktree": {
         "repo_path": "拥有目标 worktree 的源仓库绝对根路径。",
@@ -388,8 +426,6 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
 }
 
 
-assert len(TOOL_DESCRIPTIONS) == 33
-assert set(TOOL_DESCRIPTIONS) == set(PARAMETER_DESCRIPTIONS)
 
 
 _OPENAI_BOUNDARIES = {
@@ -415,3 +451,56 @@ for _tool_name in TOOL_DESCRIPTIONS:
         TOOL_DESCRIPTIONS[_tool_name] += _SESSION_FACT_BOUNDARIES[_tool_name]
     else:
         TOOL_DESCRIPTIONS[_tool_name] += "接口边界：本工具不调用 OpenAI、不读取宿主会话或 Serena Memory，也不写入 Serena Memory。"
+
+
+# Managed recovery tools deliberately have no caller-selected remote or recovery strategy.
+for _kind in ("merge", "rebase"):
+    for _action in ("continue", "abort"):
+        _name = f"{_action}_repository_{_kind}"
+        _network = "rebase continue 会对记录的 configured remote 做 live 查询，已发布则拒绝；" if (_kind, _action) == ("rebase", "continue") else "此工具离线；"
+        TOOL_DESCRIPTIONS[_name] = (
+            f"对本服务启动并记录在当前 worktree gitdir 的简单 {_kind} 执行一次原生 {_action}。"
+            "先 audit_worktree_base_sync 取得 managed_in_progress recovery_context 和新 fingerprint；"
+            "调用方先核实当前目录、UUID、HEAD、冲突解决内容。无记录、篡改、跨 worktree、锁、复杂 todo 或旧快照拒绝。"
+            + ("continue 要求冲突已解决并暂存；拒绝未合并、未暂存及无关暂存内容。" if _action == "continue" else "abort 丢弃恢复范围内解决工作；必填 strict boolean confirm_discard_resolution_work 必须为 true。")
+            + _network + "执行本地 Git 写操作，需要用户授权与 Codex writes approval；保留正常 hooks，不自动 stage/edit/skip/reset/stash/push，不调用 OpenAI、Session 或 Memory。"
+            "成功必须核实分支历史、操作结束及受保护内容并清理记录；needs_review=true 时检查现场，不循环重试。"
+            "action_started=true 表示 Git 已启动，失败不能假定无副作用；记录清理失败或回读不确定会保留记录。"
+        )
+        PARAMETER_DESCRIPTIONS[_name] = {
+            "repo_path": "必填，当前操作所属 worktree 的绝对仓库根路径；不能传同仓库其他 checkout。",
+            "operation_id": "必填，最新 audit 的 recovery_context.operation_id 标准 UUID；绑定当前 checkout 和具体操作。",
+            "expected_current_head_oid": "必填，最新 audit 的 recovery_context.current_head_oid 完整40/64位 commit OID；操作前重新比较。",
+            "expected_state_fingerprint": "必填，最新 audit.current_state_fingerprint 的64位小写 SHA-256；涵盖记录、原生状态、index、HEAD和相关文件，变化即拒绝。",
+        }
+        if _action == "abort":
+            PARAMETER_DESCRIPTIONS[_name]["confirm_discard_resolution_work"] = "必填严格布尔值，必须为 true，明确确认丢弃操作范围内的冲突解决工作；false/null/省略/字符串/数字均不允许。"
+
+TOOL_DESCRIPTIONS["audit_worktree_base_sync"] += (
+    "恢复审计另返回 recovery_context（status 为 none/managed_in_progress/unmanaged/needs_review）与 current_state_fingerprint。"
+    "只有 managed_in_progress 提供可调用恢复工具的 operation_id、kind、current_head_oid 及指纹；none 无操作，unmanaged 未由本服务记录，needs_review 需人工核查。"
+    "顶层 blocked 可因原生冲突操作存在而成立，与 recovery_context 是否可恢复独立；传恢复工具的是 recovery_context.current_head_oid。"
+    "指纹为有界内容快照，任何解决、暂存或元数据变化后必须重新审计；记录或复杂状态拒绝不构成删除/采用记录的授权。"
+)
+for _kind in ("merge", "rebase"):
+    for _action in ("continue", "abort"):
+        _name = f"{_action}_repository_{_kind}"
+        TOOL_DESCRIPTIONS[_name] += (
+            "仅受管理简单 merge 或 merge-backend pick-only rebase；exec/edit/reset/merge todo、autostash/updateRefs、混合或无记录操作均拒绝。"
+            "有界读取：记录256KiB、单原生文件1MiB、index16MiB、单相关工作文件8MiB、工作文件总量32MiB、4096路径、20000 replay commits；超限失败关闭，忽略无关ignored依赖目录。"
+            "成功清理当前worktree gitdir记录；失败保留现场，记录和指纹本身不授予写入权限。"
+            + ("成功仅 ok=true/completed=true；非零 continue 返回 still_in_progress 与刷新上下文，needs_review=true。" if _action == "continue" else "成功仅 ok=true/aborted=true；失败 needs_review 取决于是否已启动Git，不能自动重试。")
+            + ("记录remote的 live查询最长120秒，配置缺失、查询失败、未知或已发布均拒绝。" if (_kind, _action) == ("rebase", "continue") else "")
+            + '合成调用：{"repo_path":"/workspace/topic","operation_id":"11111111-1111-4111-8111-111111111111","expected_current_head_oid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expected_state_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"'
+            + (',"confirm_discard_resolution_work":true}' if _action == "abort" else '}')
+        )
+
+SERVER_INSTRUCTIONS += (
+    "\n受限恢复组：本服务的 merge/rebase 启动前在当前 worktree gitdir 写入绑定记录；冲突后先 audit_worktree_base_sync(remote=null)。"
+    "调用方在既有授权下解决并暂存后重新 audit，凭 recovery_context.operation_id/current_head_oid 和 current_state_fingerprint 调用对应 continue；"
+    "需要丢弃解决工作时调用对应 abort，并显式 confirm_discard_resolution_work=true。只有 rebase continue 联网核对记录remote的未发布状态，merge continue及两种abort离线。"
+    "四工具只执行一次原生命令并核实回读，不接管无管理或复杂操作，不自动解决、暂存、skip、reset、stash、push；指纹和记录不是授权。"
+)
+
+assert len(TOOL_DESCRIPTIONS) == 40
+assert set(TOOL_DESCRIPTIONS) == set(PARAMETER_DESCRIPTIONS)
