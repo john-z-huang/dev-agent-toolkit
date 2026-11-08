@@ -22,13 +22,13 @@ EFFORT = "medium"
 SERVER = "dev-workflow-standards-tools"
 TOOL = "get_codex_session_summary_guidance"
 ARGUMENTS = {
-    "custom_questions": ["SDK smoke test question"],
+    "custom_questions": ["SDK 冒烟测试问题"],
     "custom_template": "SDK_SMOKE_TEMPLATE",
 }
 CHECK_API_TOOL = "check_api_input"
 CHECK_API_ARGUMENTS = {
     "request": {
-        "purpose": "Review a synthetic request before external transmission",
+        "purpose": "在外发前审查合成请求",
         "content": "Authorization: Bearer AbC123def456GhI789",
     }
 }
@@ -425,7 +425,7 @@ def execute_sdk(
                         "sandbox": "read-only",
                         "approvalPolicy": "never",
                         "ephemeral": True,
-                        "baseInstructions": "You are a test subject. Use only the specified read-only MCP tool with the exact synthetic arguments. Do not inspect files, use shell, write, or delegate.",
+                        "baseInstructions": "你正在接受测试。仅可使用指定的只读 MCP 工具，并严格使用给定的合成参数。不得查看文件、使用 Shell、写入或委派任务。",
                     }
                 )
                 if (
@@ -492,11 +492,11 @@ def execute_sdk(
                     )
                     check_api_input_external_result(reviewed)
                     prompt = (
-                        "Call "
+                        "严格调用 "
                         + TOOL
-                        + " exactly once with these arguments: "
+                        + " 一次，参数如下："
                         + json.dumps(ARGUMENTS)
-                        + ". Then reply OK. Do not answer without calling the tool."
+                        + "。随后回复 OK。不得在未调用该工具时直接回答。"
                     )
                     calls = _read_live_turn(client, thread_id, prompt)
                 result = {

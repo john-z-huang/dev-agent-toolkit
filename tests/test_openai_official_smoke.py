@@ -129,6 +129,12 @@ class OfficialSmokeTests(unittest.TestCase):
             self.assertEqual(kwargs["text_format"], smoke.SmokeOutput)
             self.assertEqual(kwargs["reasoning_effort"], "medium")
             self.assertEqual(kwargs["max_output_tokens"], 512)
+            self.assertEqual(
+                kwargs["instructions"], "返回所要求的 JSON 对象，将 ok 设置为 true。"
+            )
+            self.assertEqual(
+                kwargs["input"], "这是连通性冒烟检查。只返回请求指定的布尔字段。"
+            )
             self.assertNotIn("model", kwargs)
             return parsed_response()
 

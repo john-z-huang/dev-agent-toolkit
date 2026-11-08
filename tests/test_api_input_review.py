@@ -124,7 +124,7 @@ class ApiInputReviewServiceTests(unittest.IsolatedAsyncioTestCase):
                 json.dumps(
                     {
                         "path": r"\\server\share\file.txt",
-                        "instructions": "line one\n\nline two",
+                        "instructions": "第一行\n\n第二行",
                     }
                 )
             ),
@@ -238,7 +238,7 @@ class ApiInputReviewServiceTests(unittest.IsolatedAsyncioTestCase):
                     return_value=response,
                 ):
                     result = await api_input_review.review_api_input(
-                        "Review input", "Ordinary synthetic project facts"
+                        "审核输入", "Ordinary synthetic project facts"
                     )
                 self.assertFalse(result["passed"])
                 self.assertEqual(result["status"], "unavailable")
@@ -270,7 +270,7 @@ class ApiInputReviewServiceTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ):
                 result = await api_input_review.review_api_input(
-                    "Review input", "Ordinary synthetic project facts"
+                    "审核输入", "Ordinary synthetic project facts"
                 )
             self.assertEqual(result["status"], "unavailable")
             self.assertEqual(result["external_review_performed"], attempted)
@@ -278,13 +278,13 @@ class ApiInputReviewServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unpaired_surrogate_has_safe_local_result_and_stable_hash(self):
         result = await api_input_review.check_api_input(
-            {"purpose": "Review input", "content": "bad \ud800 text"}
+            {"purpose": "审核输入", "content": "bad \ud800 text"}
         )
         self.assertEqual(result["status"], "blocked_local")
         self.assertEqual(result["error_code"], "invalid_input")
         self.assertEqual(result["findings"][0]["rule_id"], "input.schema_invalid")
         local_result = await api_input_review.review_api_input(
-            "Review input", "bad \ud800 text"
+            "审核输入", "bad \ud800 text"
         )
         self.assertEqual(
             local_result["findings"][0]["rule_id"], "input.invalid_unicode"
@@ -491,8 +491,8 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
             {
                 "type": "choice",
                 "name": "synthetic",
-                "instructions": "Classify the facts.",
-                "choices": [{"value": "clear", "description": "Clear."}],
+                "instructions": "判断这些事实。",
+                "choices": [{"value": "clear", "description": "已明确。"}],
             }
         ]
         self.decision_results.append(_review_response())
@@ -500,7 +500,7 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
         http_patch, sdk_patch = self._patch_clients()
         with _configured(), http_patch, sdk_patch:
             await openai_client.create_decision(
-                original, questions, purpose="Classify an ordinary synthetic fact"
+                original, questions, purpose="判断一条普通合成事实"
             )
         business_call = next(
             kwargs
@@ -671,16 +671,16 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("\n\n", audited_generation["instructions"])
 
-        # 原 Issue 的指纹采用 policy v2026-11-05.1；使用完整请求重算以保持报告可追溯。
-        legacy_hash_input = json.dumps(
+        # 沿用原 Issue 的指纹格式；中文指令改变外发字节，因此使用对应的新快照。
+        compatibility_hash_input = json.dumps(
             {"policy_version": "2026-11-05.1", **first_audit},
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
         )
         self.assertEqual(
-            hashlib.sha256(legacy_hash_input.encode("utf-8")).hexdigest(),
-            "d549ab8185ad4e0ee90a367d6fe8184955e79934eff404191b5b1d4debeb26d1",
+            hashlib.sha256(compatibility_hash_input.encode("utf-8")).hexdigest(),
+            "4a561aa4098e5357a745294f1caeeb1eae0b348b559eb4dbaccb0d0640daf8bf",
         )
         current_hash = api_input_review._input_hash(
             first_audit["purpose"], first_audit["content"]

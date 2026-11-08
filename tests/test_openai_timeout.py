@@ -90,7 +90,7 @@ class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(result.answers, [])
                 else:
                     result = await openai_client.parse_response(
-                        instructions="Return synthetic data",
+                        instructions="返回合成数据",
                         input="Synthetic input",
                         text_format=ParsedContent,
                         reasoning_effort="medium",
@@ -181,7 +181,7 @@ class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
                 self.assertRaises(openai_client.OpenAIWorkflowError),
             ):
                 await openai_client._create_policy_review_decision(
-                    purpose="Review input", content="Synthetic input", questions=[]
+                    purpose="审核输入", content="Synthetic input", questions=[]
                 )
             self.assertEqual(len(requests), 1)
 
@@ -198,7 +198,7 @@ class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
 
         with self.transport(handler, OPENAI_TIMEOUT_MAX_RETRIES="1"):
             await openai_client._create_policy_review_decision(
-                purpose="Review input", content="Synthetic input", questions=[]
+                purpose="审核输入", content="Synthetic input", questions=[]
             )
             self.assertEqual(requests[0].url.host, "first.synthetic.invalid")
             self.assertEqual(requests[1].url.host, "second.synthetic.invalid")
@@ -209,7 +209,7 @@ class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
             requests.clear()
             with self.assertRaises(openai_client.OpenAIWorkflowError):
                 await openai_client._create_policy_review_decision(
-                    purpose="Review input", content="Synthetic input", questions=[]
+                    purpose="审核输入", content="Synthetic input", questions=[]
                 )
             self.assertEqual(len(requests), 1)
 

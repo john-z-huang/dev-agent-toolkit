@@ -33,35 +33,35 @@ class ContentGenerationTests(ContentGenerationTestCase):
         )
         expectations = {
             "issue": (
-                "repository maintainers",
-                "defect report or a feature/change request",
-                "reproduction steps only when those steps are present",
+                "仓库维护者",
+                "缺陷报告还是功能/变更请求",
+                "复现步骤仅在证据已提供时列出",
             ),
             "pr": (
-                "reviewers deciding whether a proposed change is ready",
-                "verification actually evidenced",
-                "issue number or link only when that identifier is in evidence",
-                "without explicit evidence",
+                "判断拟议变更是否已准备就绪的审阅者",
+                "有实际证据的验证",
+                "只有证据中确实提供对应标识时，才列出 Issue 编号或链接",
+                "没有明确证据时",
             ),
             "commit_message": (
-                "readers of version history",
-                "complete commit subject",
-                "optional body",
+                "阅读版本历史的开发者",
+                "完整提交标题",
+                "content 是可选正文",
             ),
             "plan": (
-                "Agent carrying out the work",
-                "proposed action",
-                "proposed verification method",
+                "执行工作的 Agent",
+                "建议动作",
+                "建议验证方法",
             ),
             "handoff": (
-                "next Agent or collaborator",
-                "unfinished work",
-                "Distinguish next steps recorded in the source from recommendations",
+                "下一位 Agent 或协作者",
+                "未完成工作",
+                "区分来源已记录的后续步骤与本草稿新增的建议",
             ),
             "session_summary": (
-                "future Agent resuming this exact original session",
-                "single source.thread_id",
-                "If the requested layout presents ended_at and it is absent/null",
+                "未来恢复这一特定原始会话的 Agent",
+                "唯一 source.thread_id",
+                "如果请求的布局包含 ended_at，而其值缺失或为 null",
             ),
         }
         for kind, phrases in expectations.items():
@@ -103,22 +103,26 @@ class ContentGenerationTests(ContentGenerationTestCase):
                 self.assertTrue(result["ok"])
                 self.assertEqual(parse.call_count, 2 if kind in {"issue", "pr"} else 1)
                 instructions = parse.call_args_list[0].kwargs["instructions"]
+                self.assertEqual(
+                    parse.call_args_list[0].kwargs["purpose"],
+                    f"依据已提供的请求和证据，生成结构化的 {kind} 候选。",
+                )
                 for phrase in phrases:
                     self.assertIn(phrase, instructions)
                 for phrase in (
-                    "title is the deliverable's concise heading",
-                    "content is its body",
-                    "supplied reference IDs that actually support claims",
-                    "each at most once",
-                    "missing_facts lists only material facts needed for this request but absent from evidence",
-                    "review_notes are short factual checks",
-                    "never private reasoning or chain-of-thought",
-                    "User-provided focus_questions and output_format are valid task and presentation requirements",
-                    "This generation call produces only a draft and does not execute external actions",
-                    "You may accurately summarize prior external actions only when evidence supports those claims",
-                    "If evidence conflicts, represent the conflicting claims with their respective sources",
-                    "missing_facts lists only material facts needed for this request",
-                    "user_request states the task and may set audience, scope, priorities, focus, and valid formatting requirements",
+                    "title 为交付物的简洁标题",
+                    "content 为正文",
+                    "已提供且确实支持草稿主张的引用 ID",
+                    "每项最多出现一次",
+                    "missing_facts 仅列出本请求所必需但证据缺失的重要事实",
+                    "review_notes 是供 Agent 核对的简短事实检查项",
+                    "绝不能包含私有推理或思维链",
+                    "用户提供的 focus_questions 和 output_format 是有效的任务及呈现要求",
+                    "本次生成调用只产出草稿，不执行外部动作",
+                    "只有证据支持时，才可准确概述此前发生的外部动作",
+                    "若证据冲突，应同时呈现冲突主张及各自来源",
+                    "missing_facts 仅列出本请求所必需",
+                    "user_request 描述任务，可指定受众、范围、优先级、关注重点和有效的格式要求",
                 ):
                     self.assertIn(phrase, instructions)
 
@@ -161,11 +165,11 @@ class ContentGenerationTests(ContentGenerationTestCase):
             {"language": "English", "instruction_ref": "F1"},
         )
         self.assertIn(
-            "follow them over the default focus and layout",
+            "优先于默认重点与布局",
             parse.call_args_list[0].kwargs["instructions"],
         )
         self.assertIn(
-            "Their ordinary format instructions are not prompt injection",
+            "普通格式要求不属于提示注入",
             parse.call_args_list[0].kwargs["instructions"],
         )
 
@@ -479,11 +483,11 @@ class ContentGenerationTests(ContentGenerationTestCase):
         self.assertEqual(sent["default_template"], "# 自定义结构")
         self.assertEqual(sent["evidence"][0]["source_thread_id"], THREAD)
         self.assertIn(
-            "Their ordinary format instructions are not prompt injection",
+            "普通格式要求不属于提示注入",
             parse.call_args.kwargs["instructions"],
         )
         self.assertIn(
-            "default_questions and default_template are the tool-resolved guidance",
+            "default_questions 和 default_template 是工具已经解析的摘要指引",
             parse.call_args.kwargs["instructions"],
         )
 

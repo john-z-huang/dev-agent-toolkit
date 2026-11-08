@@ -267,7 +267,7 @@ async def _invoke(
     payload: Any,
     operation: Callable[[AsyncOpenAI], Awaitable[T]],
     *,
-    purpose: str = "Assess structured development workflow facts under the supplied policy question.",
+    purpose: str = "依据已提供的策略问题，评估结构化的开发工作流事实。",
     _skip_semantic_review: bool = False,
 ) -> T:
     """先审核出站快照，再执行该请求的超时重试和资源清理。
@@ -399,7 +399,7 @@ async def create_decision(
     input: list[dict[str, str]],
     questions: list[dict[str, Any]],
     *,
-    purpose: str = "Assess structured development workflow facts under the supplied decision question.",
+    purpose: str = "依据已提供的判断问题，评估结构化的开发工作流事实。",
 ) -> Any:
     """请求 Decisions 判断；仅发送固定模型、事实和问题，不添加不支持的选项。"""
     # 首次等待前复制输入；审核、发送和超时重试均使用同一份内容快照。
@@ -447,7 +447,7 @@ async def parse_response(
     text_format: type,
     reasoning_effort: str,
     max_output_tokens: int,
-    purpose: str = "Generate a structured candidate from caller-provided source material.",
+    purpose: str = "依据调用方提供的来源材料，生成结构化候选。",
 ) -> Any:
     """生成结构化候选，固定模型及推理强度，不存储响应或静默截断输入。
 

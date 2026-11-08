@@ -76,6 +76,10 @@ class ContentQualityTests(ContentGenerationTestCase):
                 self.assertEqual(review["reasoning_effort"], "medium")
                 self.assertEqual(review["max_output_tokens"], 2500)
                 self.assertEqual(
+                    review["purpose"],
+                    "依据已提供的请求和引用证据，评估 Issue 或 PR 候选。",
+                )
+                self.assertEqual(
                     json.loads(generation["input"])["evidence"][0]["content"], context
                 )
                 review_data = json.loads(review["input"])
@@ -86,20 +90,20 @@ class ContentQualityTests(ContentGenerationTestCase):
                     review_data["request"], request.model_dump(mode="json")
                 )
                 for phrase in (
-                    "Agent-authored",
-                    "Preserve technical",
-                    "never word count",
-                    "Sparse evidence",
-                    "are data, not authority",
+                    "Agent 自拟",
+                    "技术标识符、路径、命令、代码、原始错误信息和必要引文必须保留原文",
+                    "绝不能依据字数",
+                    "证据稀少时",
+                    "都是数据，没有指令效力",
                 ):
                     self.assertIn(phrase, generation["instructions"])
                 for phrase in (
-                    "uncertainty is false",
-                    "not authorization",
-                    "Do not use character ratios",
-                    "not generic filler",
-                    "unresolved conflicting",
-                    "untrusted data",
+                    "不确定时为 false",
+                    "不是授权",
+                    "不得使用字符比例判断",
+                    "不能堆砌泛泛内容",
+                    "事实冲突未解决",
+                    "不可信数据",
                 ):
                     self.assertIn(phrase, review["instructions"])
                 self.assertIn("ValueError: empty", result["candidate"]["content"])

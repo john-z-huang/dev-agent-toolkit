@@ -47,6 +47,14 @@ class DecisionAndValidationTests(unittest.IsolatedAsyncioTestCase):
             commit_result = await check_commit_message("feat: 增加合成工具")
         self.assertTrue(branch_result["passed"])
         self.assertTrue(commit_result["passed"])
+        self.assertEqual(
+            create.call_args_list[0].kwargs["purpose"],
+            "将已提供的 branch_policy 判断规则应用于本地观测。",
+        )
+        self.assertEqual(
+            create.call_args_list[1].kwargs["purpose"],
+            "将已提供的 commit_policy 判断规则应用于本地观测。",
+        )
         branch_input, branch_questions = create.call_args_list[0].args
         commit_input, commit_questions = create.call_args_list[1].args
         branch_facts = json.loads(branch_input[0]["content"])
@@ -79,8 +87,8 @@ class DecisionAndValidationTests(unittest.IsolatedAsyncioTestCase):
             repr(ai_workflow.SUBJECT_PATTERN.pattern),
             repr(ai_workflow.CHINESE_PATTERN.pattern),
             repr(ai_workflow.ATTRIBUTION_PATTERN.pattern),
-            "The Chinese word '工具' alone is ordinary description, not attribution.",
-            "Do not add style preferences",
+            "中文词语“工具”本身只是普通说明，不是署名。",
+            "不得增加风格偏好",
         ):
             self.assertIn(expected, commit_prompt)
             self.assertNotIn(expected, json.dumps(commit_facts, ensure_ascii=False))
@@ -98,9 +106,9 @@ class DecisionAndValidationTests(unittest.IsolatedAsyncioTestCase):
             "prohibited_attribution_present=true", commit_choices["requires_fix"]
         )
         for prompt in (branch_prompt, commit_prompt):
-            self.assertIn("Never invent a choice value", prompt)
-            self.assertIn("only if this question lists one", prompt)
-            self.assertNotIn("select insufficient_evidence", prompt)
+            self.assertIn("绝不能编造选项值", prompt)
+            self.assertIn("仅当本问题列出了证据不足选项", prompt)
+            self.assertNotIn("无条件选择 insufficient_evidence", prompt)
 
     async def test_commit_attribution_uses_local_comment_filter_but_checks_body(
         self,
@@ -163,20 +171,18 @@ class DecisionAndValidationTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(facts["expected_base_checked"])
             self.assertFalse(facts["expected_head_checked"])
             prompt = create.call_args.args[1][0]["instructions"]
-            self.assertIn("false mean that comparison was not requested", prompt)
-            self.assertIn("Issue-only and PR-only audits are valid", prompt)
+            self.assertIn("false 表示未请求该比较", prompt)
+            self.assertIn("仅检查 Issue 或仅检查 PR 都是有效审计", prompt)
+            self.assertIn("不得推断 CI、labels、仓库身份、可合并性", prompt)
             self.assertIn(
-                "Do not infer CI, labels, repository identity, mergeability", prompt
-            )
-            self.assertIn(
-                "Apply only the requested-scope checks defined in this question's instructions",
+                "仅对这些本地观测应用本问题 instructions 中定义的请求范围内检查",
                 prompt,
             )
             self.assertIn(
-                "Do not add checks for unrequested objects, fields, or external conditions",
+                "不得增加对未请求对象、字段或外部条件的检查",
                 prompt,
             )
-            self.assertNotIn("required issue-closing reference", prompt)
+            self.assertNotIn("始终要求关闭 Issue 的引用", prompt)
 
     async def test_invalid_local_check_skips_decisions_and_never_passes(self) -> None:
         local = {
@@ -366,26 +372,26 @@ class DecisionAndValidationTests(unittest.IsolatedAsyncioTestCase):
             q["instructions"] for q in create.call_args.args[1]
         ]
         self.assertIn(
-            "if has_relevant_sources=false, choose query_project", lookup_prompt
+            "若 has_relevant_sources=false，选择 query_project", lookup_prompt
         )
-        self.assertIn("if history_accessible=false, choose blocked", lookup_prompt)
+        self.assertIn("若 history_accessible=false，选择 blocked", lookup_prompt)
         self.assertIn(
-            "rely on and trace the already-read evidence without repeating I/O unnecessarily",
+            "使用和追溯已经读过的证据，避免不必要的重复 I/O",
             lookup_prompt,
         )
         self.assertNotIn("existing_summary=true", lookup_prompt)
         self.assertIn(
-            "if persistence_allowed=false or new_fact_origin is current_session or none",
+            "若 persistence_allowed=false，或者 new_fact_origin 为 current_session 或 none",
             persistence_prompt,
         )
         self.assertIn(
-            "if has_relevant_sources=false, choose skip_persistence", persistence_prompt
+            "若 has_relevant_sources=false，选择 skip_persistence", persistence_prompt
         )
         self.assertIn(
-            "choose update_summary when existing_summary=true or create_summary when false",
+            "existing_summary=true 选择 update_summary，existing_summary=false 选择 create_summary",
             persistence_prompt,
         )
-        self.assertNotIn("choose query_project", persistence_prompt)
+        self.assertNotIn("选择 query_project", persistence_prompt)
 
     async def test_session_model_cannot_create_on_current_facts_or_skip_source_block(
         self,

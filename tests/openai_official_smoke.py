@@ -95,8 +95,8 @@ async def _call_live() -> dict[str, Any]:
     os.environ["OPENAI_BASE_URL"] = base_url
     try:
         response = await parse_response(
-            instructions="Return the required JSON object with ok set to true.",
-            input="This is a connectivity smoke check. Return only the requested boolean field.",
+            instructions="返回所要求的 JSON 对象，将 ok 设置为 true。",
+            input="这是连通性冒烟检查。只返回请求指定的布尔字段。",
             text_format=SmokeOutput,
             reasoning_effort="medium",
             max_output_tokens=512,
