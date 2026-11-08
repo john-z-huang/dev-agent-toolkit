@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 SERVER_DESCRIPTION = (
     "本地开发工作流 MCP 服务：提供固定范围的 Git、GitHub 与 worktree 操作，及用于检查和起草的只读辅助工具。"
     "优先使用覆盖需求的 MCP 工具；未提供工具或功能未覆盖时，Agent 可在既有任务授权内自行使用 CLI 补足。"
@@ -42,7 +41,8 @@ OPENAI_NETWORK_DESCRIPTION = (
 )
 
 
-SERVER_INSTRUCTIONS = """
+SERVER_INSTRUCTIONS = (
+    """
 本地开发工作流 MCP 工具按以下组选择，不是通用 shell、任意 Git 命令或授权来源。所有 `repo_path` 均须显式给出目标仓库的绝对根路径；不要把子目录、另一个 worktree 或相邻仓库混作目标。先用只读检查和状态审计确认范围，写操作只有在用户明确授权并由 Codex writes approval 放行后才能调用。
 
 **通用外发输入审核**
@@ -55,7 +55,9 @@ SERVER_INSTRUCTIONS = """
 
 **MCP 优先与 CLI 补充**
 
-""" + CLI_FALLBACK_DESCRIPTION + """
+"""
+    + CLI_FALLBACK_DESCRIPTION
+    + """
 
 **只读 CLI 的额外边界**
 
@@ -80,7 +82,10 @@ Agent 自行规划操作顺序；各工具按自身当前输入、资源状态�
 - 配置与失败：每次实际 OpenAI 请求及重试显式读取非空 OPENAI_API_KEY、OPENAI_BASE_URL，固定 gpt-6-luna，不回退。审核、生成和质量审查保持数据依赖。取消停止后续阶段与重试并有界关闭客户端；缺配置、拒绝、refusal、无效或不完整结果均不是通过。
 
 所有响应按各工具说明的采用条件处理：`ok`/`passed`/`created`/`committed`/`merged` 有不同含义，不能只看其中一个字段；部分动作失败后先读回状态，再决定下一步。错误边界、网络访问和副作用以具体工具描述为准。
-""".strip() + "\n\n**OpenAI 网络代理**\n\n" + OPENAI_NETWORK_DESCRIPTION
+""".strip()
+    + "\n\n**OpenAI 网络代理**\n\n"
+    + OPENAI_NETWORK_DESCRIPTION
+)
 
 
 TOOL_DESCRIPTIONS: dict[str, str] = {
@@ -88,13 +93,15 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "检查显式分支名，或在未给 branch_names 时读取 repo_path 当前分支；适合准备创建、重命名分支或提交时验证命名规则。"
         "不能据此推断分支已存在、已推送或适合合并。repo_path 必须为目标仓库绝对根目录；同时提供 branch_names 与 repo_path 时只检查所列名字。"
         "逐项看 checks[].passed/errors；本地结果字段 local_passed=true 才表示本地硬规则通过。通过后还会联网调用 Decisions，结果可能有 decision/ai_status/error_code，顶层 passed 是本地与 AI 合并结果。"
-        "只读 Git；本地失败会跳过 API，不改分支。最小示例：{\"branch_names\":[\"feat/synthetic\"]}。"
-    ) + OPENAI_NETWORK_DESCRIPTION,
+        '只读 Git；本地失败会跳过 API，不改分支。最小示例：{"branch_names":["feat/synthetic"]}。'
+    )
+    + OPENAI_NETWORK_DESCRIPTION,
     "check_commit_message": (
         "检查完整提交信息的主题格式、中文说明和禁止署名；适合提交前验证，不用于解释 Git 状态。message 是完整 message，可含正文；空行及左侧去空格后以 # 开头的注释行会在本地检查时忽略。"
         "先看 local_passed/errors；只有 local_passed=true 才表示本地硬检查通过，之后才联网请求 Decisions，且模型仍可返回 requires_fix/insufficient_evidence。顶层 passed 是本地与 AI 合并结果，只有 passed=true 可采用为检查通过。"
-        "不读写仓库；本地失败不联网。示例：{\"message\":\"docs: 更新合成说明\"}。"
-    ) + OPENAI_NETWORK_DESCRIPTION,
+        '不读写仓库；本地失败不联网。示例：{"message":"docs: 更新合成说明"}。'
+    )
+    + OPENAI_NETWORK_DESCRIPTION,
     "check_staged_changes": (
         "对 repo_path 的暂存区运行固定 `git diff --cached --check`，检查空白错误；适用于 stage 后、commit 前。只读暂存内容，不运行测试或用户命令。"
         "repo_path 必须是绝对仓库根目录。passed=true 表示该 Git 检查成功；否则检查 diagnostics/error/exit_code，再修复并重跑。无网络、无写入。额外查询按共享规则执行；工具未暴露时可按相同空白检查条件用 CLI 补足，但本工具实际失败不能改走 CLI 绕过。"
@@ -102,12 +109,12 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "stage_repository_paths": (
         "仅将 paths 明列的普通仓库相对文件路径加入 Git index，适用于确认最终 diff 后的精确暂存。先检查 repo_path 与 paths，并确认用户授权；不会自动加入其他文件。"
         "paths 必须非空、唯一、无绝对路径或穿越路径；允许精确 tracked deletion。已有暂存内容会拒绝。仅当 ok=true 且 staged_paths 与请求完全一致时继续提交。"
-        "会修改本地 index，需要明确用户授权和 Codex writes approval；不联网。示例：{\"repo_path\":\"/workspace/repo\",\"paths\":[\"src/example.py\"]}。"
+        '会修改本地 index，需要明确用户授权和 Codex writes approval；不联网。示例：{"repo_path":"/workspace/repo","paths":["src/example.py"]}。'
     ),
     "commit_repository_changes": (
         "提交已暂存的精确文件集合；仅适用于用户明确授权 commit 且 staged diff 已审查、检查通过之后。expected_paths 必须精确等于当前 staged paths；message 是完整提交信息，并须通过既有本地策略及 cached diff check。"
         "成功需看 ok=true、committed=true 及回读的 commit_oid/message/paths/status。若 committed=true 但 ok=false，提交已发生而后续回读不全，先查仓库，不要重试。"
-        "会运行 `git commit` 和正常 hooks（hooks 可能执行项目检查或其他副作用），可能创建提交；不绕过 hooks。固定 Git 操作本身不主动访问网络；仓库配置的 hooks 可能有额外效果。需用户授权与 Codex writes approval。示例：{\"repo_path\":\"/workspace/repo\",\"message\":\"docs: 更新合成说明\",\"expected_paths\":[\"README.md\"]}。"
+        '会运行 `git commit` 和正常 hooks（hooks 可能执行项目检查或其他副作用），可能创建提交；不绕过 hooks。固定 Git 操作本身不主动访问网络；仓库配置的 hooks 可能有额外效果。需用户授权与 Codex writes approval。示例：{"repo_path":"/workspace/repo","message":"docs: 更新合成说明","expected_paths":["README.md"]}。'
     ),
     "list_repository_worktrees": (
         "只读列出 repo_path 仓库的 worktree 路径、HEAD、分支以及 detached/locked 状态，适合创建/删除 worktree 前核对拓扑。repo_path 为绝对仓库根目录。"
@@ -121,7 +128,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "create_repository_branch": (
         "在当前 worktree 的现有 HEAD 提交上原子创建本地工作分支并将 HEAD 指向它；适合用户明确要求新建当前点分支且保留当前工作区时。与 switch_repository_branch 不同，本工具不切换到既有分支；与 create_repository_worktree 不同，本工具不创建第二个目录，也不要求选择 base。"
         "repo_path 必须是绝对 Git 根目录；branch_name 必须通过项目分支策略和 git check-ref-format，不能为 main/master 或任何已存在/冲突的本地引用。expected_head_oid 省略/null 时由工具捕获当前 HEAD；提供非null值时须为40/64位 hex 且与当前HEAD解析出的commit OID一致，空字符串无效。OID是唯一并发条件：HEAD改指向同OID的另一符号目标仍可通过。要求HEAD是commit、worktree未锁定、index无冲突、无merge/rebase等操作；存在可执行reference-transaction hook或Git环境重定向时在写入前拒绝。Git须支持全局--no-lazy-fetch、update-ref stdin事务及option no-deref/symref-update旧OID条件；不支持时安全失败，不移除保护选项重试。缺失的promisor对象不会隐式取回。"
-        "允许暂存、未暂存、同文件混合修改和未跟踪文件。成功结果需 `ok=true`、`created=true`，并核对 `start_head_oid`；失败看 `error_code`/`error`。事务失败时 `created=null` 且 `needs_review=true` 表示先核对 refs 再决定重试；事务已成功但回读失败时 `created=true`、`ok=false`，不得盲目重试。只写本地 refs、HEAD及Git可能维护的reflog，不checkout、不改文件/index、不联网、不调用OpenAI。需要用户明确授权和 Codex writes approval。最小示例：{\"repo_path\":\"/workspace/repo\",\"branch_name\":\"feat/synthetic\",\"expected_head_oid\":null}。"
+        '允许暂存、未暂存、同文件混合修改和未跟踪文件。成功结果需 `ok=true`、`created=true`，并核对 `start_head_oid`；失败看 `error_code`/`error`。事务失败时 `created=null` 且 `needs_review=true` 表示先核对 refs 再决定重试；事务已成功但回读失败时 `created=true`、`ok=false`，不得盲目重试。只写本地 refs、HEAD及Git可能维护的reflog，不checkout、不改文件/index、不联网、不调用OpenAI。需要用户明确授权和 Codex writes approval。最小示例：{"repo_path":"/workspace/repo","branch_name":"feat/synthetic","expected_head_oid":null}。'
     ),
     "pull_origin_branch_fast_forward": (
         "将当前已检出的同名分支通过 `git pull --ff-only origin branch_name` 快进同步；适合明确要求从 origin 更新，不能用于非快进合并或其他分支。"
@@ -135,7 +142,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "audit_worktree_base_sync": (
         "只读审计准确 worktree 的 HEAD、branch、base commit、merge-base、ahead/behind、dirty、操作中、detached 与锁定状态；适用于开始同步前核对本地快照。"
         "base_ref 仅接受本地 refs/heads、refs/remotes 下的准确 ref、未带前缀的本地分支名或完整 commit OID，不接受任意 revision 表达式；不会 fetch。remote 省略/null 时不联网且 publication_status=unknown；指定已配置 remote 名称时仅 live 查询当前分支的同名远端 ref，网络/认证失败为 ok=false、status=unknown，不能推断为 unpublished。"
-        "ok=true 表示审计成功；status 为 up_to_date（base 已是 head 祖先）、fast_forwardable、diverged、blocked 或 unknown。ahead_by/behind_by 始终按 HEAD 相对 base 统计。只读本地 Git；remote 非空时 live 查询最多等待120秒并在 network_accessed 标明联网，不调用 OpenAI、Session 或 Memory。示例：{\"repo_path\":\"/workspace/repo-feature\",\"base_ref\":\"refs/remotes/origin/main\",\"remote\":\"origin\"}。"
+        'ok=true 表示审计成功；status 为 up_to_date（base 已是 head 祖先）、fast_forwardable、diverged、blocked 或 unknown。ahead_by/behind_by 始终按 HEAD 相对 base 统计。只读本地 Git；remote 非空时 live 查询最多等待120秒并在 network_accessed 标明联网，不调用 OpenAI、Session 或 Memory。示例：{"repo_path":"/workspace/repo-feature","base_ref":"refs/remotes/origin/main","remote":"origin"}。'
     ),
     "fetch_repository_branch": (
         "从已配置 remote 获取单个准确分支到 refs/remotes/<remote>/<branch>；用于基线核验前刷新远端分支。只接收 remote 名称和合法 branch_name，不接受 URL、任意 refspec 或 Git 参数。"
@@ -155,7 +162,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "rebase_repository_branch": (
         "将当前 branch_name rebase 到固定 base_branch；仅在指定 configured remote 的 live 查询确认该分支未发布、且用户明确授权改写私有历史时使用。已发布需求分支禁止 rebase；若远端分支存在、网络/认证结果未知或 remote 未配置则拒绝；不能把缺少 remote-tracking ref 当成未发布。"
         "保留前三个参数兼容旧调用；expected_head_oid/expected_base_oid 非空时与当前 OID 精确比较；旧 base_branch 仅接受本地分支名、refs/heads、refs/remotes 准确 ref 或完整 commit OID。old_base_oid 可选，必须是当前 head 的祖先 commit；仅当已核实堆叠分支旧边界时才使用，工具不猜边界。"
-        "运行时禁用 autostash/updateRefs，不绕过正常 hooks；仅拒绝与基线或待重放提交路径重叠的 ignored 未跟踪文件。ok=true/rebased=true 才表示目标祖先、当前分支与干净工作区回读成功；冲突留在现场，返回冲突路径与 needs_review，不自动 continue/abort/reset/回滚。remote 检查最多等待120秒；写操作持有 common-dir 协作锁，但不能阻止其他 Git、编辑器或文件修改。会联网做发布检查并改写当前本地分支历史；不推送、不调用 OpenAI、Session 或 Memory。需要明确授权及 Codex writes approval。示例：{\"repo_path\":\"/workspace/repo\",\"branch_name\":\"feat/synthetic\",\"base_branch\":\"refs/remotes/origin/main\",\"expected_head_oid\":\"0123456789012345678901234567890123456789\",\"expected_base_oid\":\"abcdefabcdefabcdefabcdefabcdefabcdefabcd\",\"old_base_oid\":null,\"remote\":\"origin\"}。示例 OID 为合成格式值。"
+        '运行时禁用 autostash/updateRefs，不绕过正常 hooks；仅拒绝与基线或待重放提交路径重叠的 ignored 未跟踪文件。ok=true/rebased=true 才表示目标祖先、当前分支与干净工作区回读成功；冲突留在现场，返回冲突路径与 needs_review，不自动 continue/abort/reset/回滚。remote 检查最多等待120秒；写操作持有 common-dir 协作锁，但不能阻止其他 Git、编辑器或文件修改。会联网做发布检查并改写当前本地分支历史；不推送、不调用 OpenAI、Session 或 Memory。需要明确授权及 Codex writes approval。示例：{"repo_path":"/workspace/repo","branch_name":"feat/synthetic","base_branch":"refs/remotes/origin/main","expected_head_oid":"0123456789012345678901234567890123456789","expected_base_oid":"abcdefabcdefabcdefabcdefabcdefabcdefabcd","old_base_oid":null,"remote":"origin"}。示例 OID 为合成格式值。'
     ),
     "remove_repository_worktree": (
         "移除指定的同仓库本地 worktree 目录；仅适用于用户明确要求删除该 worktree 且确认其中无须保留内容。不会删除本地或远端分支，不使用 force。"
@@ -165,7 +172,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "create_repository_worktree": (
         "从已存在的本地 base_branch 新建本地 branch_name 和 worktree 目录；仅适合用户明确要求使用或创建 worktree 时使用。不会同步 upstream、复制未跟踪文件或开始实现。"
         "repo_path 为绝对仓库根目录；target_worktree_path 必须是不存在、位于源仓库目录之外的绝对路径；目标分支须符合项目策略且不存在，不能已被其他 worktree 检出，base_branch 须存在。ok=true 才表示二者创建成功。"
-        "新增本地分支与目录，需要明确授权和 Codex writes approval；不联网。示例：{\"repo_path\":\"/workspace/repo\",\"target_worktree_path\":\"/workspace/repo-feature\",\"branch_name\":\"feat/synthetic\",\"base_branch\":\"main\"}。"
+        '新增本地分支与目录，需要明确授权和 Codex writes approval；不联网。示例：{"repo_path":"/workspace/repo","target_worktree_path":"/workspace/repo-feature","branch_name":"feat/synthetic","base_branch":"main"}。'
     ),
     "capture_untracked_file_manifest": (
         "为 repo_path 生成未忽略、未跟踪普通文件清单，包含仓库根相对 POSIX path、SHA-256 和字节数；供后续 copy 工具校验使用。不是备份，也不包含 ignored 文件。"
@@ -174,7 +181,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "copy_untracked_files_to_worktree": (
         "按先前 capture_untracked_file_manifest 返回值，将符合 SHA-256/size 的普通未跟踪文件复制到同仓库目标 worktree；用于明确希望把未跟踪输入带入新 worktree 的场景。"
         "manifest 每项含仓库相对 POSIX path、64位小写十六进制 sha256、非负字节 size；源文件仍须未跟踪、未忽略且指纹一致。target_worktree_path 须为已存在同仓库 worktree 的绝对路径。目标存在文件、symlink、路径穿越均拒绝，绝不覆盖。"
-        "仅 ok=true 且 copied 含所有期望路径才完整采用；ok=false 仍可能部分复制，copied仅列已复制项，无自动 rollback。失败先检查 target，再由用户决定是否补做，禁止盲目重跑。会写目标文件但不暂存、不联网；需授权与 Codex writes approval。结构示例：{\"repo_path\":\"/workspace/repo\",\"target_worktree_path\":\"/workspace/repo-feature\",\"manifest\":[{\"path\":\"notes/input.md\",\"sha256\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"size\":123}]}；示例摘要和大小仅为占位，实际值必须原样取自 capture_untracked_file_manifest。"
+        '仅 ok=true 且 copied 含所有期望路径才完整采用；ok=false 仍可能部分复制，copied仅列已复制项，无自动 rollback。失败先检查 target，再由用户决定是否补做，禁止盲目重跑。会写目标文件但不暂存、不联网；需授权与 Codex writes approval。结构示例：{"repo_path":"/workspace/repo","target_worktree_path":"/workspace/repo-feature","manifest":[{"path":"notes/input.md","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":123}]}；示例摘要和大小仅为占位，实际值必须原样取自 capture_untracked_file_manifest。'
     ),
     "configure_project_hooks_path": (
         "将目标仓库本地 `core.hooksPath` 固定设为 `.githooks`；仅当本仓库 `.githooks/pre-commit` 和 `commit-msg` wrappers 已存在且用户明确要求启用时使用。不会复制、安装或联网获取 hook。"
@@ -183,11 +190,12 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "audit_issue_pr_policy": (
         "联网只读检查用户指定的 GitHub Issue/PR 状态及可选 PR base/head、Issue 关闭引用；适合创建 PR 前按请求范围核验。至少给 issue_number 或 pr_number；expected_base/head 仅可与 pr_number 一起使用。Issue-only 与 PR-only 均有效。"
         "只读审计本身会联网查询 GitHub；local_passed=true 表示审计符合本地策略并允许继续调用 OpenAI Decisions，local_passed=false 只阻止 OpenAI 请求，不表示此前没有查询 GitHub。顶层 passed 表示本地审计与 AI 决策均通过；同时检查 decision/ai_status/error_code。只查开放状态、显式期望的 base/head，并仅在同时给 issue_number 与 pr_number 时查 Closes/Fixes/Resolves 引用；不查 CI、labels、mergeability。只读，不修改 GitHub。若需额外只读查询且本工具未覆盖，可按共享规则使用受限 gh CLI；REST `gh api` 须显式 `--method GET`，在已知 endpoint 路径中指明 owner/repo（不是 `--repo` 选项）；GraphQL 限已审阅 query。参数、副作用不明或写入操作不适用。"
-    ) + OPENAI_NETWORK_DESCRIPTION,
+    )
+    + OPENAI_NETWORK_DESCRIPTION,
     "cleanup_merged_pr_local_branch": (
         "PR 已合并后，将本地仓库切到 PR base、快进同步 origin/base，再删除本地 PR head；只用于用户明确授权的合并后清理，不会合并 PR 或删除远端分支。"
         "联网读取 PR 并要求 MERGED、工作区干净；repo_path 为绝对仓库根路径。branch_name 可省略（使用 PR head），若给出必须匹配；merged_head_oid 应为合并前记录的 OID。先尝试安全 `-d`；仅普通删除失败且所给 OID 与当前本地分支 OID 完全相同才用 `-D`。"
-        "completed=true 表示清理完成；失败时查看 actions，因为可能已切换/拉取 base。操作会联网 pull 并改变本地分支/删除本地分支，需明确授权和 Codex writes approval。示例：{\"repo_path\":\"/workspace/repo\",\"pr_number\":12,\"repo\":\"owner/repo\",\"branch_name\":\"feat/synthetic\",\"merged_head_oid\":\"0000000000000000000000000000000000000000\"}；SHA 仅为格式示例，实际值可取自已授权 merge 工具返回的 pre_merge_head_oid。"
+        'completed=true 表示清理完成；失败时查看 actions，因为可能已切换/拉取 base。操作会联网 pull 并改变本地分支/删除本地分支，需明确授权和 Codex writes approval。示例：{"repo_path":"/workspace/repo","pr_number":12,"repo":"owner/repo","branch_name":"feat/synthetic","merged_head_oid":"0000000000000000000000000000000000000000"}；SHA 仅为格式示例，实际值可取自已授权 merge 工具返回的 pre_merge_head_oid。'
     ),
     "audit_repository_state": (
         "审计指定仓库的本地根路径、当前分支、status 行和 remote 名称，并尝试读取 GitHub 仓库身份/Fork/default branch；适合需要确认当前动作目标时使用。repo_path 必须是绝对仓库根目录。"
@@ -200,7 +208,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "create_github_issue": (
         "在明确用户授权后联网创建 GitHub Issue；适用于内容、目标仓库和至少一个现存工作类型 label 均已确认时。body 是完整 Markdown 正文，工具用临时 body-file 传递并默认指派当前 gh 用户。"
         "repo_path 为绝对仓库根目录，repo 为 owner/repo；title/body 非空，labels 至少一项且须存在于最多读取的前100个 label 中。ok=true 表示创建后回读开放状态、labels、当前用户 assignee 均通过。created=true 且 ok=false 表示可能已创建但回读未确认，先回读，不可盲目重试。"
-        "会联网创建 Issue，属于外部写入；需明确用户授权和 Codex writes approval。示例：{\"repo_path\":\"/workspace/repo\",\"repo\":\"owner/repo\",\"title\":\"docs: 合成示例\",\"body\":\"合成说明\",\"labels\":[\"<先从 list_github_issue_labels 核对的精确名称>\"]}；label 占位值须替换为查询结果中的真实名称。"
+        '会联网创建 Issue，属于外部写入；需明确用户授权和 Codex writes approval。示例：{"repo_path":"/workspace/repo","repo":"owner/repo","title":"docs: 合成示例","body":"合成说明","labels":["<先从 list_github_issue_labels 核对的精确名称>"]}；label 占位值须替换为查询结果中的真实名称。'
     ),
     "push_issue_branch_to_origin": (
         "验证指定 Issue 开放、有 label 且指派给当前 gh 用户后，将当前本地非主分支推到 origin；仅适用于用户明确授权推送并确认关联 Issue。不会 force push。"
@@ -210,7 +218,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "create_github_pull_request": (
         "为显式 head/base 创建并回读关联开放 PR；适合本地验证完成且分支已推送之后。body 是完整 Markdown，必须含指定 Issue 的 Closes/Fixes/Resolves #N 关联；默认指派当前 gh 用户。"
         "repo_path 绝对仓库根目录；repo 为 owner/repo；base/head 不同且有效，Issue 必须开放，本地 head 分支须存在。ok=true 表示回读的 OPEN/base/head/Issue关联/@me assignee 均核验成功。created=true 且 ok=false 表示已可能创建但回读未确认，先回读，不得盲重试。"
-        "会联网创建 PR，属于外部写入；需明确用户授权与 Codex writes approval。示例：{\"repo_path\":\"/workspace/repo\",\"repo\":\"owner/repo\",\"base_branch\":\"main\",\"head_branch\":\"feat/synthetic\",\"issue_number\":12,\"title\":\"feat: 增加合成能力\",\"body\":\"Closes #12\\n\\n变更说明。\"}。"
+        '会联网创建 PR，属于外部写入；需明确用户授权与 Codex writes approval。示例：{"repo_path":"/workspace/repo","repo":"owner/repo","base_branch":"main","head_branch":"feat/synthetic","issue_number":12,"title":"feat: 增加合成能力","body":"Closes #12\\n\\n变更说明。"}。'
     ),
     "merge_github_pull_request": (
         "在明确授权后合并 GitHub PR；仅用于已审查且允许合并的目标，不会使用 admin/auto 或删远端分支。先联网核验 PR OPEN/MERGEABLE、reviewDecision、required checks。base 为 main 时只允许 squash。"
@@ -228,25 +236,27 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     ),
     "order_codex_session_sources": (
         "按调用方提供且格式通过的 created_at 对 CodexSessionSource 去重、分组并从新到旧排序；适合存在多个候选历史会话时确定优先阅读组。不会读取或核验真实会话。"
-        "sources 是调用方从多个可读原会话收集的元数据列表，使用 source_link/thread_id/title/created_at/ended_at；同一 thread 元数据冲突会报错。ready=true 表示无时间歧义；priority_groups 是按 created_at 降序排列的来源组，missing_created_at 列出缺时间的来源；相同 created_at 或缺 created_at 会在 ambiguities 中明确保留，不用 UUID、updatedAt 或入参顺序猜先后。metadata_verified 始终 false。纯本地，无网络/写入。示例仅使用合成 UUID：{\"sources\":[{\"source_link\":\"codex://threads/00000000-0000-4000-8000-000000000011\",\"created_at\":\"2026-01-01T00:00:00Z\",\"title\":\"合成会话\"}]}。"
+        'sources 是调用方从多个可读原会话收集的元数据列表，使用 source_link/thread_id/title/created_at/ended_at；同一 thread 元数据冲突会报错。ready=true 表示无时间歧义；priority_groups 是按 created_at 降序排列的来源组，missing_created_at 列出缺时间的来源；相同 created_at 或缺 created_at 会在 ambiguities 中明确保留，不用 UUID、updatedAt 或入参顺序猜先后。metadata_verified 始终 false。纯本地，无网络/写入。示例仅使用合成 UUID：{"sources":[{"source_link":"codex://threads/00000000-0000-4000-8000-000000000011","created_at":"2026-01-01T00:00:00Z","title":"合成会话"}]}。'
     ),
     "prepare_codex_session_memory": (
         "依据已核对的原会话摘要和引用，生成供调用方审阅的 Serena write_memory payload；不是 Memory 写入工具。只有用户允许持久化、原会话已回读并完成溯源后，调用方才可另行授权调用 Serena。"
-        "repo_path 为目标项目绝对根目录，单独返回并写入 metadata.memory_project_root；source 需含 thread 来源及 created_at/title（source_link 足以推导 thread_id；ended_at 未知时省略/null）；summary 非空，evidence_refs 至少一个原消息/轮次引用。persistence_allowed=false 时返回 status=skipped 且 payload=null；true 时 ok=true/status=prepared 也不代表授权或来源已核验。payload 仅含 memory_name 和 content。先读回既有同 thread Memory，绝不自动写入。无网络、不调用 Serena、不写文件或 Memory。示例：{\"repo_path\":\"/workspace/project\",\"source\":{\"source_link\":\"codex://threads/00000000-0000-4000-8000-000000000011\",\"created_at\":\"2026-01-01T00:00:00Z\",\"title\":\"合成会话\"},\"summary\":\"经原会话核对的合成摘要\",\"evidence_refs\":[\"turn:2\"]}；UUID、时间、标题和引用均为合成值，实际调用须使用已核验来源。"
+        'repo_path 为目标项目绝对根目录，单独返回并写入 metadata.memory_project_root；source 需含 thread 来源及 created_at/title（source_link 足以推导 thread_id；ended_at 未知时省略/null）；summary 非空，evidence_refs 至少一个原消息/轮次引用。persistence_allowed=false 时返回 status=skipped 且 payload=null；true 时 ok=true/status=prepared 也不代表授权或来源已核验。payload 仅含 memory_name 和 content。先读回既有同 thread Memory，绝不自动写入。无网络、不调用 Serena、不写文件或 Memory。示例：{"repo_path":"/workspace/project","source":{"source_link":"codex://threads/00000000-0000-4000-8000-000000000011","created_at":"2026-01-01T00:00:00Z","title":"合成会话"},"summary":"经原会话核对的合成摘要","evidence_refs":["turn:2"]}；UUID、时间、标题和引用均为合成值，实际调用须使用已核验来源。'
     ),
     "decide_codex_session_action": (
         "依据调用方已知的来源可用性/读取程度/相关性和持久化许可，分别建议 lookup_action 与 persistence_action；适合宿主决定先读历史、查项目、澄清、阻塞或等待证据。它不读取 history，也不写 Memory。"
-        "request 的 relevant_facts_found=null 表示未知，false 表示已核实无相关事实；new_fact_origin 区分原会话、当前会话、无来源。lookup_action 枚举为 read_history/query_project/clarify/blocked：来源无关或已读且无事实时 query_project；来源不可读时 blocked；未读完或已找到相关事实时 read_history（可依据已读证据继续，无需重复读取）；已读但相关性未知时 clarify。persistence_action 为 create_summary/update_summary/skip_persistence/await_source_evidence：原会话证据完整且相关、允许持久化时按既有摘要选择创建或更新；当前会话/无来源、未许可或无相关事实时跳过；许可下来源不可读/未读完/相关性未知时等待证据。ok=true 且两项动作符合 facts 才可作为建议，仍需 Agent 审查。通过 Decisions 联网；无会话/Git/Memory副作用。示例：{\"request\":{\"user_request\":\"查背景\",\"has_relevant_sources\":false,\"history_accessible\":false,\"history_fully_read\":false,\"relevant_facts_found\":null,\"persistence_allowed\":false,\"existing_summary\":false,\"new_fact_origin\":\"none\"}}。"
-    ) + OPENAI_NETWORK_DESCRIPTION,
+        'request 的 relevant_facts_found=null 表示未知，false 表示已核实无相关事实；new_fact_origin 区分原会话、当前会话、无来源。lookup_action 枚举为 read_history/query_project/clarify/blocked：来源无关或已读且无事实时 query_project；来源不可读时 blocked；未读完或已找到相关事实时 read_history（可依据已读证据继续，无需重复读取）；已读但相关性未知时 clarify。persistence_action 为 create_summary/update_summary/skip_persistence/await_source_evidence：原会话证据完整且相关、允许持久化时按既有摘要选择创建或更新；当前会话/无来源、未许可或无相关事实时跳过；许可下来源不可读/未读完/相关性未知时等待证据。ok=true 且两项动作符合 facts 才可作为建议，仍需 Agent 审查。通过 Decisions 联网；无会话/Git/Memory副作用。示例：{"request":{"user_request":"查背景","has_relevant_sources":false,"history_accessible":false,"history_fully_read":false,"relevant_facts_found":null,"persistence_allowed":false,"existing_summary":false,"new_fact_origin":"none"}}。'
+    )
+    + OPENAI_NETWORK_DESCRIPTION,
     "generate_skill_content": (
         "为 issue、pr、commit_message、plan、handoff 或 session_summary 生成结构化候选文本，适合已有明确证据、需要起草而非执行时。request.evidence 必须非空；每项 origin 标明来源，ref 唯一。session_summary 必须提供 source.created_at 与 source.title；source.thread_id 可从 source_link 推导；只接受对应 thread 的 provided_session 证据。"
         "调用前按类型准备事实，不必先写正文：通用为目标/受众、背景/组件、路径/符号指针、范围/非目标、约束和关联项；每项标明事实/推测、来源和缺失/冲突。Issue区分缺陷/功能请求，给实际/期望/影响或能力/动机，复现和环境仅限已知；PR给前后行为、已完成diff/文件摘要与原因、实际验证命令/结果和未运行项、已知兼容风险及关联Issue。不提交全仓库、完整会话或敏感配置。"
         "user_request定目标，focus_questions/output_format的用户重点/结构优先于默认；不增加事实。Issue/PR标题与自然语言正文默认中文，英文模板/错误/Agent请求不授权改语言，技术标识/路径/代码/错误原文保留。仅当用户明确要求其他语言时提供language_override={language,instruction_ref}，引用evidence内origin=user_provided的指令原文；省略/null用中文，其他kind禁止此字段。引用来源本地校验，指令语义由模型核对。"
         "ok=true仅表示候选和审查返回有效，candidate.title/content是标题/正文（commit_message正文可空）；used_evidence_refs只列支撑内容的输入引用，missing_facts列必要缺失/冲突，review_notes列修订要点。Issue/PR另含quality_status=ready_for_agent_review或needs_revision、adoptable和quality_review（language_compliant/evidence_supported/coverage_sufficient为模型建议）。任何缺项或否定检查均不可直接采纳，修改/补证后再审阅；通过也不是发布授权。不以字数判质量。拒绝/截断/坏引用/本地commit失败/审查异常看error_code且不可采纳；仅底层请求超时按统一配置重试，不自动修复候选或换模型。"
         "通过统一客户端Responses.parse联网调用OpenAI；每次强制读取OPENAI_API_KEY与OPENAI_BASE_URL，显式传SDK且固定gpt-6-luna。Issue/PR生成后再做一次有界语义审查，其余kind一次请求。不会读写文件/仓库、Memory、会话、执行Git/GitHub或候选动作；仅处理传入事实，后续写入另需授权。"
-        "Issue示例：{\"request\":{\"kind\":\"issue\",\"user_request\":\"为维护者起草导出功能需求\",\"evidence\":[{\"reference_id\":\"U1\",\"content\":\"用户希望导出筛选结果，避免手动复制；仅涉及报表组件。验收条件尚未确认。\",\"origin\":\"user_provided\"}]}}。"
-        "PR示例：{\"request\":{\"kind\":\"pr\",\"user_request\":\"为评审者起草说明\",\"evidence\":[{\"reference_id\":\"D1\",\"content\":\"src/report.py的diff将空输入从抛错改为返回空列表，避免空报表失败；范围仅该函数。执行python -m unittest tests.test_report：通过。未运行集成测试；关联#12；暂无已知兼容风险。\",\"origin\":\"current_observation\"}]}}。以上路径/编号/结果均为合成示例，实际调用必须替换为已核实事实。"
-    ) + OPENAI_NETWORK_DESCRIPTION,
+        'Issue示例：{"request":{"kind":"issue","user_request":"为维护者起草导出功能需求","evidence":[{"reference_id":"U1","content":"用户希望导出筛选结果，避免手动复制；仅涉及报表组件。验收条件尚未确认。","origin":"user_provided"}]}}。'
+        'PR示例：{"request":{"kind":"pr","user_request":"为评审者起草说明","evidence":[{"reference_id":"D1","content":"src/report.py的diff将空输入从抛错改为返回空列表，避免空报表失败；范围仅该函数。执行python -m unittest tests.test_report：通过。未运行集成测试；关联#12；暂无已知兼容风险。","origin":"current_observation"}]}}。以上路径/编号/结果均为合成示例，实际调用必须替换为已核实事实。'
+    )
+    + OPENAI_NETWORK_DESCRIPTION,
     "check_api_input": (
         "跨MCP通用地审核一次拟外发的完整API输入；适合调用方在准备外部模型/服务请求时核对用途和最终完整指令、事实、上下文。若本服务业务工具自行发起OpenAI请求，其统一出站边界已自动审核实际payload；本工具的旧结果不能替代该强制检查。"
         "默认允许向配置的审核服务发起外部API调用，无需前置审核、自我审核或逐次人工授权；自身本地检测、配置检查和失败关闭继续执行。"
@@ -254,8 +264,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "不检查文件或目录路径；普通POSIX/Windows/UNC/file URL及嵌套JSON中的路径可以原样提供，路径或其组成部分本身不单独归为隐私或证据不足。内容另有凭据、实际隐私、未公开机密或不透明载荷时继续审核。保留全部字段、固定指令、JSON结构及换行；自动出站审核使用相同规则。"
         "本地拒绝时 status=blocked_local、stage=local、external_review_performed=false，零OpenAI客户端/请求；语义结果只有两字段均为clear才status=passed/passed=true/stage=complete。发现可修订风险为needs_revision；证据不足为insufficient_evidence；配置/API异常、refusal、缺失/重复/未知/结构无效答案为unavailable，均不得继续。stage表示local/semantic/complete检查阶段。findings仅含field、rule_id、category、安全建议和必要位置；本地位置是字符偏移，语义位置为null，绝不回显敏感原文。input_hash是规范化purpose/content与policy_version的SHA-256；external_review_performed=true表示语义请求已由SDK尝试（超时也可能已经外发），不是授权或成功证明。"
         "工具会联网调用Decisions，不读取文件/仓库/会话，不写入文件、Git、GitHub或Memory，也不代发业务请求。除purpose和content各自最多32768字符/32KiB UTF-8外，含模型、固定审核问题与指令以及两字段的完整请求JSON最多48KiB UTF-8；超限返回unavailable/request_too_large且不发送审核请求。每次请求仍须从OPENAI_API_KEY与OPENAI_BASE_URL环境变量读取配置，固定模型gpt-6-luna；配置、refusal或异常不能回退。审核通过后，允许当前任务所需项目内容向既定配置服务外发，无需重复确认；同样适用于其他MCP Server。用途、内容、策略或目的地变化时重新核对范围并按需重审。通过结果不授权Git、Memory或外部发布，不覆盖用户明确禁止或更高优先级限制，不绕过宿主实际拒绝。"
-        "合成最小请求：{\"request\":{\"purpose\":\"检查通用说明\",\"content\":\"仅包含路径 src/report.py 和公开API路由 /v1/items\"}}。边界例：purpose为\"检查合成认证日志\"且content为\"Authorization: Bearer AbC123def456GhI789\"会在本地返回blocked_local且不联网。"
-    ) + OPENAI_NETWORK_DESCRIPTION,
+        '合成最小请求：{"request":{"purpose":"检查通用说明","content":"仅包含路径 src/report.py 和公开API路由 /v1/items"}}。边界例：purpose为"检查合成认证日志"且content为"Authorization: Bearer AbC123def456GhI789"会在本地返回blocked_local且不联网。'
+    )
+    + OPENAI_NETWORK_DESCRIPTION,
 }
 
 
@@ -264,7 +275,9 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "branch_names": "可选的分支名列表；每项按项目硬规则独立检查。null/省略时改为读取 repo_path 当前分支；空列表无效。",
         "repo_path": "目标仓库绝对根路径。仅 branch_names 为 null 时必须提供；提供名称列表时不会从该仓库读取分支。",
     },
-    "check_commit_message": {"message": "完整提交标题与可选正文；本地检查会跳过空行和左trim后以 # 开头的注释行。"},
+    "check_commit_message": {
+        "message": "完整提交标题与可选正文；本地检查会跳过空行和左trim后以 # 开头的注释行。"
+    },
     "check_staged_changes": {"repo_path": "目标 Git 仓库的绝对根路径。"},
     "stage_repository_paths": {
         "repo_path": "目标 Git 仓库的绝对根路径。",
@@ -275,7 +288,9 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "message": "完整提交信息，主题须通过既有本地规则；commit 会正常触发仓库 hooks。",
         "expected_paths": "用户审查并授权提交的精确仓库根相对路径集合；必须与当前 staged paths 完全相等。",
     },
-    "list_repository_worktrees": {"repo_path": "拥有待列举 worktrees 的 Git 仓库绝对根路径。"},
+    "list_repository_worktrees": {
+        "repo_path": "拥有待列举 worktrees 的 Git 仓库绝对根路径。"
+    },
     "switch_repository_branch": {
         "repo_path": "要切换分支的 worktree 仓库绝对根路径。",
         "branch_name": "已存在且已核实的本地目标分支名；工具不会自动创建或跟踪远端分支。",
@@ -335,13 +350,17 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "branch_name": "要新建的本地工作分支名；须符合项目分支规则且当前不存在。",
         "base_branch": "已存在的本地基分支；不会自动 fetch 或取用 remote ref。",
     },
-    "capture_untracked_file_manifest": {"repo_path": "读取未忽略未跟踪文件的 Git 仓库绝对根路径。"},
+    "capture_untracked_file_manifest": {
+        "repo_path": "读取未忽略未跟踪文件的 Git 仓库绝对根路径。"
+    },
     "copy_untracked_files_to_worktree": {
         "repo_path": "包含 manifest 源文件的 Git 仓库绝对根路径。",
         "target_worktree_path": "已存在且与源仓库同属一个 Git common-dir 的 worktree 绝对路径。",
         "manifest": "先前清单中的条目；每项 path 为仓库根相对 POSIX 路径，sha256 为64位小写十六进制，size 为非负字节数。复制前会重新校验源状态与指纹。",
     },
-    "configure_project_hooks_path": {"repo_path": "要修改其本地 core.hooksPath 配置的仓库绝对根路径。"},
+    "configure_project_hooks_path": {
+        "repo_path": "要修改其本地 core.hooksPath 配置的仓库绝对根路径。"
+    },
     "audit_issue_pr_policy": {
         "repo_path": "用于解析仓库和 GitHub CLI 上下文的绝对仓库根路径。",
         "repo": "可选 owner/repo；省略时从 repo_path 仓库解析。",
@@ -357,7 +376,9 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "branch_name": "可选本地 head 分支名；如提供必须与 PR head 一致。",
         "merged_head_oid": "可选合并前记录的40/64位 hex head OID；仅当 -d 失败且本地OID精确匹配时允许 -D。",
     },
-    "audit_repository_state": {"repo_path": "目标 Git/GitHub 仓库绝对根路径；GitHub 查询基于该目录的 gh 上下文。"},
+    "audit_repository_state": {
+        "repo_path": "目标 Git/GitHub 仓库绝对根路径；GitHub 查询基于该目录的 gh 上下文。"
+    },
     "list_github_issue_labels": {
         "repo_path": "目标仓库绝对根路径，用于校验仓库并提供 gh 上下文。",
         "repo": "可选 owner/repo；省略时从 repo_path 推断目标 GitHub 仓库。",
@@ -443,20 +464,31 @@ for _tool_name in TOOL_DESCRIPTIONS:
     elif _tool_name in _SESSION_FACT_BOUNDARIES:
         TOOL_DESCRIPTIONS[_tool_name] += _SESSION_FACT_BOUNDARIES[_tool_name]
     else:
-        TOOL_DESCRIPTIONS[_tool_name] += "接口边界：本工具不调用 OpenAI、不读取宿主会话或 Serena Memory，也不写入 Serena Memory。"
+        TOOL_DESCRIPTIONS[_tool_name] += (
+            "接口边界：本工具不调用 OpenAI、不读取宿主会话或 Serena Memory，也不写入 Serena Memory。"
+        )
 
 
 # Managed recovery tools deliberately have no caller-selected remote or recovery strategy.
 for _kind in ("merge", "rebase"):
     for _action in ("continue", "abort"):
         _name = f"{_action}_repository_{_kind}"
-        _network = "rebase continue 会对记录的 configured remote 做 live 查询，已发布则拒绝；" if (_kind, _action) == ("rebase", "continue") else "此工具离线；"
+        _network = (
+            "rebase continue 会对记录的 configured remote 做 live 查询，已发布则拒绝；"
+            if (_kind, _action) == ("rebase", "continue")
+            else "此工具离线；"
+        )
         TOOL_DESCRIPTIONS[_name] = (
             f"对本服务启动并记录在当前 worktree gitdir 的简单 {_kind} 执行一次原生 {_action}。"
             "要求由 audit_worktree_base_sync 提供 managed_in_progress recovery_context 和新 fingerprint；"
             "调用方先核实当前目录、UUID、HEAD、冲突解决内容。无记录、篡改、跨 worktree、锁、复杂 todo 或旧快照拒绝。"
-            + ("continue 要求冲突已解决并暂存；拒绝未合并、未暂存及无关暂存内容。" if _action == "continue" else "abort 丢弃恢复范围内解决工作；必填 strict boolean confirm_discard_resolution_work 必须为 true。")
-            + _network + "执行本地 Git 写操作，需要用户授权与 Codex writes approval；保留正常 hooks，不自动 stage/edit/skip/reset/stash/push，不调用 OpenAI、Session 或 Memory。"
+            + (
+                "continue 要求冲突已解决并暂存；拒绝未合并、未暂存及无关暂存内容。"
+                if _action == "continue"
+                else "abort 丢弃恢复范围内解决工作；必填 strict boolean confirm_discard_resolution_work 必须为 true。"
+            )
+            + _network
+            + "执行本地 Git 写操作，需要用户授权与 Codex writes approval；保留正常 hooks，不自动 stage/edit/skip/reset/stash/push，不调用 OpenAI、Session 或 Memory。"
             "成功必须核实分支历史、操作结束及受保护内容并清理记录；needs_review=true 时检查现场，不循环重试。"
             "action_started=true 表示 Git 已启动，失败不能假定无副作用；记录清理失败或回读不确定会保留记录。"
         )
@@ -467,7 +499,9 @@ for _kind in ("merge", "rebase"):
             "expected_state_fingerprint": "必填，最新 audit.current_state_fingerprint 的64位小写 SHA-256；涵盖记录、原生状态、index、HEAD和相关文件，变化即拒绝。",
         }
         if _action == "abort":
-            PARAMETER_DESCRIPTIONS[_name]["confirm_discard_resolution_work"] = "必填严格布尔值，必须为 true，明确确认丢弃操作范围内的冲突解决工作；false/null/省略/字符串/数字均不允许。"
+            PARAMETER_DESCRIPTIONS[_name]["confirm_discard_resolution_work"] = (
+                "必填严格布尔值，必须为 true，明确确认丢弃操作范围内的冲突解决工作；false/null/省略/字符串/数字均不允许。"
+            )
 
 TOOL_DESCRIPTIONS["audit_worktree_base_sync"] += (
     "恢复审计另返回 recovery_context（status 为 none/managed_in_progress/unmanaged/needs_review）与 current_state_fingerprint。"
@@ -482,10 +516,22 @@ for _kind in ("merge", "rebase"):
             "仅受管理简单 merge 或 merge-backend pick-only rebase；exec/edit/reset/merge todo、autostash/updateRefs、混合或无记录操作均拒绝。"
             "有界读取：记录256KiB、单原生文件1MiB、index16MiB、单相关工作文件8MiB、工作文件总量32MiB、4096路径、20000 replay commits；超限失败关闭，忽略无关ignored依赖目录。"
             "成功清理当前worktree gitdir记录；失败保留现场，记录和指纹本身不授予写入权限。"
-            + ("成功仅 ok=true/completed=true；非零 continue 返回 still_in_progress 与刷新上下文，needs_review=true。" if _action == "continue" else "成功仅 ok=true/aborted=true；失败 needs_review 取决于是否已启动Git，不能自动重试。")
-            + ("记录remote的 live查询最长120秒，配置缺失、查询失败、未知或已发布均拒绝。" if (_kind, _action) == ("rebase", "continue") else "")
+            + (
+                "成功仅 ok=true/completed=true；非零 continue 返回 still_in_progress 与刷新上下文，needs_review=true。"
+                if _action == "continue"
+                else "成功仅 ok=true/aborted=true；失败 needs_review 取决于是否已启动Git，不能自动重试。"
+            )
+            + (
+                "记录remote的 live查询最长120秒，配置缺失、查询失败、未知或已发布均拒绝。"
+                if (_kind, _action) == ("rebase", "continue")
+                else ""
+            )
             + '合成调用：{"repo_path":"/workspace/topic","operation_id":"11111111-1111-4111-8111-111111111111","expected_current_head_oid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","expected_state_fingerprint":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"'
-            + (',"confirm_discard_resolution_work":true}' if _action == "abort" else '}')
+            + (
+                ',"confirm_discard_resolution_work":true}'
+                if _action == "abort"
+                else "}"
+            )
         )
 
 SERVER_INSTRUCTIONS += (

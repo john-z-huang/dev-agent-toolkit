@@ -4,23 +4,27 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import tempfile
 import threading
 import tomllib
+from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 from urllib.parse import urlsplit
-
 
 MODEL = "gpt-6-luna"
 EFFORT = "medium"
 SERVER = "dev-workflow-standards-tools"
 TOOL = "get_codex_session_summary_guidance"
-ARGUMENTS = {"custom_questions": ["SDK smoke test question"], "custom_template": "SDK_SMOKE_TEMPLATE"}
+ARGUMENTS = {
+    "custom_questions": ["SDK smoke test question"],
+    "custom_template": "SDK_SMOKE_TEMPLATE",
+}
 CHECK_API_TOOL = "check_api_input"
 CHECK_API_ARGUMENTS = {
     "request": {
@@ -36,8 +40,15 @@ LIVE_REVIEW_ARGUMENTS = {
 }
 API_FIELD_LIMIT = 32 * 1024
 NETWORK_ENV_VARS = (
-    "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY",
-    "https_proxy", "http_proxy", "all_proxy", "no_proxy", "SSL_CERT_FILE",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "https_proxy",
+    "http_proxy",
+    "all_proxy",
+    "no_proxy",
+    "SSL_CERT_FILE",
 )
 
 
@@ -54,7 +65,14 @@ def credentials() -> dict[str, str]:
         result[name] = value
     try:
         url = urlsplit(result["OPENAI_BASE_URL"])
-        if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password or url.query or url.fragment:
+        if (
+            url.scheme not in {"http", "https"}
+            or not url.hostname
+            or url.username
+            or url.password
+            or url.query
+            or url.fragment
+        ):
             raise ValueError
     except ValueError:
         raise SmokeFailure("invalid_base_url") from None
@@ -86,24 +104,32 @@ def settings(
         "model": MODEL,
         "model_reasoning_effort": EFFORT,
         "model_provider": "sdk_test",
-        "model_providers": {"sdk_test": {
-            "name": "SDK test provider",
-            "base_url": configuration["OPENAI_BASE_URL"],
-            "env_key": "OPENAI_API_KEY",
-            "wire_api": "responses",
-            "requires_openai_auth": False,
-            "supports_websockets": False,
-            "request_max_retries": 0,
-            "stream_max_retries": 0,
-        }},
-        "mcp_servers": {SERVER: {
-            "command": server_command,
-            "args": server_args,
-            "enabled_tools": [TOOL, CHECK_API_TOOL],
-            "env_vars": ["OPENAI_API_KEY", "OPENAI_BASE_URL", *NETWORK_ENV_VARS] if live_review else [],
-            "env": {"OPENAI_TIMEOUT_MAX_RETRIES": "0"} if live_review else {"OPENAI_API_KEY": "", "OPENAI_BASE_URL": ""},
-            "startup_timeout_sec": 30,
-        }},
+        "model_providers": {
+            "sdk_test": {
+                "name": "SDK test provider",
+                "base_url": configuration["OPENAI_BASE_URL"],
+                "env_key": "OPENAI_API_KEY",
+                "wire_api": "responses",
+                "requires_openai_auth": False,
+                "supports_websockets": False,
+                "request_max_retries": 0,
+                "stream_max_retries": 0,
+            }
+        },
+        "mcp_servers": {
+            SERVER: {
+                "command": server_command,
+                "args": server_args,
+                "enabled_tools": [TOOL, CHECK_API_TOOL],
+                "env_vars": ["OPENAI_API_KEY", "OPENAI_BASE_URL", *NETWORK_ENV_VARS]
+                if live_review
+                else [],
+                "env": {"OPENAI_TIMEOUT_MAX_RETRIES": "0"}
+                if live_review
+                else {"OPENAI_API_KEY": "", "OPENAI_BASE_URL": ""},
+                "startup_timeout_sec": 30,
+            }
+        },
     }
     environment = {
         "PATH": os.environ.get("PATH", os.defpath),
@@ -141,7 +167,12 @@ def guidance_result(value: dict) -> None:
                 except (ValueError, KeyError):
                     continue
                 break
-    if not isinstance(body, dict) or body.get("ok") is not True or body.get("questions") != ARGUMENTS["custom_questions"] or body.get("template") != ARGUMENTS["custom_template"]:
+    if (
+        not isinstance(body, dict)
+        or body.get("ok") is not True
+        or body.get("questions") != ARGUMENTS["custom_questions"]
+        or body.get("template") != ARGUMENTS["custom_template"]
+    ):
         raise SmokeFailure("unexpected_mcp_result")
 
 
@@ -152,6 +183,9 @@ def _mapping(value) -> dict | None:
         try:
             result = value.model_dump(mode="json", by_alias=True)
         except Exception:
+            logging.getLogger(__name__).exception(
+                "unexpected_boundary_failure", exc_info=False
+            )
             return None
         return result if isinstance(result, dict) else None
     return None
@@ -190,7 +224,12 @@ def check_api_input_schema(value) -> None:
         raise SmokeFailure("check_api_input_schema_mismatch")
     for field in ("purpose", "content"):
         details = fields[field]
-        if not isinstance(details, dict) or details.get("type") != "string" or details.get("minLength") != 1 or details.get("maxLength") != API_FIELD_LIMIT:
+        if (
+            not isinstance(details, dict)
+            or details.get("type") != "string"
+            or details.get("minLength") != 1
+            or details.get("maxLength") != API_FIELD_LIMIT
+        ):
             raise SmokeFailure("check_api_input_schema_mismatch")
 
 
@@ -215,7 +254,12 @@ def check_api_input_result(value) -> None:
         or body.get("stage") != "local"
         or body.get("external_review_performed") is not False
         or not isinstance(findings, list)
-        or not any(item.get("field") == "content" and item.get("rule_id") == "credential.bearer" for item in findings if isinstance(item, dict))
+        or not any(
+            item.get("field") == "content"
+            and item.get("rule_id") == "credential.bearer"
+            for item in findings
+            if isinstance(item, dict)
+        )
         or "AbC123def456GhI789" in json.dumps(body, ensure_ascii=False)
     ):
         raise SmokeFailure("check_api_input_local_gate_failed")
@@ -236,21 +280,37 @@ def check_api_input_external_result(value) -> None:
         # Only publish known safe classifications, never arbitrary API/MCP text.
         code = body.get("error_code")
         if code in {
-            "missing_api_key", "missing_base_url", "client_initialization_failed",
-            "api_connection_failed", "api_timeout", "api_status_error",
-            "model_refusal", "invalid_decision_response", "request_too_large",
+            "missing_api_key",
+            "missing_base_url",
+            "client_initialization_failed",
+            "api_connection_failed",
+            "api_timeout",
+            "api_status_error",
+            "model_refusal",
+            "invalid_decision_response",
+            "request_too_large",
         }:
             raise SmokeFailure("check_api_input_" + code)
         status = body.get("status")
-        if status in {"blocked_local", "needs_revision", "insufficient_evidence", "unavailable"}:
+        if status in {
+            "blocked_local",
+            "needs_revision",
+            "insufficient_evidence",
+            "unavailable",
+        }:
             raise SmokeFailure("check_api_input_" + status)
     if (
-        not result or result.get("isError") or result.get("error")
+        not result
+        or result.get("isError")
+        or result.get("error")
         or not isinstance(body, dict)
-        or body.get("passed") is not True or body.get("status") != "passed"
-        or body.get("stage") != "complete" or body.get("external_review_performed") is not True
+        or body.get("passed") is not True
+        or body.get("status") != "passed"
+        or body.get("stage") != "complete"
+        or body.get("external_review_performed") is not True
         or body.get("policy_version") != "2026-11-05.5"
-        or not isinstance(body.get("input_hash"), str) or len(body["input_hash"]) != 64
+        or not isinstance(body.get("input_hash"), str)
+        or len(body["input_hash"]) != 64
         or body.get("findings") != []
     ):
         raise SmokeFailure("check_api_input_external_review_failed")
@@ -261,10 +321,18 @@ def check_turn(turn: dict) -> int:
         raise SmokeFailure("model_turn_failed")
     calls = []
     for item in turn.get("items", []):
-        if item.get("type") in {"commandExecution", "fileChange", "collabAgentToolCall"}:
+        if item.get("type") in {
+            "commandExecution",
+            "fileChange",
+            "collabAgentToolCall",
+        }:
             raise SmokeFailure("unexpected_agent_action")
         if item.get("type") == "mcpToolCall":
-            if item.get("server") != SERVER or item.get("tool") != TOOL or item.get("arguments") != ARGUMENTS:
+            if (
+                item.get("server") != SERVER
+                or item.get("tool") != TOOL
+                or item.get("arguments") != ARGUMENTS
+            ):
                 raise SmokeFailure("unexpected_mcp_call")
             if item.get("status") != "completed" or item.get("error") is not None:
                 raise SmokeFailure("mcp_tool_failed")
@@ -275,6 +343,27 @@ def check_turn(turn: dict) -> int:
     if len(calls) != 1:
         raise SmokeFailure("unexpected_mcp_call_count")
     return len(calls)
+
+
+def _read_live_turn(client: Any, thread_id: str, prompt: str) -> int:
+    """只消费这一轮通知；无论成功或失败都注销订阅，不继续委派任务。"""
+    turn = client.turn_start(
+        thread_id, prompt, params={"model": MODEL, "effort": EFFORT}
+    )
+    client.register_turn_notifications(turn.turn.id)
+    items = []
+    try:
+        while True:
+            notification = client.next_turn_notification(turn.turn.id)
+            value = notification.payload.model_dump(mode="json", by_alias=True)
+            if notification.method == "item/completed":
+                items.append(value["item"])
+            if notification.method == "turn/completed":
+                calls = check_turn({**value["turn"], "items": items})
+                break
+    finally:
+        client.unregister_turn_notifications(turn.turn.id)
+    return calls
 
 
 def execute_sdk(
@@ -289,7 +378,10 @@ def execute_sdk(
     try:
         from openai_codex import CodexConfig
         from openai_codex.client import CodexClient
-        from openai_codex.generated.v2_all import ListMcpServerStatusResponse, McpServerToolCallResponse
+        from openai_codex.generated.v2_all import (
+            ListMcpServerStatusResponse,
+            McpServerToolCallResponse,
+        )
     except ImportError:
         raise SmokeFailure("sdk_dependency_missing") from None
 
@@ -306,31 +398,53 @@ def execute_sdk(
     timed_out = threading.Event()
     # SDK 启动时自身会合并环境；清空继承防止其他凭据、配置路径或 provider 覆盖混入。
     with patch.dict(os.environ, environment, clear=True):
-        client = CodexClient(CodexConfig(
-            cwd=str(workspace), env=environment,
-            config_overrides=overrides(config),
-        ))
+        client = CodexClient(
+            CodexConfig(
+                cwd=str(workspace),
+                env=environment,
+                config_overrides=overrides(config),
+            )
+        )
+
         def expire():
             timed_out.set()
             client.close()
+
         timer = threading.Timer(120, expire)
         timer.daemon = True
         timer.start()
         try:
             with client:
                 client.initialize()
-                started = client.thread_start({
-                    "model": MODEL, "modelProvider": "sdk_test", "config": {"model_reasoning_effort": EFFORT},
-                    "cwd": str(workspace), "sandbox": "read-only", "approvalPolicy": "never",
-                    "ephemeral": True,
-                    "baseInstructions": "You are a test subject. Use only the specified read-only MCP tool with the exact synthetic arguments. Do not inspect files, use shell, write, or delegate.",
-                })
-                if started.model != MODEL or started.reasoning_effort is None or started.reasoning_effort.value != EFFORT or started.model_provider != "sdk_test":
+                started = client.thread_start(
+                    {
+                        "model": MODEL,
+                        "modelProvider": "sdk_test",
+                        "config": {"model_reasoning_effort": EFFORT},
+                        "cwd": str(workspace),
+                        "sandbox": "read-only",
+                        "approvalPolicy": "never",
+                        "ephemeral": True,
+                        "baseInstructions": "You are a test subject. Use only the specified read-only MCP tool with the exact synthetic arguments. Do not inspect files, use shell, write, or delegate.",
+                    }
+                )
+                if (
+                    started.model != MODEL
+                    or started.reasoning_effort is None
+                    or started.reasoning_effort.value != EFFORT
+                    or started.model_provider != "sdk_test"
+                ):
                     raise SmokeFailure("model_or_effort_mismatch")
                 thread_id = started.thread.id
-                status = client.request("mcpServerStatus/list", {
-                    "threadId": thread_id, "serverName": SERVER, "detail": "toolsAndAuthOnly",
-                }, response_model=ListMcpServerStatusResponse)
+                status = client.request(
+                    "mcpServerStatus/list",
+                    {
+                        "threadId": thread_id,
+                        "serverName": SERVER,
+                        "detail": "toolsAndAuthOnly",
+                    },
+                    response_model=ListMcpServerStatusResponse,
+                )
                 servers = [entry for entry in status.data if entry.name == SERVER]
                 if (
                     len(servers) != 1
@@ -342,39 +456,49 @@ def execute_sdk(
                 ):
                     raise SmokeFailure("mcp_discovery_failed")
                 check_api_input_schema(servers[0].tools[CHECK_API_TOOL])
-                direct = client.request("mcpServer/tool/call", {
-                    "threadId": thread_id, "server": SERVER, "tool": TOOL, "arguments": ARGUMENTS,
-                }, response_model=McpServerToolCallResponse)
+                direct = client.request(
+                    "mcpServer/tool/call",
+                    {
+                        "threadId": thread_id,
+                        "server": SERVER,
+                        "tool": TOOL,
+                        "arguments": ARGUMENTS,
+                    },
+                    response_model=McpServerToolCallResponse,
+                )
                 guidance_result(_mapping(direct) or {})
-                api_input_call = client.request("mcpServer/tool/call", {
-                    "threadId": thread_id,
-                    "server": SERVER,
-                    "tool": CHECK_API_TOOL,
-                    "arguments": CHECK_API_ARGUMENTS,
-                }, response_model=McpServerToolCallResponse)
+                api_input_call = client.request(
+                    "mcpServer/tool/call",
+                    {
+                        "threadId": thread_id,
+                        "server": SERVER,
+                        "tool": CHECK_API_TOOL,
+                        "arguments": CHECK_API_ARGUMENTS,
+                    },
+                    response_model=McpServerToolCallResponse,
+                )
                 check_api_input_result(_mapping(api_input_call) or {})
                 calls = 0
                 if live:
-                    reviewed = client.request("mcpServer/tool/call", {
-                        "threadId": thread_id, "server": SERVER, "tool": CHECK_API_TOOL,
-                        "arguments": LIVE_REVIEW_ARGUMENTS,
-                    }, response_model=McpServerToolCallResponse)
+                    reviewed = client.request(
+                        "mcpServer/tool/call",
+                        {
+                            "threadId": thread_id,
+                            "server": SERVER,
+                            "tool": CHECK_API_TOOL,
+                            "arguments": LIVE_REVIEW_ARGUMENTS,
+                        },
+                        response_model=McpServerToolCallResponse,
+                    )
                     check_api_input_external_result(reviewed)
-                    prompt = "Call " + TOOL + " exactly once with these arguments: " + json.dumps(ARGUMENTS) + ". Then reply OK. Do not answer without calling the tool."
-                    turn = client.turn_start(thread_id, prompt, params={"model": MODEL, "effort": EFFORT})
-                    client.register_turn_notifications(turn.turn.id)
-                    items = []
-                    try:
-                        while True:
-                            notification = client.next_turn_notification(turn.turn.id)
-                            value = notification.payload.model_dump(mode="json", by_alias=True)
-                            if notification.method == "item/completed":
-                                items.append(value["item"])
-                            if notification.method == "turn/completed":
-                                calls = check_turn({**value["turn"], "items": items})
-                                break
-                    finally:
-                        client.unregister_turn_notifications(turn.turn.id)
+                    prompt = (
+                        "Call "
+                        + TOOL
+                        + " exactly once with these arguments: "
+                        + json.dumps(ARGUMENTS)
+                        + ". Then reply OK. Do not answer without calling the tool."
+                    )
+                    calls = _read_live_turn(client, thread_id, prompt)
                 result = {
                     "ok": True,
                     "model": MODEL,
@@ -388,18 +512,25 @@ def execute_sdk(
                     "actual_model_tool_calls": calls,
                 }
                 if installed_info is not None:
-                    result.update({
-                        "install_source": "uv_tool",
-                        "installed_executable": installed_info["path"],
-                        "installed_version": installed_info["version"],
-                    })
+                    result.update(
+                        {
+                            "install_source": "uv_tool",
+                            "installed_executable": installed_info["path"],
+                            "installed_version": installed_info["version"],
+                        }
+                    )
                 else:
                     result["install_source"] = "wheel"
                 return result
         except SmokeFailure:
             raise
         except Exception:
-            raise SmokeFailure("sdk_timeout" if timed_out.is_set() else "sdk_request_failed") from None
+            logging.getLogger(__name__).exception(
+                "unexpected_boundary_failure", exc_info=False
+            )
+            raise SmokeFailure(
+                "sdk_timeout" if timed_out.is_set() else "sdk_request_failed"
+            ) from None
         finally:
             timer.cancel()
             client.close()
@@ -411,27 +542,17 @@ def _project_version() -> str:
         project = tomllib.loads(project_file.read_text(encoding="utf-8"))
         version = project["project"]["version"]
     except Exception:
+        logging.getLogger(__name__).exception(
+            "project_version_unavailable", exc_info=False
+        )
         raise SmokeFailure("project_version_unavailable") from None
     if not isinstance(version, str) or not version:
         raise SmokeFailure("project_version_unavailable")
     return version
 
 
-def inspect_installed_executable(executable: Path) -> dict[str, str]:
-    """核对 uv tool console entrypoint 与其安装环境中的包版本，不运行 MCP 服务。"""
-    if not executable.is_absolute():
-        raise SmokeFailure("installed_executable_must_be_absolute")
-    try:
-        resolved = executable.resolve(strict=True)
-        if not resolved.is_file() or not os.access(resolved, os.X_OK):
-            raise SmokeFailure("installed_executable_invalid")
-        source = resolved.read_text(encoding="utf-8")
-    except SmokeFailure:
-        raise
-    except Exception:
-        raise SmokeFailure("installed_executable_unavailable") from None
-    if "from dev_workflow_standards_tools.server import main" not in source:
-        raise SmokeFailure("installed_executable_mismatch")
+def _installed_interpreter(resolved: Path, source: str) -> Path:
+    """解释器必须来自被核验入口的同一安装目录，拒绝其他环境的替代项。"""
     interpreter_match = re.search(r"(?m)^'''exec' '([^']+)'", source)
     if interpreter_match is None:
         raise SmokeFailure("installed_executable_mismatch")
@@ -449,7 +570,32 @@ def inspect_installed_executable(executable: Path) -> dict[str, str]:
     except SmokeFailure:
         raise
     except Exception:
+        logging.getLogger(__name__).exception(
+            "installed_interpreter_unavailable", exc_info=False
+        )
         raise SmokeFailure("installed_interpreter_unavailable") from None
+    return interpreter_entrypoint
+
+
+def inspect_installed_executable(executable: Path) -> dict[str, str]:
+    """核对 uv tool console entrypoint 与其安装环境中的包版本，不运行 MCP 服务。"""
+    if not executable.is_absolute():
+        raise SmokeFailure("installed_executable_must_be_absolute")
+    try:
+        resolved = executable.resolve(strict=True)
+        if not resolved.is_file() or not os.access(resolved, os.X_OK):
+            raise SmokeFailure("installed_executable_invalid")
+        source = resolved.read_text(encoding="utf-8")
+    except SmokeFailure:
+        raise
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "installed_executable_unavailable", exc_info=False
+        )
+        raise SmokeFailure("installed_executable_unavailable") from None
+    if "from dev_workflow_standards_tools.server import main" not in source:
+        raise SmokeFailure("installed_executable_mismatch")
+    interpreter_entrypoint = _installed_interpreter(resolved, source)
 
     query = (
         "import importlib.metadata as m,json,pathlib;"
@@ -464,6 +610,7 @@ def inspect_installed_executable(executable: Path) -> dict[str, str]:
             capture_output=True,
             timeout=15,
             env={"PATH": os.defpath},
+            check=False,
         )
         if inspected.returncode:
             raise SmokeFailure("installed_package_inspection_failed")
@@ -481,6 +628,9 @@ def inspect_installed_executable(executable: Path) -> dict[str, str]:
     except SmokeFailure:
         raise
     except Exception:
+        logging.getLogger(__name__).exception(
+            "installed_package_inspection_failed", exc_info=False
+        )
         raise SmokeFailure("installed_package_inspection_failed") from None
     return {
         "path": str(resolved),
@@ -504,8 +654,22 @@ def run(
         with tempfile.TemporaryDirectory(prefix="codex-sdk-test-") as temporary:
             root = Path(temporary).resolve()
             site = root / "installed"
-            result = subprocess.run(["uv", "pip", "install", "--offline", "--no-deps", "--target", str(site), str(wheel.resolve())],
-                                    text=True, capture_output=True, timeout=60)
+            result = subprocess.run(
+                [
+                    "uv",
+                    "pip",
+                    "install",
+                    "--offline",
+                    "--no-deps",
+                    "--target",
+                    str(site),
+                    str(wheel.resolve()),
+                ],
+                text=True,
+                capture_output=True,
+                timeout=60,
+                check=False,
+            )
             if result.returncode:
                 raise SmokeFailure("wheel_install_failed")
             return execute_sdk(root, site, configuration, live=live)
@@ -514,22 +678,41 @@ def run(
     with tempfile.TemporaryDirectory(prefix="codex-sdk-test-") as temporary:
         root = Path(temporary).resolve()
         installed_site = Path(installed_info["module"]).parent.parent
-        return execute_sdk(root, installed_site, configuration, live=live, installed_info=installed_info)
+        return execute_sdk(
+            root,
+            installed_site,
+            configuration,
+            live=live,
+            installed_info=installed_info,
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="测试专用 Codex SDK：固定 gpt-6-luna/medium，无配置或模型回退")
+    parser = argparse.ArgumentParser(
+        description="测试专用 Codex SDK：固定 gpt-6-luna/medium，无配置或模型回退"
+    )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--wheel", type=Path, help="待测完整 wheel")
-    source.add_argument("--installed-executable", type=Path, help="已更新 uv tool 的绝对 MCP 可执行文件路径")
-    parser.add_argument("--live", action="store_true", help="显式发起一次真实模型测试；默认只检查 SDK/MCP 协议")
+    source.add_argument(
+        "--installed-executable",
+        type=Path,
+        help="已更新 uv tool 的绝对 MCP 可执行文件路径",
+    )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="显式发起一次真实模型测试；默认只检查 SDK/MCP 协议",
+    )
     args = parser.parse_args(argv)
     try:
-        result = run(args.wheel, installed_executable=args.installed_executable, live=args.live)
+        result = run(
+            args.wheel, installed_executable=args.installed_executable, live=args.live
+        )
     except SmokeFailure as error:
         print(json.dumps({"ok": False, "error_code": str(error)}))
         return 1
     except Exception:
+        logging.getLogger(__name__).exception("test_setup_failed", exc_info=False)
         print(json.dumps({"ok": False, "error_code": "test_setup_failed"}))
         return 1
     print(json.dumps(result))

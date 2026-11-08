@@ -9,7 +9,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[1]
 PYTHON_SCRIPTS = (
     "check-branch-name.py",
@@ -56,7 +55,9 @@ class GitHookIntegrationTests(unittest.TestCase):
             result = run_git(repo, "commit", "-m", "feat: 添加 hook 校验")
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(run_git(repo, "rev-parse", "--verify", "HEAD").returncode, 0)
+            self.assertEqual(
+                run_git(repo, "rev-parse", "--verify", "HEAD").returncode, 0
+            )
 
     def test_invalid_branch_is_rejected_before_commit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -67,7 +68,9 @@ class GitHookIntegrationTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 1)
             self.assertIn("已阻止 Git commit", result.stderr)
-            self.assertNotEqual(run_git(repo, "rev-parse", "--verify", "HEAD").returncode, 0)
+            self.assertNotEqual(
+                run_git(repo, "rev-parse", "--verify", "HEAD").returncode, 0
+            )
 
     def test_staged_whitespace_error_is_rejected_before_commit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -78,7 +81,9 @@ class GitHookIntegrationTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 1)
             self.assertIn("空白检查", result.stderr)
-            self.assertNotEqual(run_git(repo, "rev-parse", "--verify", "HEAD").returncode, 0)
+            self.assertNotEqual(
+                run_git(repo, "rev-parse", "--verify", "HEAD").returncode, 0
+            )
 
     def test_commit_message_is_rejected_during_commit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -89,7 +94,9 @@ class GitHookIntegrationTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 1)
             self.assertIn("提交信息不符合规范", result.stderr)
-            self.assertNotEqual(run_git(repo, "rev-parse", "--verify", "HEAD").returncode, 0)
+            self.assertNotEqual(
+                run_git(repo, "rev-parse", "--verify", "HEAD").returncode, 0
+            )
 
 
 if __name__ == "__main__":

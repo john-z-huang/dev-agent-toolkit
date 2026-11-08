@@ -26,7 +26,6 @@ import subprocess
 import sys
 from typing import Any
 
-
 ISSUE_REFERENCE_TEMPLATE = (
     r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#\s*{issue}\b"
 )
@@ -64,7 +63,9 @@ def resolve_repo(*, error_stream=sys.stderr) -> str | None:
         check=False,
     )
     if result.returncode != 0 or not result.stdout.strip():
-        print("错误: 无法从当前目录确定 GitHub 仓库，请显式传入 --repo", file=error_stream)
+        print(
+            "错误: 无法从当前目录确定 GitHub 仓库，请显式传入 --repo", file=error_stream
+        )
         return None
     return result.stdout.strip()
 
@@ -114,7 +115,9 @@ def validate_pr(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="只读审计 GitHub Issue/PR 工作流约束")
-    parser.add_argument("--repo", help="GitHub 仓库，格式为 owner/repo；默认从当前目录解析")
+    parser.add_argument(
+        "--repo", help="GitHub 仓库，格式为 owner/repo；默认从当前目录解析"
+    )
     parser.add_argument("--issue", type=int, help="需要检查是否开放的 Issue 编号")
     parser.add_argument("--pr", type=int, help="需要检查的 Pull Request 编号")
     parser.add_argument("--expected-base", help="PR 预期 base 分支")
@@ -122,16 +125,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _argument_error(args: argparse.Namespace) -> str | None:
+    if args.issue is None and args.pr is None:
+        return "错误: 至少提供 --issue 或 --pr"
+    if args.expected_base and args.pr is None:
+        return "错误: --expected-base 需要与 --pr 一起使用"
+    if args.expected_head and args.pr is None:
+        return "错误: --expected-head 需要与 --pr 一起使用"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    if args.issue is None and args.pr is None:
-        print("错误: 至少提供 --issue 或 --pr", file=sys.stderr)
-        return 2
-    if args.expected_base and args.pr is None:
-        print("错误: --expected-base 需要与 --pr 一起使用", file=sys.stderr)
-        return 2
-    if args.expected_head and args.pr is None:
-        print("错误: --expected-head 需要与 --pr 一起使用", file=sys.stderr)
+    argument_error = _argument_error(args)
+    if argument_error:
+        print(argument_error, file=sys.stderr)
         return 2
 
     repo = args.repo or resolve_repo()
@@ -143,7 +151,9 @@ def main(argv: list[str] | None = None) -> int:
         issue = run_gh_json(f"repos/{repo}/issues/{args.issue}")
         if issue is None:
             return 3
-        errors.extend(f"Issue #{args.issue}: {error}" for error in validate_issue(issue))
+        errors.extend(
+            f"Issue #{args.issue}: {error}" for error in validate_issue(issue)
+        )
 
     if args.pr is not None:
         pr = run_gh_json(f"repos/{repo}/pulls/{args.pr}")

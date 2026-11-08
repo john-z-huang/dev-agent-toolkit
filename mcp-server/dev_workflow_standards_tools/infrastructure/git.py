@@ -9,7 +9,11 @@ from .process import _run_fixed
 
 def _current_branch(root: str) -> str | None:
     result = _run_fixed(["git", "branch", "--show-current"], cwd=root)
-    return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else None
+    return (
+        result.stdout.strip()
+        if result.returncode == 0 and result.stdout.strip()
+        else None
+    )
 
 
 def _valid_local_branch(root: str, name: str) -> str | None:
@@ -18,7 +22,12 @@ def _valid_local_branch(root: str, name: str) -> str | None:
 
 
 def _valid_remote_branch(name: str) -> bool:
-    return bool(name and REMOTE_BRANCH_PATTERN.fullmatch(name) and ".." not in name and "//" not in name)
+    return bool(
+        name
+        and REMOTE_BRANCH_PATTERN.fullmatch(name)
+        and ".." not in name
+        and "//" not in name
+    )
 
 
 def _absolute_new_path(path: str) -> tuple[str | None, str | None]:
@@ -36,7 +45,11 @@ def _same_git_common_dir(source: str, target: str) -> bool:
     args = ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"]
     left = _run_fixed(args, cwd=source)
     right = _run_fixed(args, cwd=target)
-    return left.returncode == 0 and right.returncode == 0 and left.stdout.strip() == right.stdout.strip()
+    return (
+        left.returncode == 0
+        and right.returncode == 0
+        and left.stdout.strip() == right.stdout.strip()
+    )
 
 
 def _safe_relative_path(value: str) -> PurePosixPath | None:
@@ -72,7 +85,9 @@ def _require_clean_worktree(cwd: str) -> str | None:
     return None
 
 
-def _requested_repo_paths(paths: list[str]) -> tuple[list[PurePosixPath] | None, str | None]:
+def _requested_repo_paths(
+    paths: list[str],
+) -> tuple[list[PurePosixPath] | None, str | None]:
     if not paths:
         return None, "paths 不能为空"
     parsed: list[PurePosixPath] = []
@@ -102,14 +117,19 @@ def _validate_stage_path(root: str, rel: PurePosixPath) -> str | None:
     if candidate.exists() and not candidate.is_file():
         return f"只能暂存普通文件或 tracked deletion: {rel.as_posix()}"
     if not candidate.exists():
-        tracked = _run_fixed(["git", "ls-files", "--error-unmatch", "--", f":(literal){rel.as_posix()}"], cwd=root)
+        tracked = _run_fixed(
+            ["git", "ls-files", "--error-unmatch", "--", f":(literal){rel.as_posix()}"],
+            cwd=root,
+        )
         if tracked.returncode != 0:
             return f"不存在的路径不是 tracked deletion: {rel.as_posix()}"
     return None
 
 
 def _staged_path_names(root: str) -> tuple[list[str] | None, str | None]:
-    result = _run_fixed(["git", "diff", "--cached", "--name-only", "--no-renames", "-z"], cwd=root)
+    result = _run_fixed(
+        ["git", "diff", "--cached", "--name-only", "--no-renames", "-z"], cwd=root
+    )
     if result.returncode != 0:
         return None, "无法读取 staged paths"
     return [name for name in result.stdout.split("\0") if name], None

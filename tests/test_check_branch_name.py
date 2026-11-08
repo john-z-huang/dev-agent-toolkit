@@ -9,7 +9,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).parents[1] / "scripts" / "check-branch-name.py"
 PYTHON = sys.executable
 
@@ -49,7 +48,9 @@ class CheckBranchNameTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             repo = Path(directory)
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-            subprocess.run(["git", "switch", "-c", "feature/add-validation"], cwd=repo, check=True)
+            subprocess.run(
+                ["git", "switch", "-c", "feature/add-validation"], cwd=repo, check=True
+            )
             result = run_checker("--pre-commit", cwd=repo)
         self.assertEqual(result.returncode, 1)
         self.assertIn("不符合策略", result.stderr)

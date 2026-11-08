@@ -23,7 +23,6 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-
 CHINESE_PATTERN = re.compile(r"[\u3400-\u9fff]")
 SUBJECT_PATTERN = re.compile(
     r"^(?:feat|fix|docs|refactor|test|chore|perf|build|ci):\s+\S.*$"
@@ -74,7 +73,9 @@ def report_errors(errors: tuple[str, ...], *, error_stream: TextIO) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="检查 Git 提交信息的格式、语言和署名约束")
+    parser = argparse.ArgumentParser(
+        description="检查 Git 提交信息的格式、语言和署名约束"
+    )
     parser.add_argument(
         "message_file",
         nargs="?",

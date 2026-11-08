@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 from functools import partial
 from typing import Any, Literal
@@ -36,14 +37,32 @@ class StrictInput(BaseModel):
 
 
 class SessionDecisionRequest(StrictInput):
-    user_request: str = Field(description="当前希望查询或整理的主题，非空且最多12000字符；它不会替代来源状态flags。", min_length=1, max_length=12000)
-    has_relevant_sources: StrictBool = Field(description="调用方是否已识别至少一个适用的历史来源；false表示没有适用相关来源。")
-    history_accessible: StrictBool = Field(description="适用历史来源当前是否可被调用方读取；false表示不可访问，不能当作没有相关事实。")
-    history_fully_read: StrictBool = Field(description="调用方是否已完整读取适用来源；false表示尚未读完。无来源时须为false。")
-    relevant_facts_found: StrictBool | None = Field(description="完整读取后是否发现相关事实；true=有，false=确认没有，null=尚未知。未完整读取时不得伪称已确认无事实。")
-    persistence_allowed: StrictBool = Field(description="调用方根据当前用户要求记录的持久化许可；false会建议跳过，本字段不是工具自行验证的授权。")
-    existing_summary: StrictBool = Field(description="适用原会话是否已有对应摘要；仅影响最终选择创建还是更新。")
-    new_fact_origin: Literal["original_session", "current_session", "none"] = Field(description="待整理事实来源：原会话、当前会话或无事实；当前会话事实不得进入原会话摘要。")
+    user_request: str = Field(
+        description="当前希望查询或整理的主题，非空且最多12000字符；它不会替代来源状态flags。",
+        min_length=1,
+        max_length=12000,
+    )
+    has_relevant_sources: StrictBool = Field(
+        description="调用方是否已识别至少一个适用的历史来源；false表示没有适用相关来源。"
+    )
+    history_accessible: StrictBool = Field(
+        description="适用历史来源当前是否可被调用方读取；false表示不可访问，不能当作没有相关事实。"
+    )
+    history_fully_read: StrictBool = Field(
+        description="调用方是否已完整读取适用来源；false表示尚未读完。无来源时须为false。"
+    )
+    relevant_facts_found: StrictBool | None = Field(
+        description="完整读取后是否发现相关事实；true=有，false=确认没有，null=尚未知。未完整读取时不得伪称已确认无事实。"
+    )
+    persistence_allowed: StrictBool = Field(
+        description="调用方根据当前用户要求记录的持久化许可；false会建议跳过，本字段不是工具自行验证的授权。"
+    )
+    existing_summary: StrictBool = Field(
+        description="适用原会话是否已有对应摘要；仅影响最终选择创建还是更新。"
+    )
+    new_fact_origin: Literal["original_session", "current_session", "none"] = Field(
+        description="待整理事实来源：原会话、当前会话或无事实；当前会话事实不得进入原会话摘要。"
+    )
 
     @field_validator("user_request")
     @classmethod
@@ -53,8 +72,10 @@ class SessionDecisionRequest(StrictInput):
         return value
 
     @model_validator(mode="after")
-    def validate_consistency(self) -> "SessionDecisionRequest":
-        if self.history_fully_read and (not self.has_relevant_sources or not self.history_accessible):
+    def validate_consistency(self) -> SessionDecisionRequest:
+        if self.history_fully_read and (
+            not self.has_relevant_sources or not self.history_accessible
+        ):
             raise ValueError("history_fully_read 与来源可用状态不一致")
         if self.relevant_facts_found is True and not self.has_relevant_sources:
             raise ValueError("无相关来源时不能声明找到历史事实")
@@ -62,10 +83,24 @@ class SessionDecisionRequest(StrictInput):
 
 
 class EvidenceItem(StrictInput):
-    reference_id: str = Field(description="调用方可回查的轮次/消息引用ID，非空且最多120字符；request内必须唯一。", min_length=1, max_length=120)
-    content: str = Field(description="该引用支持的具体事实文本，非空且最多16000字符；不得混入未标注来源的当前事实。", min_length=1, max_length=16000)
-    origin: Literal["provided_session", "current_observation", "user_provided"] = Field(description="证据来源类别；session_summary只允许provided_session。")
-    source_thread_id: str | None = Field(default=None, max_length=36, description="原会话证据所属thread UUID；非session证据可为null。session_summary必须与source.thread_id完全一致。")
+    reference_id: str = Field(
+        description="调用方可回查的轮次/消息引用ID，非空且最多120字符；request内必须唯一。",
+        min_length=1,
+        max_length=120,
+    )
+    content: str = Field(
+        description="该引用支持的具体事实文本，非空且最多16000字符；不得混入未标注来源的当前事实。",
+        min_length=1,
+        max_length=16000,
+    )
+    origin: Literal["provided_session", "current_observation", "user_provided"] = Field(
+        description="证据来源类别；session_summary只允许provided_session。"
+    )
+    source_thread_id: str | None = Field(
+        default=None,
+        max_length=36,
+        description="原会话证据所属thread UUID；非session证据可为null。session_summary必须与source.thread_id完全一致。",
+    )
 
     @field_validator("reference_id", "content")
     @classmethod
@@ -76,8 +111,16 @@ class EvidenceItem(StrictInput):
 
 
 class LanguageOverride(StrictInput):
-    language: str = Field(min_length=1, max_length=100, description="用户明确要求的输出语言名称，1–100字符且非空；不是从英文材料推断的语言。")
-    instruction_ref: str = Field(min_length=1, max_length=120, description="本请求 evidence 中包含用户语言指令原文的 reference_id；必须引用 user_provided 来源。模型仍须核对原文是否明确授权该语言。")
+    language: str = Field(
+        min_length=1,
+        max_length=100,
+        description="用户明确要求的输出语言名称，1–100字符且非空；不是从英文材料推断的语言。",
+    )
+    instruction_ref: str = Field(
+        min_length=1,
+        max_length=120,
+        description="本请求 evidence 中包含用户语言指令原文的 reference_id；必须引用 user_provided 来源。模型仍须核对原文是否明确授权该语言。",
+    )
 
     @field_validator("language", "instruction_ref")
     @classmethod
@@ -88,13 +131,40 @@ class LanguageOverride(StrictInput):
 
 
 class ContentGenerationRequest(StrictInput):
-    kind: Literal["issue", "pr", "commit_message", "plan", "handoff", "session_summary"] = Field(description="候选种类：缺陷/需求Issue、PR说明、提交信息、计划、交接或单一原会话摘要。")
-    user_request: str = Field(description="目标、受众、范围/非目标、约束和关注点；非空且最多12000字符，不是事实证据。Issue/PR 默认中文，Agent 自拟的英文请求不构成用户语言授权；其他语言须用 language_override 引用用户原文。", min_length=1, max_length=12000)
-    evidence: list[EvidenceItem] = Field(description="有界真实事实，1–100项且reference_id唯一。通用：背景、组件、路径/符号、范围、约束和关联项，区分事实/推测并给可追溯指针。Issue先区分缺陷/需求，提供实际/期望/影响或目标/动机，环境和复现仅填已知；PR提供前后行为、已完成diff/文件摘要与原因、实际验证命令/结果及未运行项、兼容风险和关联Issue。不必先写正文；缺失/冲突需标明，不传全仓库/完整会话/密钥。session_summary须同一source thread。", min_length=1, max_length=100)
-    focus_questions: list[str] | None = Field(default=None, min_length=1, max_length=20, description="可选自定义关注问题；null/省略使用默认重点，显式提供时需1–20个非空问题。")
-    output_format: str | None = Field(default=None, max_length=12000, description="可选用户输出结构/模板，优先于默认章节；null/省略用默认格式，显式提供须非空且最多12000字符。Issue/PR 英文模板不授权改语言，其他语言须用language_override；其他kind保留语言偏好。不覆盖事实与硬规则。")
-    language_override: LanguageOverride | None = Field(default=None, description="仅Issue/PR可用的用户明确语言覆盖：language与instruction_ref。省略/null默认中文；不接受布尔值。引用必须存在且origin=user_provided，实际指令语义由模型审查；不能把Agent英文请求、英文证据或模板当作用户授权。")
-    source: CodexSessionSource | None = Field(default=None, description="session_summary的单一原会话元数据；其他kind可为null。格式通过不代表宿主元数据真实或来源已读取。")
+    kind: Literal[
+        "issue", "pr", "commit_message", "plan", "handoff", "session_summary"
+    ] = Field(
+        description="候选种类：缺陷/需求Issue、PR说明、提交信息、计划、交接或单一原会话摘要。"
+    )
+    user_request: str = Field(
+        description="目标、受众、范围/非目标、约束和关注点；非空且最多12000字符，不是事实证据。Issue/PR 默认中文，Agent 自拟的英文请求不构成用户语言授权；其他语言须用 language_override 引用用户原文。",
+        min_length=1,
+        max_length=12000,
+    )
+    evidence: list[EvidenceItem] = Field(
+        description="有界真实事实，1–100项且reference_id唯一。通用：背景、组件、路径/符号、范围、约束和关联项，区分事实/推测并给可追溯指针。Issue先区分缺陷/需求，提供实际/期望/影响或目标/动机，环境和复现仅填已知；PR提供前后行为、已完成diff/文件摘要与原因、实际验证命令/结果及未运行项、兼容风险和关联Issue。不必先写正文；缺失/冲突需标明，不传全仓库/完整会话/密钥。session_summary须同一source thread。",
+        min_length=1,
+        max_length=100,
+    )
+    focus_questions: list[str] | None = Field(
+        default=None,
+        min_length=1,
+        max_length=20,
+        description="可选自定义关注问题；null/省略使用默认重点，显式提供时需1–20个非空问题。",
+    )
+    output_format: str | None = Field(
+        default=None,
+        max_length=12000,
+        description="可选用户输出结构/模板，优先于默认章节；null/省略用默认格式，显式提供须非空且最多12000字符。Issue/PR 英文模板不授权改语言，其他语言须用language_override；其他kind保留语言偏好。不覆盖事实与硬规则。",
+    )
+    language_override: LanguageOverride | None = Field(
+        default=None,
+        description="仅Issue/PR可用的用户明确语言覆盖：language与instruction_ref。省略/null默认中文；不接受布尔值。引用必须存在且origin=user_provided，实际指令语义由模型审查；不能把Agent英文请求、英文证据或模板当作用户授权。",
+    )
+    source: CodexSessionSource | None = Field(
+        default=None,
+        description="session_summary的单一原会话元数据；其他kind可为null。格式通过不代表宿主元数据真实或来源已读取。",
+    )
 
     @field_validator("user_request", "output_format")
     @classmethod
@@ -111,28 +181,42 @@ class ContentGenerationRequest(StrictInput):
         return value
 
     @model_validator(mode="after")
-    def validate_provenance(self) -> "ContentGenerationRequest":
+    def validate_provenance(self) -> ContentGenerationRequest:
         reference_ids = [item.reference_id for item in self.evidence]
         if len(reference_ids) != len(set(reference_ids)):
             raise ValueError("evidence.reference_id 必须唯一")
         if self.language_override is not None:
             if self.kind not in {"issue", "pr"}:
                 raise ValueError("language_override 仅适用于 Issue/PR")
-            instruction = next((item for item in self.evidence if item.reference_id == self.language_override.instruction_ref), None)
+            instruction = next(
+                (
+                    item
+                    for item in self.evidence
+                    if item.reference_id == self.language_override.instruction_ref
+                ),
+                None,
+            )
             if instruction is None or instruction.origin != "user_provided":
-                raise ValueError("language_override 必须引用 user_provided 用户指令证据")
+                raise ValueError(
+                    "language_override 必须引用 user_provided 用户指令证据"
+                )
         if self.kind == "session_summary":
             if self.source is None:
                 raise ValueError("session_summary 必须提供 CodexSessionSource")
             if self.source.created_at is None or self.source.title is None:
-                raise ValueError("session_summary 的 source 必须提供 created_at 和 title")
+                raise ValueError(
+                    "session_summary 的 source 必须提供 created_at 和 title"
+                )
             if not self.evidence:
                 raise ValueError("session_summary 必须提供已读取原会话的证据")
             if any(
-                item.origin != "provided_session" or item.source_thread_id != self.source.thread_id
+                item.origin != "provided_session"
+                or item.source_thread_id != self.source.thread_id
                 for item in self.evidence
             ):
-                raise ValueError("session_summary 证据必须来自 source.thread_id 对应的已提供会话")
+                raise ValueError(
+                    "session_summary 证据必须来自 source.thread_id 对应的已提供会话"
+                )
         return self
 
 
@@ -166,8 +250,17 @@ class ContentQualityReview(StrictInput):
         return value
 
     @model_validator(mode="after")
-    def require_failure_details(self) -> "ContentQualityReview":
-        if not all((self.language_compliant, self.evidence_supported, self.coverage_sufficient)) and not self.review_notes:
+    def require_failure_details(self) -> ContentQualityReview:
+        if (
+            not all(
+                (
+                    self.language_compliant,
+                    self.evidence_supported,
+                    self.coverage_sufficient,
+                )
+            )
+            and not self.review_notes
+        ):
             raise ValueError("不通过的审查必须说明需修订内容")
         return self
 
@@ -385,7 +478,11 @@ def _choice_value(question: dict[str, Any], answers: list[Any]) -> str:
     if not isinstance(choice, str) or choice not in allowed:
         raise ValueError("invalid_choice")
     confidence = _get(answer, "confidence")
-    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not math.isfinite(confidence):
+    if (
+        isinstance(confidence, bool)
+        or not isinstance(confidence, (int, float))
+        or not math.isfinite(confidence)
+    ):
         raise ValueError("invalid_confidence")
     if not 0 <= confidence <= 1:
         raise ValueError("invalid_confidence")
@@ -434,13 +531,19 @@ async def _decisions(
     """请求固定选项判断，并核对答案数量、问题名称和合法枚举。"""
     api_input = [{"role": "user", "content": _json(facts)}]
     try:
-        response = await openai_client.create_decision(api_input, questions, purpose=purpose)
+        response = await openai_client.create_decision(
+            api_input, questions, purpose=purpose
+        )
     except openai_client.OpenAIWorkflowError as error:
         return error.as_result()
 
     refusal = _get(response, "refusal")
     answers = _get(response, "answers")
-    if refusal or not isinstance(answers, (list, tuple)) or len(answers) != len(questions):
+    if (
+        refusal
+        or not isinstance(answers, (list, tuple))
+        or len(answers) != len(questions)
+    ):
         return {"error_code": "invalid_decision_response"}
     answer_map: dict[str, Any] = {}
     for answer in answers:
@@ -453,18 +556,24 @@ async def _decisions(
     result: dict[str, str] = {}
     for question in questions:
         try:
-            result[question["name"]] = _choice_value(question, [answer_map[question["name"]]])
+            result[question["name"]] = _choice_value(
+                question, [answer_map[question["name"]]]
+            )
         except ValueError:
             return {"error_code": "invalid_decision_response"}
     return result
 
 
-def _question(name: str, instructions: str, values: tuple[str, ...], descriptions: dict[str, str]) -> dict[str, Any]:
+def _question(
+    name: str, instructions: str, values: tuple[str, ...], descriptions: dict[str, str]
+) -> dict[str, Any]:
     return {
         "type": "choice",
         "name": name,
         "instructions": instructions,
-        "choices": [{"value": value, "description": descriptions[value]} for value in values],
+        "choices": [
+            {"value": value, "description": descriptions[value]} for value in values
+        ],
     }
 
 
@@ -492,15 +601,31 @@ async def _validation_result(
         purpose=f"Apply the supplied {question['name']} decision policy to local observations.",
     )
     if "error_code" in answers:
-        if answers["error_code"] == "sensitive_value_in_request" or answers["error_code"].startswith("api_input_") or answers["error_code"] in {"sensitive_input_detected", "request_too_large"}:
+        if (
+            answers["error_code"] == "sensitive_value_in_request"
+            or answers["error_code"].startswith("api_input_")
+            or answers["error_code"]
+            in {"sensitive_input_detected", "request_too_large"}
+        ):
             return {
                 "passed": False,
                 "local_passed": local_passed,
                 "decision": None,
-                "ai_status": "blocked_by_api_input_policy" if answers["error_code"].startswith("api_input_") or answers["error_code"] == "sensitive_input_detected" else "failed",
+                "ai_status": "blocked_by_api_input_policy"
+                if answers["error_code"].startswith("api_input_")
+                or answers["error_code"] == "sensitive_input_detected"
+                else "failed",
                 "error_code": answers["error_code"],
-                **({"api_input_review": answers["api_input_review"]} if isinstance(answers.get("api_input_review"), dict) else {}),
-                **({"api_status_code": answers["status_code"]} if answers.get("status_code") else {}),
+                **(
+                    {"api_input_review": answers["api_input_review"]}
+                    if isinstance(answers.get("api_input_review"), dict)
+                    else {}
+                ),
+                **(
+                    {"api_status_code": answers["status_code"]}
+                    if answers.get("status_code")
+                    else {}
+                ),
                 "requires_agent_review": True,
             }
         result["passed"] = False
@@ -532,7 +657,10 @@ async def check_branch_names(
     checked_names = [item.get("branch_name") for item in local.get("checks", [])]
     facts = {
         "branch_checks": [
-            {"branch_name": item.get("branch_name"), "passed": item.get("passed") is True}
+            {
+                "branch_name": item.get("branch_name"),
+                "passed": item.get("passed") is True,
+            }
             for item in local.get("checks", [])
         ]
     }
@@ -567,7 +695,8 @@ async def check_commit_message(message: str) -> dict[str, Any]:
     local = validation.check_commit_message(message)
     subject = local.get("subject", "")
     inspected_lines = [
-        line for line in message.splitlines()
+        line
+        for line in message.splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
     inspected_message = "\n".join(inspected_lines)
@@ -576,7 +705,9 @@ async def check_commit_message(message: str) -> dict[str, Any]:
             "subject": subject,
             "subject_format_valid": bool(SUBJECT_PATTERN.fullmatch(subject)),
             "chinese_description_present": bool(CHINESE_PATTERN.search(subject)),
-            "prohibited_attribution_present": bool(ATTRIBUTION_PATTERN.search(inspected_message)),
+            "prohibited_attribution_present": bool(
+                ATTRIBUTION_PATTERN.search(inspected_message)
+            ),
         }
     }
     question = _question(
@@ -676,18 +807,27 @@ def _session_expected_lookup(request: SessionDecisionRequest) -> str:
 
 
 def _session_expected_persistence(request: SessionDecisionRequest) -> str:
-    if not request.persistence_allowed or request.new_fact_origin in {"current_session", "none"}:
+    if not request.persistence_allowed or request.new_fact_origin in {
+        "current_session",
+        "none",
+    }:
         return "skip_persistence"
     if not request.has_relevant_sources:
         return "skip_persistence"
-    if not request.history_accessible or not request.history_fully_read or request.relevant_facts_found is None:
+    if (
+        not request.history_accessible
+        or not request.history_fully_read
+        or request.relevant_facts_found is None
+    ):
         return "await_source_evidence"
     if not request.relevant_facts_found:
         return "skip_persistence"
     return "update_summary" if request.existing_summary else "create_summary"
 
 
-async def decide_codex_session_action(request: SessionDecisionRequest) -> dict[str, Any]:
+async def decide_codex_session_action(
+    request: SessionDecisionRequest,
+) -> dict[str, Any]:
     """等待历史查询和持久化动作建议；不读取原会话或写入 Memory。"""
     if not isinstance(request, SessionDecisionRequest):
         request = SessionDecisionRequest.model_validate(request)
@@ -728,13 +868,23 @@ async def decide_codex_session_action(request: SessionDecisionRequest) -> dict[s
         return {
             "ok": False,
             "error_code": response["error_code"],
-            **({"api_input_review": response["api_input_review"]} if isinstance(response.get("api_input_review"), dict) else {}),
-            **({"api_status_code": response["status_code"]} if response.get("status_code") else {}),
+            **(
+                {"api_input_review": response["api_input_review"]}
+                if isinstance(response.get("api_input_review"), dict)
+                else {}
+            ),
+            **(
+                {"api_status_code": response["status_code"]}
+                if response.get("status_code")
+                else {}
+            ),
             "requires_agent_review": True,
         }
     lookup = response["lookup_action"]
     persistence = response["persistence_action"]
-    if lookup != _session_expected_lookup(request) or persistence != _session_expected_persistence(request):
+    if lookup != _session_expected_lookup(
+        request
+    ) or persistence != _session_expected_persistence(request):
         return {
             "ok": False,
             "error_code": "decision_inconsistent_with_session_rules",
@@ -787,10 +937,20 @@ def _generation_instruction(kind: str) -> str:
     return instructions
 
 
-async def _review_issue_pr(request: ContentGenerationRequest, generated: GeneratedContent) -> dict[str, Any]:
+async def _review_issue_pr(
+    request: ContentGenerationRequest, generated: GeneratedContent
+) -> dict[str, Any]:
     """通过统一客户端审查有界候选；模型建议不替代本地验证或发布授权。"""
-    review_input = _json({"request": request.model_dump(mode="json"), "candidate": generated.model_dump(mode="json")})
-    if len(review_input.encode("utf-8")) + len(_QUALITY_REVIEW_PROMPT.encode("utf-8")) > openai_client.MAX_REQUEST_BYTES:
+    review_input = _json(
+        {
+            "request": request.model_dump(mode="json"),
+            "candidate": generated.model_dump(mode="json"),
+        }
+    )
+    if (
+        len(review_input.encode("utf-8")) + len(_QUALITY_REVIEW_PROMPT.encode("utf-8"))
+        > openai_client.MAX_REQUEST_BYTES
+    ):
         return {"ok": False, "error_code": "quality_review_request_too_large"}
     try:
         response = await openai_client.parse_response(
@@ -810,6 +970,7 @@ async def _review_issue_pr(request: ContentGenerationRequest, generated: Generat
     try:
         review = ContentQualityReview.model_validate(_get(response, "output_parsed"))
     except Exception:
+        logging.getLogger(__name__).exception("invalid_quality_review", exc_info=False)
         return {"ok": False, "error_code": "invalid_quality_review"}
     missing = list(dict.fromkeys([*generated.missing_facts, *review.missing_facts]))
     notes = list(dict.fromkeys([*generated.review_notes, *review.review_notes]))
@@ -817,14 +978,98 @@ async def _review_issue_pr(request: ContentGenerationRequest, generated: Generat
         return {"ok": False, "error_code": "quality_review_findings_too_large"}
     generated.missing_facts = missing
     generated.review_notes = notes
-    adoptable = all((review.language_compliant, review.evidence_supported, review.coverage_sufficient)) and not missing
+    adoptable = (
+        all(
+            (
+                review.language_compliant,
+                review.evidence_supported,
+                review.coverage_sufficient,
+            )
+        )
+        and not missing
+    )
     return {
         "ok": True,
         "adoptable": adoptable,
         "quality_status": "ready_for_agent_review" if adoptable else "needs_revision",
-        "quality_review": {**review.model_dump(mode="json"), "assessment_source": "model_advice"},
+        "quality_review": {
+            **review.model_dump(mode="json"),
+            "assessment_source": "model_advice",
+        },
         "quality_review_usage": _safe_usage(response),
     }
+
+
+def _generated_content_error(
+    request: ContentGenerationRequest, generated: GeneratedContent
+) -> str | None:
+    """在采纳候选前验证证据引用、必要正文和提交署名规则。"""
+    allowed_refs = {item.reference_id for item in request.evidence}
+    used = generated.used_evidence_refs
+    if len(used) != len(set(used)) or any(
+        reference not in allowed_refs for reference in used
+    ):
+        return "invalid_evidence_reference"
+    if request.kind != "commit_message" and not generated.content.strip():
+        return "empty_generated_content"
+    if request.kind == "commit_message":
+        commit_candidate = generated.title
+        if generated.content.strip():
+            commit_candidate = f"{commit_candidate}\n{generated.content}"
+        local_commit_check = validation.check_commit_message(commit_candidate)
+        if not local_commit_check.get("passed"):
+            return "generated_commit_message_rejected"
+    if request.kind in {"issue", "pr", "commit_message"} and ATTRIBUTION_PATTERN.search(
+        f"{generated.title}\n{generated.content}"
+    ):
+        return "forbidden_attribution"
+    return None
+
+
+def _parse_generated_content(
+    response: Any,
+) -> tuple[GeneratedContent | None, str | None]:
+    """依次核对拒绝、完成状态和结构化候选，返回安全错误分类。"""
+    if _has_refusal(response):
+        return None, "model_refusal"
+    if _get(response, "status") != "completed":
+        return None, "incomplete_response"
+    parsed = _get(response, "output_parsed")
+    if parsed is None:
+        return None, "invalid_structured_output"
+    try:
+        generated = (
+            parsed
+            if isinstance(parsed, GeneratedContent)
+            else GeneratedContent.model_validate(parsed)
+        )
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "invalid_structured_output", exc_info=False
+        )
+        return None, "invalid_structured_output"
+    return generated, None
+
+
+def _generation_facts(
+    request: ContentGenerationRequest,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """从已冻结的请求构造事实快照，并按内容类型补齐摘要指引。"""
+    facts = request.model_dump(mode="json")
+    if request.kind == "session_summary":
+        try:
+            guidance = get_codex_session_summary_guidance(
+                custom_questions=request.focus_questions,
+                custom_template=request.output_format,
+            )
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "summary_guidance_unavailable", exc_info=False
+            )
+            return None, "summary_guidance_unavailable"
+        facts["default_questions"] = guidance["questions"]
+        facts["default_template"] = guidance["template"]
+    return facts, None
 
 
 async def generate_skill_content(request: ContentGenerationRequest) -> dict[str, Any]:
@@ -836,22 +1081,22 @@ async def generate_skill_content(request: ContentGenerationRequest) -> dict[str,
         request = ContentGenerationRequest.model_validate(request)
     # 同时冻结嵌套证据，确保后续质量审查不会混入等待期间新增的事实。
     request = request.model_copy(deep=True)
-    facts = request.model_dump(mode="json")
-    if request.kind == "session_summary":
-        try:
-            guidance = get_codex_session_summary_guidance(
-                custom_questions=request.focus_questions,
-                custom_template=request.output_format,
-            )
-        except Exception:
-            return {"ok": False, "error_code": "summary_guidance_unavailable", "requires_agent_review": True}
-        facts["default_questions"] = guidance["questions"]
-        facts["default_template"] = guidance["template"]
+    facts, facts_error = _generation_facts(request)
+    if facts_error:
+        return {"ok": False, "error_code": facts_error, "requires_agent_review": True}
+    assert facts is not None
 
     instructions = _generation_instruction(request.kind)
     input_text = _json(facts)
-    if len(input_text.encode("utf-8")) + len(instructions.encode("utf-8")) > openai_client.MAX_REQUEST_BYTES:
-        return {"ok": False, "error_code": "request_too_large", "requires_agent_review": True}
+    if (
+        len(input_text.encode("utf-8")) + len(instructions.encode("utf-8"))
+        > openai_client.MAX_REQUEST_BYTES
+    ):
+        return {
+            "ok": False,
+            "error_code": "request_too_large",
+            "requires_agent_review": True,
+        }
     effort = _effort_for_kind(request.kind)
     try:
         response = await openai_client.parse_response(
@@ -865,40 +1110,20 @@ async def generate_skill_content(request: ContentGenerationRequest) -> dict[str,
     except openai_client.OpenAIWorkflowError as error:
         return {"ok": False, **error.as_result(), "requires_agent_review": True}
 
-    if _has_refusal(response):
-        return {"ok": False, "error_code": "model_refusal", "requires_agent_review": True}
-    if _get(response, "status") != "completed":
-        return {"ok": False, "error_code": "incomplete_response", "requires_agent_review": True}
-    parsed = _get(response, "output_parsed")
-    if parsed is None:
-        return {"ok": False, "error_code": "invalid_structured_output", "requires_agent_review": True}
-    try:
-        generated = parsed if isinstance(parsed, GeneratedContent) else GeneratedContent.model_validate(parsed)
-    except Exception:
-        return {"ok": False, "error_code": "invalid_structured_output", "requires_agent_review": True}
-
-    allowed_refs = {item.reference_id for item in request.evidence}
-    used = generated.used_evidence_refs
-    if len(used) != len(set(used)) or any(reference not in allowed_refs for reference in used):
-        return {"ok": False, "error_code": "invalid_evidence_reference", "requires_agent_review": True}
-    if request.kind != "commit_message" and not generated.content.strip():
-        return {"ok": False, "error_code": "empty_generated_content", "requires_agent_review": True}
-    if request.kind == "commit_message":
-        commit_candidate = generated.title
-        if generated.content.strip():
-            commit_candidate = f"{commit_candidate}\n{generated.content}"
-        local_commit_check = validation.check_commit_message(commit_candidate)
-        if not local_commit_check.get("passed"):
-            return {
-                "ok": False,
-                "error_code": "generated_commit_message_rejected",
-                "adoptable": False,
-                "requires_agent_review": True,
-            }
-    if request.kind in {"issue", "pr", "commit_message"} and ATTRIBUTION_PATTERN.search(
-        f"{generated.title}\n{generated.content}"
-    ):
-        return {"ok": False, "error_code": "forbidden_attribution", "requires_agent_review": True}
+    generated, parse_error = _parse_generated_content(response)
+    if parse_error is not None:
+        return {"ok": False, "error_code": parse_error, "requires_agent_review": True}
+    assert generated is not None
+    candidate_error = _generated_content_error(request, generated)
+    if candidate_error:
+        failure = {
+            "ok": False,
+            "error_code": candidate_error,
+            "requires_agent_review": True,
+        }
+        if candidate_error == "generated_commit_message_rejected":
+            failure["adoptable"] = False
+        return failure
     quality: dict[str, Any] = {}
     if request.kind in {"issue", "pr"}:
         quality = await _review_issue_pr(request, generated)

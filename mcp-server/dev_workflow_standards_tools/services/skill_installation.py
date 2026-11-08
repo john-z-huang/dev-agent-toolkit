@@ -4,19 +4,18 @@ macOS/Linux 使用内核 no-replace / exchange 原语发布完整目录。合作
 同目标的持久锁串行化；不把该锁描述为对恶意外部文件写入者的隔离机制。
 """
 
-from contextlib import contextmanager
 import ctypes
 import errno
 import hashlib
-from importlib.resources import files
 import json
 import os
-from pathlib import Path, PurePosixPath
 import shutil
 import stat
 import sys
 import tempfile
-
+from contextlib import contextmanager
+from importlib.resources import files
+from pathlib import Path, PurePosixPath
 
 OWNER = "dev-workflow-standards-tools"
 SKILL = "dev-workflow-standards"
@@ -40,20 +39,32 @@ def _manifest(data: bytes) -> dict:
         if (
             not isinstance(value, dict)
             or set(value) != {"schema", "owner", "skill", "version", "files"}
-            or type(value["schema"]) is not int or value["schema"] != 1
-            or value["owner"] != OWNER or value["skill"] != SKILL
-            or not isinstance(value["version"], str) or not 0 < len(value["version"]) <= 120
-            or not isinstance(value["files"], dict) or not 0 < len(value["files"]) <= MAX_FILES
+            or type(value["schema"]) is not int
+            or value["schema"] != 1
+            or value["owner"] != OWNER
+            or value["skill"] != SKILL
+            or not isinstance(value["version"], str)
+            or not 0 < len(value["version"]) <= 120
+            or not isinstance(value["files"], dict)
+            or not 0 < len(value["files"]) <= MAX_FILES
             or "SKILL.md" not in value["files"]
         ):
             raise ValueError
         for name, digest in value["files"].items():
             path = PurePosixPath(name)
             if (
-                path.is_absolute() or path.as_posix() != name or "\\" in name or "\x00" in name
-                or any(part in {"", ".", ".."} or part.startswith(".") for part in path.parts)
-                or path.suffix != ".md" or len(name) > 240
-                or not isinstance(digest, str) or len(digest) != 64
+                path.is_absolute()
+                or path.as_posix() != name
+                or "\\" in name
+                or "\x00" in name
+                or any(
+                    part in {"", ".", ".."} or part.startswith(".")
+                    for part in path.parts
+                )
+                or path.suffix != ".md"
+                or len(name) > 240
+                or not isinstance(digest, str)
+                or len(digest) != 64
                 or any(char not in "0123456789abcdef" for char in digest)
             ):
                 raise ValueError
@@ -77,7 +88,11 @@ def _bundle() -> tuple[dict, dict[str, bytes]]:
 
 
 def _target(raw: str | None) -> Path:
-    raw = raw if raw is not None else str(Path.home() / ".agents" / "skills" / DEFAULT_DIRECTORY)
+    raw = (
+        raw
+        if raw is not None
+        else str(Path.home() / ".agents" / "skills" / DEFAULT_DIRECTORY)
+    )
     if not raw or "\x00" in raw or ".." in Path(raw).parts:
         raise SkillError("目标不能为空或含路径穿越")
     target = Path(os.path.abspath(Path(raw).expanduser()))
@@ -86,7 +101,9 @@ def _target(raw: str | None) -> Path:
     legacy = Path.home() / ".agents" / "skills" / SKILL
     for protected in (legacy, legacy.resolve()):
         if target.is_relative_to(protected) or protected.is_relative_to(target):
-            raise SkillError("旧项目目录受保护；请使用 dev-workflow-standards-skill 或其他独立目标")
+            raise SkillError(
+                "旧项目目录受保护；请使用 dev-workflow-standards-skill 或其他独立目标"
+            )
     for path in reversed((target, *target.parents)):
         if path.is_symlink():
             raise SkillError("目标或祖先目录是符号链接；请提供真实且独立的路径")
@@ -101,7 +118,11 @@ def _read_regular(path: Path) -> bytes:
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, "rb") as stream:
         info = os.fstat(stream.fileno())
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > MAX_BYTES:
+        if (
+            not stat.S_ISREG(info.st_mode)
+            or info.st_nlink != 1
+            or info.st_size > MAX_BYTES
+        ):
             raise SkillError("安装包含特殊文件、硬链接或过大文件")
         data = stream.read(MAX_BYTES + 1)
         if len(data) > MAX_BYTES:
@@ -112,6 +133,7 @@ def _read_regular(path: Path) -> bytes:
 def _snapshot(target: Path) -> dict[str, str]:
     result = {}
     directories = set()
+
     def onerror(error):
         raise error
 
@@ -128,7 +150,9 @@ def _snapshot(target: Path) -> dict[str, str]:
                 raise SkillError("安装包含过多文件")
     expected_dirs = {
         parent.as_posix()
-        for name in result for parent in PurePosixPath(name).parents if parent != PurePosixPath(".")
+        for name in result
+        for parent in PurePosixPath(name).parents
+        if parent != PurePosixPath(".")
     }
     if directories != expected_dirs:
         raise SkillError("安装包含额外目录；请人工核查")
@@ -155,12 +179,22 @@ def _rename_function():
         function = libc.renamex_np
         function.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
         function.restype = ctypes.c_int
-        return lambda source, target, exchange: function(source, target, 2 if exchange else 4)
+        return lambda source, target, exchange: function(
+            source, target, 2 if exchange else 4
+        )
     if sys.platform.startswith("linux") and hasattr(libc, "renameat2"):
         function = libc.renameat2
-        function.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+        function.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
         function.restype = ctypes.c_int
-        return lambda source, target, exchange: function(-100, source, -100, target, 2 if exchange else 1)
+        return lambda source, target, exchange: function(
+            -100, source, -100, target, 2 if exchange else 1
+        )
     raise SkillError("当前平台不支持安全的目录原子发布；仅支持 macOS/Linux")
 
 
@@ -192,11 +226,48 @@ def _lock(target: Path):
     # 不删除锁文件，防止第三个进程锁住不同 inode。
 
 
-def manage_skill(action: str, raw_target: str | None = None, *, dry_run: bool = False) -> dict:
+def manage_skill(
+    action: str, raw_target: str | None = None, *, dry_run: bool = False
+) -> dict:
     try:
         return _manage_skill(action, raw_target, dry_run=dry_run)
     except OSError:
-        raise SkillError("本地文件访问失败；检查权限、目录类型及残留暂存目录后重试") from None
+        raise SkillError(
+            "本地文件访问失败；检查权限、目录类型及残留暂存目录后重试"
+        ) from None
+
+
+def _write_skill_stage(stage: Path, payload: dict[str, bytes], manifest: dict) -> None:
+    """完整写入并同步暂存快照，正式发布前不触碰现有安装。"""
+    for name, data in payload.items():
+        path = stage / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("xb") as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+    with (stage / MARKER).open("xb") as stream:
+        stream.write(_manifest_bytes(manifest))
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def _skill_preflight(action: str, target: Path) -> tuple[dict | None, dict | None]:
+    """重新核对目标边界，安装拒绝覆盖，更新要求完整受管快照。"""
+    _target(str(target))
+    if action == "install":
+        if target.exists():
+            raise SkillError("目标已存在；不覆盖旧目录，受管安装请使用 skills update")
+        return None, None
+    return _installed(target)
+
+
+def _old_skill_snapshot_matches(stage: Path, before: dict | None) -> bool:
+    """交换后的旧目录不可读或发生变化时，一律要求撤回并保留现场。"""
+    try:
+        return _snapshot(stage) == before
+    except (SkillError, OSError):
+        return False
 
 
 def _manage_skill(action: str, raw_target: str | None, *, dry_run: bool) -> dict:
@@ -204,72 +275,75 @@ def _manage_skill(action: str, raw_target: str | None, *, dry_run: bool) -> dict
         raise SkillError("未知 Skill 操作")
     manifest, payload = _bundle()
     target = _target(raw_target)
-    result = {"ok": True, "target": str(target), "skill": SKILL, "package_version": manifest["version"]}
-
-    def preflight():
-        _target(str(target))
-        if action == "install":
-            if target.exists():
-                raise SkillError("目标已存在；不覆盖旧目录，受管安装请使用 skills update")
-            return None, None
-        return _installed(target)
+    result = {
+        "ok": True,
+        "target": str(target),
+        "skill": SKILL,
+        "package_version": manifest["version"],
+    }
 
     if action == "show":
         if not target.exists():
             return {**result, "status": "not_installed", "installed_version": None}
         current, _ = _installed(target)
-        return {**result, "status": "installed", "installed_version": current["version"]}
-    _, before = preflight()
+        return {
+            **result,
+            "status": "installed",
+            "installed_version": current["version"],
+        }
+    _, before = _skill_preflight(action, target)
     _rename_function()  # 写入前确认平台能力；文件系统支持由原子操作判定。
     if dry_run:
         return {**result, "status": "preview", "action": action, "changed": False}
     target.parent.mkdir(parents=True, exist_ok=True)
     _target(str(target))
     with _lock(target):
-        _, before = preflight()
+        _, before = _skill_preflight(action, target)
         if before == {**manifest["files"], MARKER: _digest(_manifest_bytes(manifest))}:
             return {**result, "status": "unchanged", "changed": False}
         parent_identity = target.parent.stat()
-        stage = Path(tempfile.mkdtemp(prefix=f".{target.name}.skill-stage-", dir=target.parent))
+        stage = Path(
+            tempfile.mkdtemp(prefix=f".{target.name}.skill-stage-", dir=target.parent)
+        )
         cleanup_snapshot = None
         try:
-            for name, data in payload.items():
-                path = stage / name
-                path.parent.mkdir(parents=True, exist_ok=True)
-                with path.open("xb") as stream:
-                    stream.write(data)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-            with (stage / MARKER).open("xb") as stream:
-                stream.write(_manifest_bytes(manifest))
-                stream.flush()
-                os.fsync(stream.fileno())
+            _write_skill_stage(stage, payload, manifest)
             _, cleanup_snapshot = _installed(stage)
             # 在发布前重复边界、目录身份与完整快照检查。
-            _, latest = preflight()
+            _, latest = _skill_preflight(action, target)
             parent_now = target.parent.stat()
             if latest != before or (parent_now.st_dev, parent_now.st_ino) != (
-                parent_identity.st_dev, parent_identity.st_ino
+                parent_identity.st_dev,
+                parent_identity.st_ino,
             ):
                 raise SkillError("发布前检测到并发目录修改；保留现有安装")
             _publish(stage, target, exchange=action == "update")
             if action == "update":
                 cleanup_snapshot = before
-                try:
-                    old_matches = _snapshot(stage) == before
-                except (SkillError, OSError):
-                    old_matches = False
+                old_matches = _old_skill_snapshot_matches(stage, before)
                 if not old_matches:
                     # 交换后旧目录仍完整保存。发现非合作写入时撤回，并保留现场。
                     _publish(stage, target, exchange=True)
                     cleanup_snapshot = None
-                    raise SkillError(f"检测到外部并发修改；已撤回更新，请核查暂存目录 {stage}")
-            return {**result, "status": "installed" if action == "install" else "updated", "changed": True}
+                    raise SkillError(
+                        f"检测到外部并发修改；已撤回更新，请核查暂存目录 {stage}"
+                    )
+            return {
+                **result,
+                "status": "installed" if action == "install" else "updated",
+                "changed": True,
+            }
         finally:
             # 不删除未知或被外部修改的内容；中断可能留下隐藏暂存副本，但正式目标始终完整。
-            if stage.exists() and cleanup_snapshot is not None and _snapshot(stage) == cleanup_snapshot:
+            if (
+                stage.exists()
+                and cleanup_snapshot is not None
+                and _snapshot(stage) == cleanup_snapshot
+            ):
                 shutil.rmtree(stage)
 
 
 def _manifest_bytes(manifest: dict) -> bytes:
-    return (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    return (
+        json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    ).encode("utf-8")

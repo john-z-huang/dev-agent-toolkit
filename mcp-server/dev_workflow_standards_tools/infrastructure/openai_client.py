@@ -33,20 +33,33 @@ T = TypeVar("T")
 _LOG_REDACTION_MARKER = "[REDACTED]"
 CLIENT_CLEANUP_SECONDS = 5.0
 # 每个任务独立保存进行中请求的脱敏值；配置轮换不应让旧请求的诊断泄漏。
-_active_secrets: ContextVar[tuple[str, ...]] = ContextVar("openai_active_secrets", default=())
+_active_secrets: ContextVar[tuple[str, ...]] = ContextVar(
+    "openai_active_secrets", default=()
+)
 
 
 def _configuration_secrets() -> tuple[str, ...]:
     """收集当前配置的脱敏值，仅在进行中的请求上下文中保留。"""
     env_names = (
-        "OPENAI_API_KEY", "OPENAI_BASE_URL",
-        "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
-        "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+        "no_proxy",
     )
     secrets: list[str] = [os.environ.get(name, "").strip() for name in env_names]
     proxy_names = (
-        "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
-        "http_proxy", "https_proxy", "all_proxy",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
     )
     for name in proxy_names:
         proxy = os.environ.get(name, "").strip()
@@ -83,14 +96,14 @@ def _install_log_redaction() -> None:
         record = current_factory(*args, **kwargs)
         try:
             record.msg = _redact_log_text(record.getMessage())
-        except Exception:
+        except Exception:  # noqa: BLE001 -- 日志工厂内部不能再次写日志；任何格式化异常都必须转成脱敏内容。
             record.msg = _redact_log_text(str(record.msg))
         record.args = ()
         if record.exc_info:
             try:
                 exception_text = "".join(traceback.format_exception(*record.exc_info))
                 record.exc_text = _redact_log_text(exception_text)
-            except Exception:
+            except Exception:  # noqa: BLE001 -- 日志工厂内部不能再次写日志；任何格式化异常都必须转成脱敏内容。
                 record.exc_text = _LOG_REDACTION_MARKER
         elif record.exc_text:
             record.exc_text = _redact_log_text(record.exc_text)
@@ -157,8 +170,11 @@ def _read_configuration() -> tuple[str, str]:
 
 def _payload_text(payload: Any) -> str:
     try:
-        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+        return json.dumps(
+            payload, ensure_ascii=False, separators=(",", ":"), default=str
+        )
     except Exception:
+        logging.getLogger(__name__).exception("invalid_request_payload", exc_info=False)
         raise OpenAIWorkflowError("invalid_request_payload") from None
 
 
@@ -184,7 +200,9 @@ async def _close_resource(close: Callable[[], Awaitable[None]]) -> None:
         try:
             await close()
         except Exception:
-            logging.getLogger(__name__).exception("OpenAI client cleanup failed", exc_info=False)
+            logging.getLogger(__name__).exception(
+                "OpenAI client cleanup failed", exc_info=False
+            )
     if scope.cancel_called:
         logging.getLogger(__name__).warning("OpenAI client cleanup timed out")
 
@@ -212,12 +230,17 @@ async def _make_client(payload: Any) -> tuple[AsyncOpenAI, str, str]:
         )
         return client, api_key, base_url
     except Exception:
+        logging.getLogger(__name__).exception(
+            "client_initialization_failed", exc_info=False
+        )
         if http_client is not None:
             await _close_resource(http_client.aclose)
         raise OpenAIWorkflowError("client_initialization_failed") from None
 
 
-def _safe_api_error(error: Exception, *, request_attempted: bool = False) -> OpenAIWorkflowError:
+def _safe_api_error(
+    error: Exception, *, request_attempted: bool = False
+) -> OpenAIWorkflowError:
     if isinstance(error, AuthenticationError):
         code = "api_authentication_failed"
     elif isinstance(error, PermissionDeniedError):
@@ -271,14 +294,21 @@ async def _invoke(
             details = {
                 key: review[key]
                 for key in (
-                    "status", "stage", "findings", "input_hash", "policy_version", "external_review_performed"
+                    "status",
+                    "stage",
+                    "findings",
+                    "input_hash",
+                    "policy_version",
+                    "external_review_performed",
                 )
                 if key in review
             }
             api_status = review.get("api_status_code")
             raise OpenAIWorkflowError(
                 error_code,
-                api_status if isinstance(api_status, int) and not isinstance(api_status, bool) else None,
+                api_status
+                if isinstance(api_status, int) and not isinstance(api_status, bool)
+                else None,
                 api_input_review=details,
             )
     else:
@@ -288,11 +318,20 @@ async def _invoke(
             blocked = await review_api_input(purpose, payload_text)
             details = {
                 key: blocked[key]
-                for key in ("status", "stage", "findings", "input_hash", "policy_version", "external_review_performed")
+                for key in (
+                    "status",
+                    "stage",
+                    "findings",
+                    "input_hash",
+                    "policy_version",
+                    "external_review_performed",
+                )
                 if key in blocked
             }
             raise OpenAIWorkflowError(
-                blocked.get("error_code") or local.get("error_code") or "sensitive_input_detected",
+                blocked.get("error_code")
+                or local.get("error_code")
+                or "sensitive_input_detected",
                 api_input_review=details,
             )
     # 即使初值相同也保存 token，确保重试期间追加的脱敏值在本次调用结束后释放。
@@ -347,6 +386,9 @@ async def _request_attempts(
                 ) from None
             raise
         except Exception as error:
+            logging.getLogger(__name__).exception(
+                "unexpected_boundary_failure", exc_info=False
+            )
             raise _safe_api_error(error, request_attempted=True) from None
         finally:
             await _close_resource(client.close)
@@ -377,7 +419,9 @@ async def create_decision(
     )
 
 
-async def _create_policy_review_decision(*, purpose: str, content: str, questions: list[dict[str, Any]]) -> Any:
+async def _create_policy_review_decision(
+    *, purpose: str, content: str, questions: list[dict[str, Any]]
+) -> Any:
     """审核专用私有入口：保留统一配置和本地检测，仅避免再次触发语义审核。"""
     payload = {
         "model": MODEL_NAME,
@@ -415,9 +459,12 @@ async def parse_response(
         schema = json.loads(_payload_text(text_format.model_json_schema()))
         schema_snapshot = _payload_text(schema)
     except Exception:
+        logging.getLogger(__name__).exception("invalid_response_schema", exc_info=False)
         raise OpenAIWorkflowError("invalid_response_schema") from None
 
-    def frozen_model_json_schema(cls: type, *args: Any, **kwargs: Any) -> dict[str, Any]:
+    def frozen_model_json_schema(
+        cls: type, *args: Any, **kwargs: Any
+    ) -> dict[str, Any]:
         # SDK 从此方法生成出站 Schema；每次返回快照的副本，隔离调用期间的类元数据变化。
         return json.loads(schema_snapshot)
 

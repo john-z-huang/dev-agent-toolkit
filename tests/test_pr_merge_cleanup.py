@@ -10,7 +10,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-
 SCRIPT = Path(__file__).parents[1] / "scripts" / "pr-merge-cleanup.py"
 SPEC = importlib.util.spec_from_file_location("pr_merge_cleanup", SCRIPT)
 assert SPEC and SPEC.loader
@@ -69,7 +68,9 @@ class PrMergeCleanupTests(unittest.TestCase):
         ) as run_command:
             MODULE.switch_to_base("release")
 
-        self.assertEqual(run_command.call_args_list[0].args[0], ["git", "switch", "release"])
+        self.assertEqual(
+            run_command.call_args_list[0].args[0], ["git", "switch", "release"]
+        )
         self.assertEqual(
             run_command.call_args_list[1].args[0],
             ["git", "switch", "--track", "origin/release"],

@@ -1,77 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 import json
-import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from dev_workflow_standards_tools.services import worktree_sync as sync
 from dev_workflow_standards_tools.server import mcp as complete_server
+from dev_workflow_standards_tools.services import worktree_sync as sync
+from worktree_fixtures import WorktreeTestCase
 
 
-class WorktreeBaseSyncTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory(prefix="worktree sync synthetic ")
-        self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
-
-    def git(self, cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-        result = subprocess.run(
-            ["git", *args],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            check=False,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"},
-        )
-        if check and result.returncode:
-            self.fail(f"git {' '.join(args)} failed: {result.stderr}")
-        return result
-
-    def commit_file(self, repo: Path, name: str, content: str, message: str) -> str:
-        path = repo / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-        self.git(repo, "add", "--", name)
-        self.git(repo, "commit", "-m", message)
-        return self.oid(repo, "HEAD")
-
-    def oid(self, repo: Path, ref: str) -> str:
-        return self.git(repo, "rev-parse", "--verify", f"{ref}^{{commit}}").stdout.strip()
-
-    def init_remote(self) -> tuple[Path, Path, Path, str]:
-        suffix = len(list(self.root.iterdir()))
-        bare = self.root / f"origin-{suffix}.git"
-        seed = self.root / f"main checkout {suffix}"
-        topic = self.root / f"topic linked checkout {suffix}"
-        bare.mkdir()
-        seed.mkdir()
-        topic.parent.mkdir(exist_ok=True)
-        self.git(self.root, "init", "--bare", "-q", str(bare))
-        self.git(bare, "symbolic-ref", "HEAD", "refs/heads/main")
-        self.git(seed, "init", "-q")
-        self.git(seed, "config", "user.name", "Synthetic Fixture")
-        self.git(seed, "config", "user.email", "fixture@example.invalid")
-        baseline = self.commit_file(seed, "shared.txt", "baseline\n", "baseline")
-        self.git(seed, "branch", "-M", "main")
-        self.git(seed, "remote", "add", "origin", str(bare))
-        self.git(seed, "push", "-u", "origin", "main")
-        self.git(seed, "worktree", "add", "-b", "feat/topic", str(topic), "main")
-        return bare, seed, topic, baseline
-
-    def advance_main(self, seed: Path, *, name: str = "base.txt", content: str = "base update\n") -> str:
-        self.git(seed, "checkout", "main")
-        oid = self.commit_file(seed, name, content, "advance base")
-        self.git(seed, "push", "origin", "main")
-        return oid
-
-    def add_topic_commit(self, topic: Path, *, name: str = "topic.txt", content: str = "topic work\n") -> str:
-        return self.commit_file(topic, name, content, "topic work")
-
+class WorktreeBaseSyncTests(WorktreeTestCase):
     def test_audit_reports_local_relation_and_optional_live_publication(self) -> None:
         _, seed, topic, baseline = self.init_remote()
         topic_oid = self.add_topic_commit(topic)
@@ -93,7 +35,9 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.assertEqual(local["publication_status"], "unknown")
         self.assertFalse(local["network_accessed"])
 
-        live = sync.audit_worktree_base_sync(str(topic), "refs/remotes/origin/main", "origin")
+        live = sync.audit_worktree_base_sync(
+            str(topic), "refs/remotes/origin/main", "origin"
+        )
         self.assertTrue(live["ok"], live)
         self.assertEqual(live["publication_status"], "unpublished")
         self.assertIsNone(live["publication_remote_oid"])
@@ -108,7 +52,12 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.git(seed, "checkout", "main")
         base_tip = self.advance_main(seed)
 
-        self.git(topic, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
+        self.git(
+            topic,
+            "config",
+            "remote.origin.fetch",
+            "+refs/heads/*:refs/remotes/origin/*",
+        )
         self.git(topic, "config", "fetch.prune", "true")
         self.git(topic, "config", "fetch.pruneTags", "true")
         self.git(bare, "update-ref", "refs/tags/remote-only", side_tip)
@@ -119,7 +68,17 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.assertEqual(fetched["fetched_oid"], base_tip)
         self.assertEqual(self.oid(topic, "refs/remotes/origin/main"), base_tip)
         self.assertEqual(self.oid(topic, "refs/remotes/origin/side"), initial)
-        self.assertNotEqual(self.git(topic, "show-ref", "--verify", "--hash", "refs/tags/remote-only", check=False).returncode, 0)
+        self.assertNotEqual(
+            self.git(
+                topic,
+                "show-ref",
+                "--verify",
+                "--hash",
+                "refs/tags/remote-only",
+                check=False,
+            ).returncode,
+            0,
+        )
 
         self.git(bare, "update-ref", "refs/heads/main", initial)
         rewind = sync.fetch_repository_branch(str(topic), "origin", "main")
@@ -157,7 +116,15 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.assertNotEqual(self.oid(topic, ref), base_tip)
 
         symbolic_repo = self.root / "symbolic fetch checkout"
-        self.git(seed, "worktree", "add", "-b", "feat/symbolic-test", str(symbolic_repo), "main")
+        self.git(
+            seed,
+            "worktree",
+            "add",
+            "-b",
+            "feat/symbolic-test",
+            str(symbolic_repo),
+            "main",
+        )
         self.git(symbolic_repo, "update-ref", "refs/remotes/origin/side", initial)
         self.git(symbolic_repo, "symbolic-ref", ref, "refs/remotes/origin/side")
         before = self.oid(symbolic_repo, "refs/remotes/origin/side")
@@ -168,7 +135,7 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.assertEqual(self.oid(symbolic_repo, "refs/remotes/origin/side"), before)
 
     def test_unpublished_rebase_preserves_topic_and_other_refs(self) -> None:
-        bare, seed, topic, _ = self.init_remote()
+        _bare, seed, topic, _ = self.init_remote()
         old_topic = self.add_topic_commit(topic)
         self.git(topic, "branch", "feat/other", old_topic)
         self.git(topic, "config", "rebase.updateRefs", "true")
@@ -179,15 +146,30 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.assertTrue(fetched["ok"], fetched)
 
         result = sync.rebase_repository_branch(
-            str(topic), "feat/topic", "refs/remotes/origin/main", old_topic, base_oid, remote="origin"
+            str(topic),
+            "feat/topic",
+            "refs/remotes/origin/main",
+            old_topic,
+            base_oid,
+            remote="origin",
         )
         self.assertTrue(result["ok"], result)
         self.assertTrue(result["rebased"])
         self.assertEqual(result["head_oid_before"], old_topic)
-        self.assertTrue(self.git(topic, "merge-base", "--is-ancestor", base_oid, "HEAD").returncode == 0)
-        self.assertEqual(self.git(topic, "show", "-s", "--format=%s", "HEAD").stdout.strip(), "topic work")
-        self.assertEqual((topic / "topic.txt").read_text(encoding="utf-8"), "topic work\n")
-        self.assertEqual((topic / "base.txt").read_text(encoding="utf-8"), "base update\n")
+        self.assertTrue(
+            self.git(topic, "merge-base", "--is-ancestor", base_oid, "HEAD").returncode
+            == 0
+        )
+        self.assertEqual(
+            self.git(topic, "show", "-s", "--format=%s", "HEAD").stdout.strip(),
+            "topic work",
+        )
+        self.assertEqual(
+            (topic / "topic.txt").read_text(encoding="utf-8"), "topic work\n"
+        )
+        self.assertEqual(
+            (topic / "base.txt").read_text(encoding="utf-8"), "base update\n"
+        )
         self.assertEqual(self.oid(topic, "refs/heads/feat/other"), old_topic)
         self.assertEqual(self.oid(seed, "refs/heads/main"), base_oid)
         self.assertEqual(self.oid(seed, "HEAD"), base_oid)
@@ -206,7 +188,12 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.assertTrue(audit["network_accessed"])
 
         result = sync.rebase_repository_branch(
-            str(topic), "feat/topic", "main", topic_oid, self.oid(topic, "main"), remote="origin"
+            str(topic),
+            "feat/topic",
+            "main",
+            topic_oid,
+            self.oid(topic, "main"),
+            remote="origin",
         )
         self.assertFalse(result["ok"])
         self.assertEqual(result["error_code"], "published_branch")
@@ -223,32 +210,51 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.git(topic, "config", "merge.ff", "false")
 
         result = sync.merge_repository_branch(
-            str(topic), "feat/topic", "refs/remotes/origin/main", topic_oid, base_oid, "origin"
+            str(topic),
+            "feat/topic",
+            "refs/remotes/origin/main",
+            topic_oid,
+            base_oid,
+            "origin",
         )
         self.assertTrue(result["ok"], result)
         self.assertEqual(result["merge_type"], "merge_commit")
         self.assertEqual(result["publication_remote_oid"], topic_oid)
-        parents = self.git(topic, "rev-list", "--parents", "-n", "1", "HEAD").stdout.strip().split()[1:]
+        parents = (
+            self.git(topic, "rev-list", "--parents", "-n", "1", "HEAD")
+            .stdout.strip()
+            .split()[1:]
+        )
         self.assertIn(topic_oid, parents)
         self.assertIn(base_oid, parents)
         pushed = self.git(topic, "push", "origin", "feat/topic")
         self.assertEqual(pushed.returncode, 0, pushed.stderr)
-        self.assertEqual(self.oid(bare, "refs/heads/feat/topic"), result["head_oid_after"])
+        self.assertEqual(
+            self.oid(bare, "refs/heads/feat/topic"), result["head_oid_after"]
+        )
 
-    def test_stale_dirty_detached_missing_ref_and_network_failure_fail_closed(self) -> None:
-        _, seed, topic, _ = self.init_remote()
+    def test_stale_dirty_detached_missing_ref_and_network_failure_fail_closed(
+        self,
+    ) -> None:
+        _, _seed, topic, _ = self.init_remote()
         topic_oid = self.add_topic_commit(topic)
         base_oid = self.oid(topic, "main")
-        stale_head = sync.rebase_repository_branch(str(topic), "feat/topic", "main", "f" * 40, base_oid)
+        stale_head = sync.rebase_repository_branch(
+            str(topic), "feat/topic", "main", "f" * 40, base_oid
+        )
         self.assertEqual(stale_head["error_code"], "stale_oid")
-        stale_base = sync.rebase_repository_branch(str(topic), "feat/topic", "main", topic_oid, "e" * 40)
+        stale_base = sync.rebase_repository_branch(
+            str(topic), "feat/topic", "main", topic_oid, "e" * 40
+        )
         self.assertEqual(stale_base["error_code"], "stale_oid")
         missing = sync.audit_worktree_base_sync(str(topic), "refs/heads/missing")
         self.assertFalse(missing["ok"])
         self.assertEqual(missing["error_code"], "base_ref_missing")
 
         (topic / "dirty.txt").write_text("keep me\n", encoding="utf-8")
-        dirty = sync.rebase_repository_branch(str(topic), "feat/topic", "main", topic_oid, base_oid)
+        dirty = sync.rebase_repository_branch(
+            str(topic), "feat/topic", "main", topic_oid, base_oid
+        )
         self.assertEqual(dirty["error_code"], "dirty_worktree")
         self.assertEqual((topic / "dirty.txt").read_text(encoding="utf-8"), "keep me\n")
         (topic / "dirty.txt").unlink()
@@ -262,7 +268,9 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         unavailable_remote = self.root / "missing remote.git"
         self.git(topic, "remote", "set-url", "origin", str(unavailable_remote))
         before = self.oid(topic, "HEAD")
-        result = sync.rebase_repository_branch(str(topic), "feat/topic", "main", before, base_oid, remote="origin")
+        result = sync.rebase_repository_branch(
+            str(topic), "feat/topic", "main", before, base_oid, remote="origin"
+        )
         self.assertFalse(result["ok"])
         self.assertEqual(result["error_code"], "publication_check_failed")
         self.assertTrue(result["network_accessed"])
@@ -275,7 +283,9 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         topic_oid = self.oid(topic, "HEAD")
         base_oid = self.commit_file(seed, "shared.txt", "base side\n", "base edit")
         self.git(seed, "push", "origin", "main")
-        self.assertTrue(sync.fetch_repository_branch(str(topic), "origin", "main")["ok"])
+        self.assertTrue(
+            sync.fetch_repository_branch(str(topic), "origin", "main")["ok"]
+        )
         result = sync.rebase_repository_branch(
             str(topic), "feat/topic", "refs/remotes/origin/main", topic_oid, base_oid
         )
@@ -283,15 +293,21 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.assertEqual(result["error_code"], "rebase_conflict")
         self.assertTrue(result["needs_review"])
         self.assertIn("shared.txt", result["conflict_paths"])
-        self.assertTrue(self.git(topic, "rev-parse", "--git-path", "rebase-merge").stdout.strip())
+        self.assertTrue(
+            self.git(topic, "rev-parse", "--git-path", "rebase-merge").stdout.strip()
+        )
         self.assertNotEqual(self.git(topic, "status", "--porcelain").stdout, "")
 
         _, seed2, topic2, _ = self.init_remote()
-        topic2_oid = self.commit_file(topic2, "shared.txt", "topic side\n", "topic edit")
+        topic2_oid = self.commit_file(
+            topic2, "shared.txt", "topic side\n", "topic edit"
+        )
         self.git(topic2, "push", "-u", "origin", "feat/topic")
         base2_oid = self.commit_file(seed2, "shared.txt", "base side\n", "base edit")
         self.git(seed2, "push", "origin", "main")
-        self.assertTrue(sync.fetch_repository_branch(str(topic2), "origin", "main")["ok"])
+        self.assertTrue(
+            sync.fetch_repository_branch(str(topic2), "origin", "main")["ok"]
+        )
         merge = sync.merge_repository_branch(
             str(topic2), "feat/topic", "refs/remotes/origin/main", topic2_oid, base2_oid
         )
@@ -299,35 +315,66 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.assertEqual(merge["error_code"], "merge_conflict")
         self.assertTrue(merge["needs_review"])
         self.assertIn("shared.txt", merge["conflict_paths"])
-        self.assertEqual(self.git(topic2, "rev-parse", "--verify", "MERGE_HEAD", check=False).returncode, 0)
+        self.assertEqual(
+            self.git(
+                topic2, "rev-parse", "--verify", "MERGE_HEAD", check=False
+            ).returncode,
+            0,
+        )
 
     def test_old_boundary_replays_only_child_commits_after_parent_squash(self) -> None:
         bare, seed, _, _ = self.init_remote()
         parent = self.root / "parent linked checkout"
         child = self.root / "child linked checkout"
         self.git(seed, "worktree", "add", "-b", "feat/parent", str(parent), "main")
-        parent_oid = self.commit_file(parent, "parent.txt", "parent content\n", "parent work")
+        parent_oid = self.commit_file(
+            parent, "parent.txt", "parent content\n", "parent work"
+        )
         self.git(seed, "worktree", "add", "-b", "feat/child", str(child), "feat/parent")
-        child_oid = self.commit_file(child, "child.txt", "child content\n", "child work")
+        child_oid = self.commit_file(
+            child, "child.txt", "child content\n", "child work"
+        )
 
         self.git(seed, "checkout", "main")
         self.commit_file(seed, "parent.txt", "parent content\n", "squashed parent")
         self.git(seed, "push", "origin", "main")
-        base_oid = sync.fetch_repository_branch(str(child), "origin", "main")["fetched_oid"]
+        base_oid = sync.fetch_repository_branch(str(child), "origin", "main")[
+            "fetched_oid"
+        ]
         self.assertIsNotNone(base_oid)
 
         result = sync.rebase_repository_branch(
-            str(child), "feat/child", "refs/remotes/origin/main", child_oid, base_oid, parent_oid
+            str(child),
+            "feat/child",
+            "refs/remotes/origin/main",
+            child_oid,
+            base_oid,
+            parent_oid,
         )
         self.assertTrue(result["ok"], result)
-        self.assertTrue(self.git(child, "merge-base", "--is-ancestor", base_oid, "HEAD").returncode == 0)
-        self.assertNotEqual(self.git(child, "merge-base", "--is-ancestor", parent_oid, "HEAD", check=False).returncode, 0)
-        self.assertEqual(self.git(child, "show", "-s", "--format=%s", "HEAD").stdout.strip(), "child work")
+        self.assertTrue(
+            self.git(child, "merge-base", "--is-ancestor", base_oid, "HEAD").returncode
+            == 0
+        )
+        self.assertNotEqual(
+            self.git(
+                child, "merge-base", "--is-ancestor", parent_oid, "HEAD", check=False
+            ).returncode,
+            0,
+        )
+        self.assertEqual(
+            self.git(child, "show", "-s", "--format=%s", "HEAD").stdout.strip(),
+            "child work",
+        )
         self.assertTrue((child / "parent.txt").exists())
-        self.assertEqual((child / "child.txt").read_text(encoding="utf-8"), "child content\n")
+        self.assertEqual(
+            (child / "child.txt").read_text(encoding="utf-8"), "child content\n"
+        )
         self.assertTrue((bare / "HEAD").exists())
 
-    def test_ignored_path_collision_is_rejected_without_overwriting_user_file(self) -> None:
+    def test_ignored_path_collision_is_rejected_without_overwriting_user_file(
+        self,
+    ) -> None:
         _, seed, topic, _ = self.init_remote()
         self.commit_file(seed, ".gitignore", "private.dat\n", "ignore private file")
         self.git(seed, "push", "origin", "main")
@@ -337,7 +384,9 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         private = topic / "private.dat"
         private.write_text("user content must survive\n", encoding="utf-8")
         self.commit_file(seed, ".gitignore", "", "stop ignoring private path")
-        base_oid = self.commit_file(seed, "private.dat", "tracked base content\n", "track formerly ignored path")
+        base_oid = self.commit_file(
+            seed, "private.dat", "tracked base content\n", "track formerly ignored path"
+        )
         self.git(seed, "push", "origin", "main")
         fetched = sync.fetch_repository_branch(str(topic), "origin", "main")
         self.assertTrue(fetched["ok"], fetched)
@@ -350,7 +399,9 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.assertEqual(result["error_code"], "ignored_path_collision")
         self.assertEqual(result["ignored_path_collisions"], ["private.dat"])
         self.assertFalse(result["needs_review"])
-        self.assertEqual(private.read_text(encoding="utf-8"), "user content must survive\n")
+        self.assertEqual(
+            private.read_text(encoding="utf-8"), "user content must survive\n"
+        )
         self.assertEqual(self.oid(topic, "HEAD"), topic_oid)
 
         _, seed2, topic2, _ = self.init_remote()
@@ -362,23 +413,33 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         private2 = topic2 / "private.dat"
         private2.write_text("keep this ignored file\n", encoding="utf-8")
         self.commit_file(seed2, ".gitignore", "", "stop ignoring private path")
-        base2_oid = self.commit_file(seed2, "private.dat", "new tracked base content\n", "track ignored path")
+        base2_oid = self.commit_file(
+            seed2, "private.dat", "new tracked base content\n", "track ignored path"
+        )
         self.git(seed2, "push", "origin", "main")
-        self.assertTrue(sync.fetch_repository_branch(str(topic2), "origin", "main")["ok"])
+        self.assertTrue(
+            sync.fetch_repository_branch(str(topic2), "origin", "main")["ok"]
+        )
         merge = sync.merge_repository_branch(
             str(topic2), "feat/topic", "refs/remotes/origin/main", topic2_oid, base2_oid
         )
         self.assertEqual(merge["error_code"], "ignored_path_collision")
         self.assertEqual(merge["ignored_path_collisions"], ["private.dat"])
-        self.assertEqual(private2.read_text(encoding="utf-8"), "keep this ignored file\n")
+        self.assertEqual(
+            private2.read_text(encoding="utf-8"), "keep this ignored file\n"
+        )
         self.assertEqual(self.oid(topic2, "HEAD"), topic2_oid)
 
-    def test_merge_rejects_branch_merge_options_that_change_merge_semantics(self) -> None:
+    def test_merge_rejects_branch_merge_options_that_change_merge_semantics(
+        self,
+    ) -> None:
         _, seed, topic, _ = self.init_remote()
         topic_oid = self.add_topic_commit(topic)
         self.git(topic, "push", "-u", "origin", "feat/topic")
         base_oid = self.advance_main(seed)
-        self.assertTrue(sync.fetch_repository_branch(str(topic), "origin", "main")["ok"])
+        self.assertTrue(
+            sync.fetch_repository_branch(str(topic), "origin", "main")["ok"]
+        )
         self.git(topic, "config", "branch.feat/topic.mergeOptions", "-s ours")
 
         result = sync.merge_repository_branch(
@@ -390,14 +451,26 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         self.assertFalse(result["needs_review"])
         self.assertEqual(self.oid(topic, "HEAD"), topic_oid)
 
-    def test_post_action_readback_failure_marks_uncertain_write_for_review(self) -> None:
+    def test_post_action_readback_failure_marks_uncertain_write_for_review(
+        self,
+    ) -> None:
         _, seed, topic, _ = self.init_remote()
         topic_oid = self.add_topic_commit(topic)
         base_oid = self.advance_main(seed)
-        self.assertTrue(sync.fetch_repository_branch(str(topic), "origin", "main")["ok"])
-        with patch.object(sync, "_clean_readback", side_effect=sync._SyncFailure("readback_unavailable", "synthetic")):
+        self.assertTrue(
+            sync.fetch_repository_branch(str(topic), "origin", "main")["ok"]
+        )
+        with patch.object(
+            sync,
+            "_clean_readback",
+            side_effect=sync._SyncFailure("readback_unavailable", "synthetic"),
+        ):
             result = sync.rebase_repository_branch(
-                str(topic), "feat/topic", "refs/remotes/origin/main", topic_oid, base_oid
+                str(topic),
+                "feat/topic",
+                "refs/remotes/origin/main",
+                topic_oid,
+                base_oid,
             )
         self.assertFalse(result["ok"])
         self.assertTrue(result["action_started"])
@@ -409,10 +482,20 @@ class WorktreeBaseSyncTests(unittest.TestCase):
         topic2_oid = self.add_topic_commit(topic2)
         self.git(topic2, "push", "-u", "origin", "feat/topic")
         base2_oid = self.advance_main(seed2)
-        self.assertTrue(sync.fetch_repository_branch(str(topic2), "origin", "main")["ok"])
-        with patch.object(sync, "_clean_readback", side_effect=sync._SyncFailure("readback_unavailable", "synthetic")):
+        self.assertTrue(
+            sync.fetch_repository_branch(str(topic2), "origin", "main")["ok"]
+        )
+        with patch.object(
+            sync,
+            "_clean_readback",
+            side_effect=sync._SyncFailure("readback_unavailable", "synthetic"),
+        ):
             merged = sync.merge_repository_branch(
-                str(topic2), "feat/topic", "refs/remotes/origin/main", topic2_oid, base2_oid
+                str(topic2),
+                "feat/topic",
+                "refs/remotes/origin/main",
+                topic2_oid,
+                base2_oid,
             )
         self.assertFalse(merged["ok"])
         self.assertTrue(merged["action_started"])
@@ -422,19 +505,64 @@ class WorktreeBaseSyncTests(unittest.TestCase):
 
 
 class WorktreeBaseSyncMcpTests(unittest.IsolatedAsyncioTestCase):
-    async def test_audit_is_discoverable_and_callable_with_synthetic_input(self) -> None:
+    async def test_audit_is_discoverable_and_callable_with_synthetic_input(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory(prefix="mcp base audit ") as temp:
             repo = Path(temp) / "repo"
             repo.mkdir()
-            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-            subprocess.run(["git", "config", "user.name", "Synthetic"], cwd=repo, check=True)
-            subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=repo, check=True)
+            (
+                await asyncio.to_thread(
+                    subprocess.run, ["git", "init", "-q"], cwd=repo, check=True
+                )
+            )
+            (
+                await asyncio.to_thread(
+                    subprocess.run,
+                    ["git", "config", "user.name", "Synthetic"],
+                    cwd=repo,
+                    check=True,
+                )
+            )
+            (
+                await asyncio.to_thread(
+                    subprocess.run,
+                    ["git", "config", "user.email", "fixture@example.invalid"],
+                    cwd=repo,
+                    check=True,
+                )
+            )
             (repo / "base.txt").write_text("base\n", encoding="utf-8")
-            subprocess.run(["git", "add", "base.txt"], cwd=repo, check=True)
-            subprocess.run(["git", "commit", "-m", "baseline"], cwd=repo, check=True)
-            subprocess.run(["git", "branch", "-M", "main"], cwd=repo, check=True)
-            base_oid = subprocess.run(
-                ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+            (
+                await asyncio.to_thread(
+                    subprocess.run, ["git", "add", "base.txt"], cwd=repo, check=True
+                )
+            )
+            (
+                await asyncio.to_thread(
+                    subprocess.run,
+                    ["git", "commit", "-m", "baseline"],
+                    cwd=repo,
+                    check=True,
+                )
+            )
+            (
+                await asyncio.to_thread(
+                    subprocess.run,
+                    ["git", "branch", "-M", "main"],
+                    cwd=repo,
+                    check=True,
+                )
+            )
+            base_oid = (
+                await asyncio.to_thread(
+                    subprocess.run,
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=repo,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
             ).stdout.strip()
 
             raw = await complete_server.call_tool(

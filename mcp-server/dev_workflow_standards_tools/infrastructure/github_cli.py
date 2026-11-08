@@ -1,7 +1,6 @@
 """Private GitHub CLI/API helpers; commands remain fixed by each use case."""
 
 import json
-import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -15,14 +14,22 @@ def _resolve_repo(repo: str | None, *, cwd: str) -> tuple[str | None, str | None
         if not REPO_PATTERN.fullmatch(repo):
             return None, "repo 必须采用 owner/repo 格式"
         return repo, None
-    result = _run_fixed(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"], cwd=cwd)
+    result = _run_fixed(
+        ["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+        cwd=cwd,
+    )
     resolved = result.stdout.strip()
     if result.returncode != 0 or not REPO_PATTERN.fullmatch(resolved):
-        return None, "无法从当前目录确定 GitHub 仓库；请提供 repo=owner/repo 并确认 gh 已授权"
+        return (
+            None,
+            "无法从当前目录确定 GitHub 仓库；请提供 repo=owner/repo 并确认 gh 已授权",
+        )
     return resolved, None
 
 
-def _gh_api_json(endpoint: str, *, cwd: str) -> tuple[dict[str, Any] | None, str | None]:
+def _gh_api_json(
+    endpoint: str, *, cwd: str
+) -> tuple[dict[str, Any] | None, str | None]:
     result = _run_fixed(["gh", "api", endpoint], cwd=cwd)
     if result.returncode != 0:
         return None, f"gh API 请求失败（退出码 {result.returncode}）"
@@ -35,7 +42,9 @@ def _gh_api_json(endpoint: str, *, cwd: str) -> tuple[dict[str, Any] | None, str
     return value, None
 
 
-def _gh_pr_for_cleanup(pr_number: int, repo: str | None, *, cwd: str) -> tuple[dict[str, Any] | None, str | None]:
+def _gh_pr_for_cleanup(
+    pr_number: int, repo: str | None, *, cwd: str
+) -> tuple[dict[str, Any] | None, str | None]:
     if repo is not None and not REPO_PATTERN.fullmatch(repo):
         return None, "repo 必须采用 owner/repo 格式"
     args = ["gh", "pr", "view", str(pr_number)]

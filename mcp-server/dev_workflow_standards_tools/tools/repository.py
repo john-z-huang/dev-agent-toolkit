@@ -10,18 +10,64 @@ from ._registration import _register_adapter
 
 def register_repository_tools(server: MCPServer) -> None:
     read_only = ToolAnnotations(read_only_hint=True, open_world_hint=False)
-    local_write = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
-    destructive_write = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False)
-    idempotent_write = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False)
-    network_write = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True)
-    network_destructive_write = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=True)
+    local_write = ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=False,
+    )
+    destructive_write = ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=False,
+    )
+    idempotent_write = ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=True,
+        open_world_hint=False,
+    )
+    network_write = ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=True,
+    )
+    network_destructive_write = ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=True,
+    )
     tools = (
         (workflows.list_repository_worktrees, read_only),
-        (workflows.audit_worktree_base_sync, ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=True)),
+        (
+            workflows.audit_worktree_base_sync,
+            ToolAnnotations(
+                read_only_hint=True, idempotent_hint=True, open_world_hint=True
+            ),
+        ),
         (workflows.switch_repository_branch, local_write),
         (create_repository_branch, local_write),
-        (workflows.pull_origin_branch_fast_forward, ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True)),
-        (workflows.fetch_upstream_branch, ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True)),
+        (
+            workflows.pull_origin_branch_fast_forward,
+            ToolAnnotations(
+                read_only_hint=False,
+                destructive_hint=False,
+                idempotent_hint=False,
+                open_world_hint=True,
+            ),
+        ),
+        (
+            workflows.fetch_upstream_branch,
+            ToolAnnotations(
+                read_only_hint=False,
+                destructive_hint=False,
+                idempotent_hint=False,
+                open_world_hint=True,
+            ),
+        ),
         (workflows.fetch_repository_branch, network_write),
         (workflows.merge_upstream_branch_fast_forward, local_write),
         (workflows.merge_repository_branch, network_write),

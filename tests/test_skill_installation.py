@@ -3,9 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from dev_workflow_standards_tools.services import skill_installation as service
@@ -13,8 +13,15 @@ from dev_workflow_standards_tools.services import skill_installation as service
 
 def bundle(version="1", text=b"# Test Skill\n"):
     payload = {"SKILL.md": text, "references/guide.md": b"guide\n"}
-    manifest = {"schema": 1, "owner": service.OWNER, "skill": service.SKILL, "version": version,
-                "files": {name: hashlib.sha256(data).hexdigest() for name, data in payload.items()}}
+    manifest = {
+        "schema": 1,
+        "owner": service.OWNER,
+        "skill": service.SKILL,
+        "version": version,
+        "files": {
+            name: hashlib.sha256(data).hexdigest() for name, data in payload.items()
+        },
+    }
     return manifest, payload
 
 
@@ -59,9 +66,13 @@ class SkillInstallationTests(unittest.TestCase):
             with self.subTest(action=action):
                 with self.assertRaises(service.SkillError):
                     self.manage(action)
-                self.assertEqual((self.target / "SKILL.md").read_text(), "old development version")
+                self.assertEqual(
+                    (self.target / "SKILL.md").read_text(), "old development version"
+                )
 
-    def test_default_install_and_update_use_new_directory_and_preserve_old_project(self):
+    def test_default_install_and_update_use_new_directory_and_preserve_old_project(
+        self,
+    ):
         legacy = self.root / ".agents" / "skills" / service.SKILL
         legacy.mkdir(parents=True)
         (legacy / "SKILL.md").write_text("old project")
@@ -73,11 +84,15 @@ class SkillInstallationTests(unittest.TestCase):
             self.assertFalse(expected.exists())
             service.manage_skill("install")
             self.assertEqual(service.manage_skill("show")["target"], str(expected))
-            with patch.object(service, "_bundle", return_value=bundle("2", b"new snapshot")):
+            with patch.object(
+                service, "_bundle", return_value=bundle("2", b"new snapshot")
+            ):
                 service.manage_skill("update")
             self.assertEqual((expected / "SKILL.md").read_bytes(), b"new snapshot")
         self.assertEqual((legacy / "SKILL.md").read_text(), "old project")
-        self.assertEqual(sorted(path.name for path in legacy.iterdir()), [".git", "SKILL.md"])
+        self.assertEqual(
+            sorted(path.name for path in legacy.iterdir()), [".git", "SKILL.md"]
+        )
 
     def test_explicit_legacy_targets_are_blocked_even_with_valid_managed_manifest(self):
         legacy = self.root / ".agents" / "skills" / service.SKILL
@@ -91,7 +106,10 @@ class SkillInstallationTests(unittest.TestCase):
         with patch.object(Path, "home", return_value=self.root):
             for target in (legacy, legacy / "nested", legacy.parent):
                 for action in ("install", "update"):
-                    with self.subTest(target=target, action=action), self.assertRaisesRegex(service.SkillError, "旧项目目录受保护"):
+                    with (
+                        self.subTest(target=target, action=action),
+                        self.assertRaisesRegex(service.SkillError, "旧项目目录受保护"),
+                    ):
                         service.manage_skill(action, str(target))
         self.assertEqual(service._snapshot(legacy), before)
 
@@ -104,7 +122,10 @@ class SkillInstallationTests(unittest.TestCase):
         legacy.symlink_to(actual, target_is_directory=True)
         with patch.object(Path, "home", return_value=self.root):
             for target in (actual, legacy):
-                with self.subTest(target=target), self.assertRaisesRegex(service.SkillError, "旧项目目录受保护"):
+                with (
+                    self.subTest(target=target),
+                    self.assertRaisesRegex(service.SkillError, "旧项目目录受保护"),
+                ):
                     service.manage_skill("install", str(target))
         self.assertEqual((actual / "SKILL.md").read_text(), "old project")
 
@@ -130,7 +151,15 @@ class SkillInstallationTests(unittest.TestCase):
             service.manage_skill("install", str(self.root / "missing" / ".." / "new"))
 
     def test_modified_extra_missing_and_special_contents_block_update(self):
-        changes = ("modified", "missing", "extra", "empty_dir", "symlink", "hardlink", "fifo")
+        changes = (
+            "modified",
+            "missing",
+            "extra",
+            "empty_dir",
+            "symlink",
+            "hardlink",
+            "fifo",
+        )
         for index, change in enumerate(changes):
             with self.subTest(change=change):
                 target = self.root / str(index)
@@ -158,21 +187,32 @@ class SkillInstallationTests(unittest.TestCase):
     def test_failure_before_atomic_publish_keeps_old_installation(self):
         self.manage("install")
         before = service._snapshot(self.target)
-        with patch.object(service, "_bundle", return_value=bundle("2", b"new")), patch.object(
-            service, "_publish", side_effect=service.SkillError("simulated failure")
-        ), self.assertRaises(service.SkillError):
+        with (
+            patch.object(service, "_bundle", return_value=bundle("2", b"new")),
+            patch.object(
+                service, "_publish", side_effect=service.SkillError("simulated failure")
+            ),
+            self.assertRaises(service.SkillError),
+        ):
             self.manage("update")
         self.assertEqual(service._snapshot(self.target), before)
 
     def test_racing_first_install_does_not_replace_newly_created_target(self):
         publish = service._publish
+
         def competing_install(source, target, *, exchange):
             target.mkdir()
             (target / "user-file").write_text("preserve concurrent content")
             publish(source, target, exchange=exchange)
-        with patch.object(service, "_publish", side_effect=competing_install), self.assertRaises(service.SkillError):
+
+        with (
+            patch.object(service, "_publish", side_effect=competing_install),
+            self.assertRaises(service.SkillError),
+        ):
             self.manage("install")
-        self.assertEqual((self.target / "user-file").read_text(), "preserve concurrent content")
+        self.assertEqual(
+            (self.target / "user-file").read_text(), "preserve concurrent content"
+        )
         self.assertFalse((self.target / "SKILL.md").exists())
 
     def test_interrupt_after_swap_leaves_complete_new_target(self):
@@ -183,9 +223,11 @@ class SkillInstallationTests(unittest.TestCase):
             publish(*args, **kwargs)
             raise KeyboardInterrupt
 
-        with patch.object(service, "_bundle", return_value=bundle("2", b"new")), patch.object(
-            service, "_publish", side_effect=interrupted
-        ), self.assertRaises(KeyboardInterrupt):
+        with (
+            patch.object(service, "_bundle", return_value=bundle("2", b"new")),
+            patch.object(service, "_publish", side_effect=interrupted),
+            self.assertRaises(KeyboardInterrupt),
+        ):
             self.manage("update")
         self.assertEqual(self.manage("show")["installed_version"], "2")
         self.assertEqual((self.target / "SKILL.md").read_bytes(), b"new")
@@ -193,45 +235,69 @@ class SkillInstallationTests(unittest.TestCase):
     def test_external_edit_before_swap_is_rejected_and_preserved(self):
         self.manage("install")
         installed = service._installed
+
         def edit_when_staged(path):
             result = installed(path)
             if path != self.target:
                 (self.target / "SKILL.md").write_text("external edit")
             return result
-        with patch.object(service, "_bundle", return_value=bundle("2", b"new")), patch.object(
-            service, "_installed", side_effect=edit_when_staged
-        ), self.assertRaises(service.SkillError):
+
+        with (
+            patch.object(service, "_bundle", return_value=bundle("2", b"new")),
+            patch.object(service, "_installed", side_effect=edit_when_staged),
+            self.assertRaises(service.SkillError),
+        ):
             self.manage("update")
         self.assertEqual((self.target / "SKILL.md").read_text(), "external edit")
 
     def test_external_special_file_during_swap_is_preserved_and_rolled_back(self):
         self.manage("install")
         publish = service._publish
+
         def edit_before_swap(source, target, *, exchange):
             if not (target / "pipe").exists():
                 os.mkfifo(target / "pipe")
             publish(source, target, exchange=exchange)
-        with patch.object(service, "_bundle", return_value=bundle("2", b"new")), patch.object(
-            service, "_publish", side_effect=edit_before_swap
-        ), self.assertRaises(service.SkillError):
+
+        with (
+            patch.object(service, "_bundle", return_value=bundle("2", b"new")),
+            patch.object(service, "_publish", side_effect=edit_before_swap),
+            self.assertRaises(service.SkillError),
+        ):
             self.manage("update")
         self.assertTrue((self.target / "pipe").exists())
-        self.assertEqual((self.target / "SKILL.md").read_bytes(), bundle()[1]["SKILL.md"])
+        self.assertEqual(
+            (self.target / "SKILL.md").read_bytes(), bundle()[1]["SKILL.md"]
+        )
 
     def test_cooperating_process_lock_blocks_a_second_writer(self):
         self.target.parent.mkdir()
-        with service._lock(self.target), self.assertRaisesRegex(service.SkillError, "另一个"):
+        with (
+            service._lock(self.target),
+            self.assertRaisesRegex(service.SkillError, "另一个"),
+        ):
             self.manage("install")
         self.assertFalse(self.target.exists())
 
     def test_unknown_platform_has_no_writes(self):
-        with patch.object(service.sys, "platform", "win32"), self.assertRaises(service.SkillError):
+        with (
+            patch.object(service.sys, "platform", "win32"),
+            self.assertRaises(service.SkillError),
+        ):
             self.manage("install")
         self.assertEqual(list(self.root.iterdir()), [])
 
     def test_untrusted_manifest_paths_and_schema_are_refused(self):
         original, _ = bundle()
-        for name in ("../escape.md", "/absolute.md", "a/../../escape.md", "a\\b.md", "./test.md", ".git/config.md", "a\x00.md"):
+        for name in (
+            "../escape.md",
+            "/absolute.md",
+            "a/../../escape.md",
+            "a\\b.md",
+            "./test.md",
+            ".git/config.md",
+            "a\x00.md",
+        ):
             data = {**original, "files": {**original["files"], name: "a" * 64}}
             with self.subTest(name=name), self.assertRaises(service.SkillError):
                 service._manifest(json.dumps(data).encode())
