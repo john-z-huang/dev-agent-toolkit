@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 与 Python 实现放在同一目录，使入口不依赖调用者的工作目录。
+# 从项目根目录定位实现，使入口不依赖调用者的工作目录。
 script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
 
 case "${1:-}" in
@@ -27,14 +27,14 @@ case "${1:-}" in
         ;;
     --help|-h|"")
         cat <<'HELP'
-用法：setup-codex-mcp.sh 操作参数 [对应操作的选项]
-  --mcp-install     安装 MCP Server，并注册和配置 Codex
-  --mcp-update      更新 MCP Server，并注册和配置 Codex
-  --skills-install  从已安装的完整发行包安装 Skill
-  --skills-update   从已安装的完整发行包更新 Skill
+用法：./setup 操作参数 [对应操作的选项]
+  --mcp-install     安装 MCP 服务，并在 Codex 中注册和配置
+  --mcp-update      更新 MCP 服务，并在 Codex 中注册和配置
+  --skills-install  从已安装的完整发行包安装技能（Skill）
+  --skills-update   从已安装的完整发行包更新技能（Skill）
   --agents-install  创建全局 AGENTS.md；已有文件须显式接管
   --agents-update   更新全局 AGENTS.md，保留接管、备份与冲突校验
-Skill 和 AGENTS.md 操作不安装或更新 MCP Server，也不修改 MCP 注册。
+技能和 AGENTS.md 操作不安装或更新 MCP 服务，也不修改 MCP 注册。
 在操作参数后加 --help 查看对应选项，加 --dry-run 预览。
 兼容原 MCP 参数，例如 --install --force 或 --env-only。
 HELP
@@ -43,4 +43,4 @@ HELP
 esac
 
 # exec 保留退出状态与信号语义；参数逐项转发，避免空格或通配符被重新解释。
-exec uv run --managed-python -- "$script_dir/setup-codex-mcp.py" "$@"
+exec uv run --managed-python -- "$script_dir/scripts/setup-codex-mcp.py" "$@"

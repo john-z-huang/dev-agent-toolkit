@@ -66,23 +66,23 @@ uv tool install --force ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.w
 
 ## Codex 中安装
 
-本仓库的 [Codex 安装更新入口](scripts/setup-codex-mcp.sh) 按参数分别管理 MCP Server、Skill 和全局 `AGENTS.md`。在仓库根目录无参数执行时，仅打印使用帮助并返回 `0`，不安装软件、不注册 MCP，也不写入配置或指令文件：
+本仓库的 [Codex 安装更新入口](setup) 按参数分别管理 MCP Server、Skill 和全局 `AGENTS.md`。在仓库根目录无参数执行时，仅打印使用帮助并返回 `0`，不安装软件、不注册 MCP，也不写入配置或指令文件：
 
 ```bash
-./scripts/setup-codex-mcp.sh
+./setup
 # 等价的显式帮助命令
-./scripts/setup-codex-mcp.sh --help
+./setup --help
 ```
 
 安装 MCP Server、注册服务并配置环境变量转发：
 
 ```bash
-./scripts/setup-codex-mcp.sh --mcp-install
+./setup --mcp-install
 ```
 
 脚本从自身位置定位 `mcp-server/`，不依赖调用时的工作目录。它默认处理 `dev-workflow-standards-tools`，将 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 及上述四个代理变量的大写、小写名称合并到该服务的 `env_vars`。只有变量名会写入配置，脚本不读取或打印配置值，不发起 OpenAI 请求。
 
-入口参考 Homebrew 的 Gradle/Maven 命令脚本：Bash 根据显式操作参数选择入口，通过 `exec` 启动对应程序并保留退出状态。MCP 操作调用同目录的 Python 实现；Skill 和全局指令操作通过 `uv tool dir --bin` 定位已安装的完整发行包入口，额外选项原样转发。支持本机 Bash 3.2；从其他工作目录调用时使用该入口的绝对路径。需要 `uv` 位于 `PATH`，Python 版本与依赖仍由实现脚本的 PEP 723 声明管理。入口与 `setup-codex-mcp.py` 必须保留在同一目录，不单独复制入口或通过异目录符号链接调用。原 Python 命令仍兼容。
+入口参考 Homebrew 的 Gradle/Maven 命令脚本：Bash 根据显式操作参数选择入口，通过 `exec` 启动对应程序并保留退出状态。MCP 操作调用项目内的 `scripts/setup-codex-mcp.py` 实现；Skill 和全局指令操作通过 `uv tool dir --bin` 定位已安装的完整发行包入口，额外选项原样转发。支持本机 Bash 3.2；从其他工作目录调用时使用该入口的绝对路径。需要 `uv` 位于 `PATH`，Python 版本与依赖仍由实现脚本的 PEP 723 声明管理。根目录入口与 `scripts/setup-codex-mcp.py` 必须保持仓库中的相对路径，不单独复制入口或通过异目录符号链接调用。原 Python 命令仍兼容。
 
 安装和更新按资源使用独立参数；操作参数必须放在首位，每次只选择一种资源：
 
@@ -93,10 +93,10 @@ uv tool install --force ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.w
 | `--agents-install` | `--agents-update` | 创建或更新全局 `AGENTS.md`；不安装软件包、不注册 MCP。 |
 
 ```bash
-./scripts/setup-codex-mcp.sh --skills-install
-./scripts/setup-codex-mcp.sh --skills-update --dry-run
-./scripts/setup-codex-mcp.sh --agents-install --dry-run
-./scripts/setup-codex-mcp.sh --agents-update --dry-run
+./setup --skills-install
+./setup --skills-update --dry-run
+./setup --agents-install --dry-run
+./setup --agents-update --dry-run
 ```
 
 Skill 选项包括 `--target`、`--dry-run`；全局指令选项包括 `--source`、`--dry-run`、`--adopt`、`--replace-local`。`--agents-install` 和 `--agents-update` 均复用管理 CLI 的 `agents update`：目标不存在时创建，已有未知文件仍需显式 `--adopt`，不会绕过备份或本地修改保护。资源操作使用已安装包内的内容；需要最新源码时，先独立更新完整发行包。各操作后加 `--help` 查看选项；原 MCP 参数 `--install`、`--install --force`、`--env-only` 仍兼容。
@@ -104,22 +104,22 @@ Skill 选项包括 `--target`、`--dry-run`；全局指令选项包括 `--source
 更新已有安装：
 
 ```bash
-./scripts/setup-codex-mcp.sh --mcp-update
+./setup --mcp-update
 ```
 
 可先预览安装和配置计划；`--mcp-install --dry-run` 不运行安装或注册命令，也不读写配置：
 
 ```bash
-./scripts/setup-codex-mcp.sh --mcp-install --dry-run
+./setup --mcp-install --dry-run
 ```
 
 如果已经通过 `uv tool install ./mcp-server` 安装，可显式传入 `--server dev-workflow-standards-tools` 完成注册和转发配置；如果服务也已经注册，只需修复转发声明：
 
 ```bash
 # 仅注册已有安装并补齐转发配置
-./scripts/setup-codex-mcp.sh --server dev-workflow-standards-tools
+./setup --server dev-workflow-standards-tools
 # 仅修复已注册服务的转发声明
-./scripts/setup-codex-mcp.sh --env-only
+./setup --env-only
 ```
 
 `--env-only` 不安装软件、不调用 Codex CLI，也不会创建缺失的服务条目；其 `--dry-run` 会读取并验证配置，但不写入。重复运行时只追加缺失的名称；已经完整配置时，文件内容和修改时间保持不变。已有转发变量名、服务启动参数、审批设置及其他配置会保留。
@@ -151,7 +151,7 @@ default_tools_approval_mode = "writes"
 
 `writes` 会要求 Codex 确认未标记为只读的工具。Skill 的用户授权规则仍然适用；MCP 注解和 Codex 确认都不能替代任务语境中的授权。Codex 桌面端、CLI 和 IDE 共享该配置。修改配置后，重新加载 MCP 服务；若客户端未提供重载入口，退出后重新打开客户端，确保重新创建服务进程。已有 MCP 进程不会自动获得新配置或环境变量。
 
-安装为普通本机 uv tool 后，工具从本机安装位置运行，不依赖仓库 worktree 路径。更新本地源码后，可运行 `./scripts/setup-codex-mcp.sh --mcp-update` 更新软件包和 MCP 注册，再按需要分别运行 `--skills-update`、`--agents-update` 更新已安装指令。单独运行 `uv tool install` 不会自动配置 Codex；需要安装并注册 MCP 时，使用上述脚本的 MCP 操作参数。
+安装为普通本机 uv tool 后，工具从本机安装位置运行，不依赖仓库 worktree 路径。更新本地源码后，可运行 `./setup --mcp-update` 更新软件包和 MCP 注册，再按需要分别运行 `--skills-update`、`--agents-update` 更新已安装指令。单独运行 `uv tool install` 不会自动配置 Codex；需要安装并注册 MCP 时，使用上述脚本的 MCP 操作参数。
 
 ### 从旧名称迁移
 
