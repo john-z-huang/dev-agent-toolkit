@@ -15,12 +15,12 @@ upstream/main → origin/main → personal-<project> → feat/fix/docs/... → P
 
 ## 同步上游
 
-先调用 `audit_repository_state` 核对 Fork、仓库、默认分支、remote 和工作区。
+同步操作要求已核实 Fork、仓库、实际默认分支、remote 和工作区，`audit_repository_state` 可提供相关观测。
 
-1. 确认 `upstream` remote 已配置。MCP 不会猜 URL 或首次添加 remote；若缺失，核实 Fork parent、准确 URL 和配置授权后，按 [`cli-fallback.md`](cli-fallback.md) 用 Git CLI 配置并回读，再继续同步。
-2. 在工作区允许时，依次使用 `fetch_upstream_branch` 获取上游分支、`switch_repository_branch` 切到本地 `main`、`merge_upstream_branch_fast_forward` 快进更新 `main`。
-3. 仅当 `main` 与 `upstream/main` 快进一致且用户授权时，调用 `push_fork_main_fast_forward` 更新 `origin/main`。
-4. 切换回已核验的个人维护分支。若需新建或设置跟踪关系，先核实维护基线和授权；已有工具能满足时优先使用，其余按 CLI 补充规约完成并回读。
+- 获取上游：`upstream` 必须已配置且对应真实 Fork parent。MCP 不猜 URL 或首次添加 remote；缺失时只有准确 URL 和配置授权明确，才可按 [CLI 边界](cli-fallback.md) 补足并回读。
+- 更新本地镜像：`merge_upstream_branch_fast_forward` 要求当前目标为本地 `main`，已获取的上游引用可信且可快进；工作区允许安全切换/合入，不改写个人内容。获取、切换和合入分别满足各自条件。
+- 更新远端镜像：只有 `main` 与 `upstream/main` 的快进关系已核实且推送授权有效，才适用 `push_fork_main_fast_forward`。
+- 个人维护分支：需求工作要求基线和拓扑准确；创建或设置 tracking 是单独动作，不因上游同步而自动执行。工具未覆盖的部分按既有授权补足，基线不明则暂停。
 
 任何 fetch、切换、快进或推送失败都保留现场，不使用过期 remote-tracking 信息、任意 SHA、重置或强推绕过。
 

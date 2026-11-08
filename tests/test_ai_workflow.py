@@ -6,7 +6,7 @@ import os
 from io import StringIO
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from pydantic import ValidationError
 
@@ -18,12 +18,10 @@ from dev_workflow_standards_tools.services.ai_workflow import (
     EvidenceItem,
     GeneratedContent,
     SessionDecisionRequest,
-    WorkflowDecisionRequest,
     audit_issue_pr_policy,
     check_branch_names,
     check_commit_message,
     decide_codex_session_action,
-    decide_skill_workflow,
     generate_skill_content,
 )
 from dev_workflow_standards_tools.services.codex_session_facts import CodexSessionSource
@@ -54,29 +52,39 @@ def configured_env(**overrides: str) -> dict[str, str]:
     return {"OPENAI_API_KEY": API_KEY_A, "OPENAI_BASE_URL": BASE_URL_A, **overrides}
 
 
-class OpenAIClientTests(unittest.TestCase):
+def sdk_client() -> Mock:
+    """构造网络方法和 close 可等待的 SDK 替身，客户端构造本身仍为同步。"""
+    client = Mock()
+    client.decisions.create = AsyncMock()
+    client.responses.parse = AsyncMock()
+    client.close = AsyncMock()
+    return client
+
+
+class OpenAIClientTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.http_clients: list[Mock] = []
 
         def make_http_client(**kwargs: object) -> Mock:
-            client = Mock()
+            client = Mock(aclose=AsyncMock())
             client.trust_env = kwargs.get("trust_env")
             self.http_clients.append(client)
             return client
 
         client_patcher = patch.object(
-            openai_client.httpx2, "Client", side_effect=make_http_client
+            openai_client.httpx2, "AsyncClient", side_effect=make_http_client
         )
         client_patcher.start()
         self.addCleanup(client_patcher.stop)
-        self.addCleanup(self.close_http_clients)
+        self.addAsyncCleanup(self.close_http_clients)
 
-    def close_http_clients(self) -> None:
+    async def close_http_clients(self) -> None:
+        """清理未交给真实 SDK 管理的模拟传输，避免测试替身留下资源。"""
         for client in self.http_clients:
-            if not client.close.called:
-                client.close()
+            if not client.aclose.called:
+                await client.aclose()
 
-    def test_missing_or_blank_environment_prevents_client_creation(self) -> None:
+    async def test_missing_or_blank_environment_prevents_client_creation(self) -> None:
         cases = [
             {"OPENAI_API_KEY": "", "OPENAI_BASE_URL": BASE_URL_A},
             {"OPENAI_API_KEY": API_KEY_A, "OPENAI_BASE_URL": "   "},
@@ -84,17 +92,17 @@ class OpenAIClientTests(unittest.TestCase):
         ]
         for environment in cases:
             with self.subTest(environment_keys=list(environment)), patch.dict(os.environ, environment, clear=True), patch.object(
-                openai_client, "OpenAI"
+                openai_client, "AsyncOpenAI"
             ) as factory:
                 with self.assertRaises(openai_client.OpenAIWorkflowError):
-                    openai_client.create_decision([], [])
+                    await openai_client.create_decision([], [])
                 factory.assert_not_called()
-                with patch.object(openai_client.httpx2, "Client") as http_factory:
+                with patch.object(openai_client.httpx2, "AsyncClient") as http_factory:
                     with self.assertRaises(openai_client.OpenAIWorkflowError):
-                        openai_client.create_decision([], [])
+                        await openai_client.create_decision([], [])
                     http_factory.assert_not_called()
 
-    def test_bad_base_url_is_rejected_without_echoing_it(self) -> None:
+    async def test_bad_base_url_is_rejected_without_echoing_it(self) -> None:
         for url in (
             "ftp://api.example.invalid/v1",
             "https://user:password@api.example.invalid/v1",
@@ -103,36 +111,36 @@ class OpenAIClientTests(unittest.TestCase):
         ):
             with self.subTest(url_kind=url.split(":", 1)[0]), patch.dict(
                 os.environ, configured_env(OPENAI_BASE_URL=url), clear=True
-            ), patch.object(openai_client, "OpenAI") as factory:
+            ), patch.object(openai_client, "AsyncOpenAI") as factory:
                 with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                    openai_client.create_decision([], [])
+                    await openai_client.create_decision([], [])
                 self.assertEqual(raised.exception.error_code, "invalid_base_url")
                 self.assertNotIn(url, str(raised.exception))
                 factory.assert_not_called()
 
-    def test_each_request_reads_environment_and_passes_explicit_config(self) -> None:
+    async def test_each_request_reads_environment_and_passes_explicit_config(self) -> None:
         answer = decision_response(choice_answer("q", "compliant", ("compliant",)))
-        first = Mock()
+        first = sdk_client()
         first.decisions.create.return_value = answer
-        second = Mock()
+        second = sdk_client()
         second.decisions.create.return_value = answer
-        transport_a = Mock()
-        transport_b = Mock()
+        transport_a = Mock(aclose=AsyncMock())
+        transport_b = Mock(aclose=AsyncMock())
         with (
             patch.dict(os.environ, configured_env(), clear=True),
-            patch.object(openai_client, "OpenAI", side_effect=[first, second]) as factory,
+            patch.object(openai_client, "AsyncOpenAI", side_effect=[first, second]) as factory,
             patch.object(
-                openai_client.httpx2, "Client", side_effect=[transport_a, transport_b]
+                openai_client.httpx2, "AsyncClient", side_effect=[transport_a, transport_b]
             ) as transport_factory,
             patch(
                 "dev_workflow_standards_tools.services.api_input_review.review_api_input",
                 return_value={"passed": True},
             ),
         ):
-            openai_client.create_decision([], [])
+            await openai_client.create_decision([], [])
             os.environ["OPENAI_API_KEY"] = API_KEY_B
             os.environ["OPENAI_BASE_URL"] = BASE_URL_B
-            openai_client.create_decision([], [])
+            await openai_client.create_decision([], [])
         self.assertEqual(factory.call_count, 2)
         self.assertEqual(factory.call_args_list[0].kwargs["api_key"], API_KEY_A)
         self.assertEqual(factory.call_args_list[0].kwargs["base_url"], BASE_URL_A)
@@ -151,48 +159,48 @@ class OpenAIClientTests(unittest.TestCase):
         self.assertTrue(
             all(call.kwargs == {"trust_env": True} for call in transport_factory.call_args_list)
         )
-        first.close.assert_called_once()
-        second.close.assert_called_once()
-        transport_a.close()
-        transport_b.close()
+        first.close.assert_awaited_once()
+        second.close.assert_awaited_once()
+        await transport_a.aclose()
+        await transport_b.aclose()
 
-    def test_secret_or_endpoint_in_payload_is_blocked_before_client_creation(self) -> None:
+    async def test_secret_or_endpoint_in_payload_is_blocked_before_client_creation(self) -> None:
         for sensitive_value in (API_KEY_A, BASE_URL_A):
             with self.subTest(kind="secret" if sensitive_value == API_KEY_A else "endpoint"), patch.dict(
                 os.environ, configured_env(), clear=True
-            ), patch.object(openai_client, "OpenAI") as factory:
+            ), patch.object(openai_client, "AsyncOpenAI") as factory:
                 with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                    openai_client.create_decision([{"role": "user", "content": sensitive_value}], [])
+                    await openai_client.create_decision([{"role": "user", "content": sensitive_value}], [])
                 self.assertEqual(raised.exception.error_code, "sensitive_input_detected")
                 self.assertNotIn(sensitive_value, str(raised.exception))
                 factory.assert_not_called()
 
-    def test_api_errors_and_sensitive_responses_are_sanitized(self) -> None:
-        fake = Mock()
+    async def test_api_errors_and_sensitive_responses_are_sanitized(self) -> None:
+        fake = sdk_client()
         fake.decisions.create.side_effect = RuntimeError(f"{API_KEY_A} {BASE_URL_A}")
         with patch.dict(os.environ, configured_env(), clear=True), patch.object(
-            openai_client, "OpenAI", return_value=fake
+            openai_client, "AsyncOpenAI", return_value=fake
         ), patch(
             "dev_workflow_standards_tools.services.api_input_review.review_api_input",
             return_value={"passed": True},
         ):
             with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                openai_client.create_decision([], [])
+                await openai_client.create_decision([], [])
         self.assertEqual(raised.exception.error_code, "api_request_failed")
         self.assertNotIn(API_KEY_A, str(raised.exception))
         self.assertNotIn(BASE_URL_A, str(raised.exception))
 
         sensitive_response = SimpleNamespace(secret=API_KEY_A)
-        fake = Mock()
+        fake = sdk_client()
         fake.decisions.create.return_value = sensitive_response
         with patch.dict(os.environ, configured_env(), clear=True), patch.object(
-            openai_client, "OpenAI", return_value=fake
+            openai_client, "AsyncOpenAI", return_value=fake
         ), patch(
             "dev_workflow_standards_tools.services.api_input_review.review_api_input",
             return_value={"passed": True},
         ):
             with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                openai_client.create_decision([], [])
+                await openai_client.create_decision([], [])
         self.assertEqual(raised.exception.error_code, "sensitive_value_in_response")
 
     def test_log_records_redact_current_api_and_proxy_settings(self) -> None:
@@ -236,35 +244,35 @@ class OpenAIClientTests(unittest.TestCase):
             logger.propagate = previous_propagate
             handler.close()
 
-    def test_decisions_uses_fixed_model_and_no_reasoning_or_store_options(self) -> None:
-        fake = Mock()
+    async def test_decisions_uses_fixed_model_and_no_reasoning_or_store_options(self) -> None:
+        fake = sdk_client()
         fake.decisions.create.return_value = decision_response(
             choice_answer("q", "compliant", ("compliant",))
         )
         question = [{"type": "choice", "name": "q", "instructions": "fixed", "choices": [{"value": "compliant"}]}]
         with patch.dict(os.environ, configured_env(), clear=True), patch.object(
-            openai_client, "OpenAI", return_value=fake
+            openai_client, "AsyncOpenAI", return_value=fake
         ), patch(
             "dev_workflow_standards_tools.services.api_input_review.review_api_input",
             return_value={"passed": True},
         ):
-            openai_client.create_decision([{"role": "user", "content": "{}"}], question)
+            await openai_client.create_decision([{"role": "user", "content": "{}"}], question)
         kwargs = fake.decisions.create.call_args.kwargs
         self.assertEqual(kwargs["model"], "gpt-6-luna")
         self.assertEqual(kwargs["questions"], question)
         self.assertEqual(set(kwargs), {"model", "input", "questions"})
 
-    def test_responses_parse_uses_effort_store_disabled_and_no_auto_truncation(self) -> None:
-        fake = Mock()
+    async def test_responses_parse_uses_effort_store_disabled_and_no_auto_truncation(self) -> None:
+        fake = sdk_client()
         fake.responses.parse.return_value = SimpleNamespace(status="completed")
         schema = GeneratedContent
         with patch.dict(os.environ, configured_env(), clear=True), patch.object(
-            openai_client, "OpenAI", return_value=fake
+            openai_client, "AsyncOpenAI", return_value=fake
         ), patch(
             "dev_workflow_standards_tools.services.api_input_review.review_api_input",
             return_value={"passed": True},
         ):
-            openai_client.parse_response(
+            await openai_client.parse_response(
                 instructions="fixed",
                 input="{}",
                 text_format=schema,
@@ -284,15 +292,15 @@ class OpenAIClientTests(unittest.TestCase):
         })
 
 
-class DecisionAndValidationTests(unittest.TestCase):
-    def test_decision_prompts_include_exact_local_rules_and_listed_choice_constraints(self) -> None:
+class DecisionAndValidationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_decision_prompts_include_exact_local_rules_and_listed_choice_constraints(self) -> None:
         responses = [
             decision_response(choice_answer("branch_policy", "compliant", ai_workflow.DECISION_CHOICES)),
             decision_response(choice_answer("commit_policy", "compliant", ai_workflow.DECISION_CHOICES)),
         ]
         with patch.object(ai_workflow.openai_client, "create_decision", side_effect=responses) as create:
-            branch_result = check_branch_names(["feat/synthetic"])
-            commit_result = check_commit_message("feat: 增加合成工具")
+            branch_result = await check_branch_names(["feat/synthetic"])
+            commit_result = await check_commit_message("feat: 增加合成工具")
         self.assertTrue(branch_result["passed"])
         self.assertTrue(commit_result["passed"])
         branch_input, branch_questions = create.call_args_list[0].args
@@ -337,26 +345,26 @@ class DecisionAndValidationTests(unittest.TestCase):
             self.assertIn("only if this question lists one", prompt)
             self.assertNotIn("select insufficient_evidence", prompt)
 
-    def test_commit_attribution_uses_local_comment_filter_but_checks_body(self) -> None:
+    async def test_commit_attribution_uses_local_comment_filter_but_checks_body(self) -> None:
         comment_only = "feat: 增加功能\n# Generated with Codex\n"
         with patch.object(
             ai_workflow.openai_client,
             "create_decision",
             return_value=decision_response(choice_answer("commit_policy", "compliant", ai_workflow.DECISION_CHOICES)),
         ) as create:
-            accepted = check_commit_message(comment_only)
+            accepted = await check_commit_message(comment_only)
         self.assertTrue(accepted["passed"])
         submitted_facts = json.loads(create.call_args.args[0][0]["content"])
         self.assertFalse(submitted_facts["inspected_commit"]["prohibited_attribution_present"])
 
         body_attribution = "feat: 增加功能\n实现了用户请求的能力。\nGenerated with Codex"
         with patch.object(ai_workflow.openai_client, "create_decision") as create:
-            rejected = check_commit_message(body_attribution)
+            rejected = await check_commit_message(body_attribution)
         create.assert_not_called()
         self.assertFalse(rejected["passed"])
         self.assertIn("禁止包含工具署名", " ".join(rejected["errors"]))
 
-    def test_issue_pr_single_object_requests_are_valid_and_false_flags_mean_not_requested(self) -> None:
+    async def test_issue_pr_single_object_requests_are_valid_and_false_flags_mean_not_requested(self) -> None:
         for requested, kwargs in (
             ("issue", {"issue_number": 4}),
             ("pr", {"pr_number": 5}),
@@ -372,7 +380,7 @@ class DecisionAndValidationTests(unittest.TestCase):
                     choice_answer("issue_pr_policy", "compliant", ai_workflow.DECISION_CHOICES)
                 ),
             ) as create:
-                result = audit_issue_pr_policy("/synthetic/repo", **kwargs)
+                result = await audit_issue_pr_policy("/synthetic/repo", **kwargs)
             self.assertTrue(result["passed"])
             facts = json.loads(create.call_args.args[0][0]["content"])
             self.assertEqual(facts["issue_requested"], requested == "issue")
@@ -387,31 +395,31 @@ class DecisionAndValidationTests(unittest.TestCase):
             self.assertIn("Do not add checks for unrequested objects, fields, or external conditions", prompt)
             self.assertNotIn("required issue-closing reference", prompt)
 
-    def test_invalid_local_check_skips_decisions_and_never_passes(self) -> None:
+    async def test_invalid_local_check_skips_decisions_and_never_passes(self) -> None:
         local = {"passed": False, "checks": [{"branch_name": "bad", "passed": False, "errors": ["hard error"]}]}
         with patch.object(ai_workflow.validation, "check_branch_names", return_value=local), patch.object(
             ai_workflow.openai_client, "create_decision"
         ) as create:
-            result = check_branch_names(["bad"])
+            result = await check_branch_names(["bad"])
         create.assert_not_called()
         self.assertFalse(result["passed"])
         self.assertFalse(result["local_passed"])
         self.assertEqual(result["checks"], local["checks"])
         self.assertEqual(result["ai_status"], "skipped_local_failure")
 
-    def test_local_failure_cannot_be_flipped_by_compliant_decision(self) -> None:
+    async def test_local_failure_cannot_be_flipped_by_compliant_decision(self) -> None:
         local = {"passed": False, "subject": "bad", "errors": ["local rule"]}
         with patch.object(ai_workflow.validation, "check_commit_message", return_value=local), patch.object(
             ai_workflow.openai_client,
             "create_decision",
             return_value=decision_response(choice_answer("commit_policy", "compliant", ai_workflow.DECISION_CHOICES)),
         ) as create:
-            result = check_commit_message("bad")
+            result = await check_commit_message("bad")
         create.assert_not_called()
         self.assertFalse(result["passed"])
         self.assertEqual(result["errors"], ["local rule"])
 
-    def test_local_pass_requires_compliant_decision(self) -> None:
+    async def test_local_pass_requires_compliant_decision(self) -> None:
         local = {"passed": True, "subject": "docs: 文档", "errors": []}
         fake_response = decision_response(
             choice_answer("commit_policy", "requires_fix", ai_workflow.DECISION_CHOICES)
@@ -419,19 +427,19 @@ class DecisionAndValidationTests(unittest.TestCase):
         with patch.object(ai_workflow.validation, "check_commit_message", return_value=local), patch.object(
             ai_workflow.openai_client, "create_decision", return_value=fake_response
         ):
-            result = check_commit_message("docs: 文档")
+            result = await check_commit_message("docs: 文档")
         self.assertFalse(result["passed"])
         self.assertTrue(result["local_passed"])
         self.assertEqual(result["decision"], "requires_fix")
         self.assertTrue(result["requires_agent_review"])
 
-    def test_sensitive_commit_input_is_not_echoed_when_api_request_is_blocked(self) -> None:
+    async def test_sensitive_commit_input_is_not_echoed_when_api_request_is_blocked(self) -> None:
         for sensitive_value in (API_KEY_A, BASE_URL_A):
             message = f"docs: 文档 {sensitive_value}"
             with self.subTest(kind="key" if sensitive_value == API_KEY_A else "base_url"), patch.dict(
                 os.environ, configured_env(), clear=True
-            ), patch.object(openai_client, "OpenAI") as factory:
-                result = check_commit_message(message)
+            ), patch.object(openai_client, "AsyncOpenAI") as factory:
+                result = await check_commit_message(message)
             factory.assert_not_called()
             self.assertFalse(result["passed"])
             self.assertTrue(result["local_passed"])
@@ -441,7 +449,7 @@ class DecisionAndValidationTests(unittest.TestCase):
             self.assertNotIn(sensitive_value, json.dumps(result))
             self.assertNotIn("subject", result)
 
-    def test_issue_pr_api_input_omits_repo_path_repo_and_raw_body(self) -> None:
+    async def test_issue_pr_api_input_omits_repo_path_repo_and_raw_body(self) -> None:
         local = {"passed": True, "repo": "private/example", "errors": []}
         result = decision_response(
             choice_answer("issue_pr_policy", "compliant", ai_workflow.DECISION_CHOICES)
@@ -449,100 +457,34 @@ class DecisionAndValidationTests(unittest.TestCase):
         with patch.object(ai_workflow.validation, "audit_issue_pr_policy", return_value=local), patch.object(
             ai_workflow.openai_client, "create_decision", return_value=result
         ) as create:
-            wrapped = audit_issue_pr_policy("/secret/repo", repo="private/example", issue_number=4, pr_number=5)
+            wrapped = await audit_issue_pr_policy("/secret/repo", repo="private/example", issue_number=4, pr_number=5)
         self.assertTrue(wrapped["passed"])
         payload = json.dumps(create.call_args.args[0], ensure_ascii=False)
         self.assertNotIn("/secret/repo", payload)
         self.assertNotIn("private/example", payload)
         self.assertNotIn("body", payload)
 
-    def test_decision_answer_shape_choice_and_unique_name_are_strict(self) -> None:
+    async def test_decision_answer_shape_choice_and_unique_name_are_strict(self) -> None:
         question = {
             "name": "q",
             "choices": [{"value": value} for value in ai_workflow.DECISION_CHOICES],
         }
         valid = choice_answer("q", "compliant", ai_workflow.DECISION_CHOICES)
         with patch.object(ai_workflow.openai_client, "create_decision", return_value=decision_response(valid)):
-            self.assertEqual(ai_workflow._decisions([question], {}), {"q": "compliant"})
+            self.assertEqual(await ai_workflow._decisions([question], {}), {"q": "compliant"})
         refusal = SimpleNamespace(type="refusal", name="q")
         with patch.object(ai_workflow.openai_client, "create_decision", return_value=decision_response(refusal)):
-            self.assertEqual(ai_workflow._decisions([question], {}), {"error_code": "invalid_decision_response"})
+            self.assertEqual(await ai_workflow._decisions([question], {}), {"error_code": "invalid_decision_response"})
         bad = choice_answer("q", "not-an-option", ai_workflow.DECISION_CHOICES)
         with patch.object(ai_workflow.openai_client, "create_decision", return_value=decision_response(bad)):
-            self.assertEqual(ai_workflow._decisions([question], {}), {"error_code": "invalid_decision_response"})
+            self.assertEqual(await ai_workflow._decisions([question], {}), {"error_code": "invalid_decision_response"})
         duplicate = decision_response(valid, valid)
         with patch.object(ai_workflow.openai_client, "create_decision", return_value=duplicate):
-            self.assertEqual(ai_workflow._decisions([question], {}), {"error_code": "invalid_decision_response"})
+            self.assertEqual(await ai_workflow._decisions([question], {}), {"error_code": "invalid_decision_response"})
 
-    def test_workflow_priority_and_no_implicit_worktree(self) -> None:
-        request = WorkflowDecisionRequest(
-            user_request="实现普通开发任务",
-            explicit_worktree=False,
-            github_delivery=True,
-            verification_only=True,
-            special_operations=True,
-            blocked=False,
-        )
-        result = decision_response(
-            choice_answer("workflow", "github-delivery", ai_workflow.WORKFLOW_CHOICES)
-        )
-        with patch.object(ai_workflow.openai_client, "create_decision", return_value=result) as create:
-            advised = decide_skill_workflow(request)
-        self.assertEqual(advised["workflow"], "github-delivery")
-        self.assertEqual(advised["model"], "gpt-6-luna")
-        self.assertTrue(advised["requires_agent_review"])
-        self.assertFalse(advised["side_effects"])
-        self.assertEqual(advised["rules_hash"], ai_workflow._fingerprint(create.call_args.args[1]))
-        api_input, questions = create.call_args.args
-        self.assertEqual(len(api_input), 1)
-        self.assertEqual(api_input[0]["role"], "user")
-        self.assertEqual(json.loads(api_input[0]["content"]), request.model_dump(mode="json"))
-        workflow_instructions = questions[0]["instructions"]
-        for phrase in (
-            "blocked=true selects recovery-and-exceptions",
-            "explicit_worktree=true selects worktree-development",
-            "github_delivery=true selects github-delivery",
-            "special_operations=true selects special-operations",
-            "verification_only=true selects verification-and-cleanup",
-            "If all five flags are false, select standard-development",
-            "A missing repository path, unavailable tool, or lack of execution access is not a reason to clarify",
-        ):
-            self.assertIn(phrase, workflow_instructions)
 
-        worktree = decision_response(
-            choice_answer("workflow", "worktree-development", ai_workflow.WORKFLOW_CHOICES)
-        )
-        with patch.object(ai_workflow.openai_client, "create_decision", return_value=worktree):
-            rejected = decide_skill_workflow(
-                WorkflowDecisionRequest(
-                    user_request="普通任务",
-                    explicit_worktree=False,
-                    github_delivery=False,
-                    verification_only=False,
-                    special_operations=False,
-                    blocked=False,
-                )
-            )
-        self.assertFalse(rejected["ok"])
-        self.assertEqual(rejected["error_code"], "decision_inconsistent_with_workflow_rules")
 
-    def test_strict_workflow_input_rejects_string_boolean_and_unknown_model(self) -> None:
-        data = {
-            "user_request": "任务",
-            "explicit_worktree": "false",
-            "github_delivery": False,
-            "verification_only": False,
-            "special_operations": False,
-            "blocked": False,
-        }
-        with self.assertRaises(ValidationError):
-            WorkflowDecisionRequest.model_validate(data)
-        data["explicit_worktree"] = False
-        data["model"] = "another-model"
-        with self.assertRaises(ValidationError):
-            WorkflowDecisionRequest.model_validate(data)
-
-    def test_session_actions_enforce_source_access_and_persistence_bounds(self) -> None:
+    async def test_session_actions_enforce_source_access_and_persistence_bounds(self) -> None:
         request = SessionDecisionRequest(
             user_request="检查历史背景",
             has_relevant_sources=True,
@@ -558,7 +500,7 @@ class DecisionAndValidationTests(unittest.TestCase):
             choice_answer("persistence_action", "skip_persistence", ai_workflow.SESSION_PERSISTENCE_CHOICES),
         )
         with patch.object(ai_workflow.openai_client, "create_decision", return_value=response) as create:
-            result = decide_codex_session_action(request)
+            result = await decide_codex_session_action(request)
         self.assertEqual(result["lookup_action"], "read_history")
         self.assertEqual(result["persistence_action"], "skip_persistence")
         self.assertFalse(result["metadata_verified"])
@@ -575,7 +517,7 @@ class DecisionAndValidationTests(unittest.TestCase):
         self.assertIn("choose update_summary when existing_summary=true or create_summary when false", persistence_prompt)
         self.assertNotIn("choose query_project", persistence_prompt)
 
-    def test_session_model_cannot_create_on_current_facts_or_skip_source_block(self) -> None:
+    async def test_session_model_cannot_create_on_current_facts_or_skip_source_block(self) -> None:
         current = SessionDecisionRequest(
             user_request="归纳当前发现",
             has_relevant_sources=True,
@@ -591,7 +533,7 @@ class DecisionAndValidationTests(unittest.TestCase):
             choice_answer("persistence_action", "create_summary", ai_workflow.SESSION_PERSISTENCE_CHOICES),
         )
         with patch.object(ai_workflow.openai_client, "create_decision", return_value=bad_response):
-            rejected = decide_codex_session_action(current)
+            rejected = await decide_codex_session_action(current)
         self.assertFalse(rejected["ok"])
         self.assertEqual(rejected["error_code"], "decision_inconsistent_with_session_rules")
 
@@ -610,12 +552,12 @@ class DecisionAndValidationTests(unittest.TestCase):
             choice_answer("persistence_action", "await_source_evidence", ai_workflow.SESSION_PERSISTENCE_CHOICES),
         )
         with patch.object(ai_workflow.openai_client, "create_decision", return_value=good_blocked):
-            allowed = decide_codex_session_action(unavailable)
+            allowed = await decide_codex_session_action(unavailable)
         self.assertEqual(allowed["lookup_action"], "blocked")
         self.assertEqual(allowed["persistence_action"], "await_source_evidence")
 
 
-class ContentGenerationTests(unittest.TestCase):
+class ContentGenerationTests(unittest.IsolatedAsyncioTestCase):
     def _review(self, **changes) -> ContentQualityReview:
         return ContentQualityReview(**{
             "language_compliant": True, "evidence_supported": True, "coverage_sufficient": True,
@@ -640,7 +582,7 @@ class ContentGenerationTests(unittest.TestCase):
             usage=SimpleNamespace(input_tokens=10, output_tokens=20, total_tokens=30, secret="ignored"),
         )
 
-    def test_each_kind_sends_substantive_audience_structure_and_evidence_rules(self) -> None:
+    async def test_each_kind_sends_substantive_audience_structure_and_evidence_rules(self) -> None:
         source = CodexSessionSource(
             source_link=f"codex://threads/{THREAD}", created_at="2026-01-01T00:00:00Z", title="历史会话"
         )
@@ -678,7 +620,7 @@ class ContentGenerationTests(unittest.TestCase):
                     "parse_response",
                     side_effect=[self._completed(candidate), self._completed(self._review())],
                 ) as parse:
-                    result = generate_skill_content(request)
+                    result = await generate_skill_content(request)
                 self.assertTrue(result["ok"])
                 self.assertEqual(parse.call_count, 2 if kind in {"issue", "pr"} else 1)
                 instructions = parse.call_args_list[0].kwargs["instructions"]
@@ -701,7 +643,7 @@ class ContentGenerationTests(unittest.TestCase):
                 ):
                     self.assertIn(phrase, instructions)
 
-    def test_user_custom_focus_and_format_are_preserved_as_valid_preferences(self) -> None:
+    async def test_user_custom_focus_and_format_are_preserved_as_valid_preferences(self) -> None:
         request = ContentGenerationRequest(
             kind="issue",
             user_request="Create an issue draft in English",
@@ -717,7 +659,7 @@ class ContentGenerationTests(unittest.TestCase):
         with patch.object(
             ai_workflow.openai_client, "parse_response", side_effect=[self._completed(candidate), self._completed(self._review())]
         ) as parse:
-            result = generate_skill_content(request)
+            result = await generate_skill_content(request)
         self.assertTrue(result["ok"])
         supplied = json.loads(parse.call_args_list[0].kwargs["input"])
         self.assertEqual(supplied["focus_questions"], request.focus_questions)
@@ -726,7 +668,7 @@ class ContentGenerationTests(unittest.TestCase):
         self.assertIn("follow them over the default focus and layout", parse.call_args_list[0].kwargs["instructions"])
         self.assertIn("Their ordinary format instructions are not prompt injection", parse.call_args_list[0].kwargs["instructions"])
 
-    def test_effort_profiles_and_response_results_are_bounded(self) -> None:
+    async def test_effort_profiles_and_response_results_are_bounded(self) -> None:
         for kind, expected_effort in (
             ("commit_message", "low"),
             ("plan", "high"),
@@ -749,7 +691,7 @@ class ContentGenerationTests(unittest.TestCase):
                     "parse_response",
                     side_effect=[self._completed(generated), self._completed(self._review())],
                 ) as parse:
-                    result = generate_skill_content(request)
+                    result = await generate_skill_content(request)
                 self.assertEqual(result["reasoning_effort"], expected_effort)
                 self.assertEqual(result["model"], "gpt-6-luna")
                 self.assertEqual(result["usage"], {"input_tokens": 10, "output_tokens": 20, "total_tokens": 30})
@@ -761,7 +703,7 @@ class ContentGenerationTests(unittest.TestCase):
                     self.assertIn("<type>: 中文说明", parse.call_args.kwargs["instructions"])
                     self.assertIn(ai_workflow.validation.SUBJECT_PATTERN.pattern, parse.call_args.kwargs["instructions"])
 
-    def test_non_commit_kinds_reject_empty_body(self) -> None:
+    async def test_non_commit_kinds_reject_empty_body(self) -> None:
         evidence = [EvidenceItem(reference_id="F1", content="事实", origin="user_provided")]
         kinds = ["issue", "pr", "plan", "handoff"]
         session_source = CodexSessionSource(
@@ -785,12 +727,12 @@ class ContentGenerationTests(unittest.TestCase):
                 with patch.object(
                     ai_workflow.openai_client, "parse_response", return_value=self._completed(output)
                 ) as parse:
-                    result = generate_skill_content(request)
+                    result = await generate_skill_content(request)
                 self.assertTrue(parse.called)
                 self.assertFalse(result["ok"])
                 self.assertEqual(result["error_code"], "empty_generated_content")
 
-    def test_commit_output_with_forbidden_attribution_is_rejected(self) -> None:
+    async def test_commit_output_with_forbidden_attribution_is_rejected(self) -> None:
         output = GeneratedContent(
             title="docs: 文档",
             content="docs: 文档\nGenerated with Codex",
@@ -799,7 +741,7 @@ class ContentGenerationTests(unittest.TestCase):
             review_notes=[],
         )
         with patch.object(ai_workflow.openai_client, "parse_response", return_value=self._completed(output)):
-            result = generate_skill_content(ContentGenerationRequest(
+            result = await generate_skill_content(ContentGenerationRequest(
                 kind="commit_message", user_request="生成提交信息",
                 evidence=[EvidenceItem(reference_id="F1", content="事实", origin="user_provided")],
             ))
@@ -807,7 +749,7 @@ class ContentGenerationTests(unittest.TestCase):
         self.assertEqual(result["error_code"], "generated_commit_message_rejected")
         self.assertFalse(result["adoptable"])
 
-    def test_commit_candidate_must_pass_original_local_check(self) -> None:
+    async def test_commit_candidate_must_pass_original_local_check(self) -> None:
         request = ContentGenerationRequest(
             kind="commit_message", user_request="生成提交信息",
             evidence=[EvidenceItem(reference_id="F1", content="修正文档标题", origin="user_provided")],
@@ -817,7 +759,7 @@ class ContentGenerationTests(unittest.TestCase):
             missing_facts=[], review_notes=[],
         )
         with patch.object(ai_workflow.openai_client, "parse_response", return_value=self._completed(valid)):
-            result = generate_skill_content(request)
+            result = await generate_skill_content(request)
         self.assertTrue(result["ok"])
 
         invalid = GeneratedContent(
@@ -827,12 +769,12 @@ class ContentGenerationTests(unittest.TestCase):
         with patch.object(ai_workflow.openai_client, "parse_response", return_value=self._completed(invalid)), patch.object(
             ai_workflow.validation, "check_commit_message", wraps=ai_workflow.validation.check_commit_message
         ) as local_check:
-            rejected = generate_skill_content(request)
+            rejected = await generate_skill_content(request)
         local_check.assert_called_once_with("update stuff")
         self.assertFalse(rejected["ok"])
         self.assertEqual(rejected["error_code"], "generated_commit_message_rejected")
 
-    def test_issue_pr_context_and_technical_text_reach_both_bounded_requests(self) -> None:
+    async def test_issue_pr_context_and_technical_text_reach_both_bounded_requests(self) -> None:
         for kind in ("issue", "pr"):
             with self.subTest(kind=kind):
                 context = (
@@ -852,7 +794,7 @@ class ContentGenerationTests(unittest.TestCase):
                 with patch.object(ai_workflow.openai_client, "parse_response", side_effect=[
                     self._completed(draft), self._completed(self._review())
                 ]) as parse:
-                    result = generate_skill_content(request)
+                    result = await generate_skill_content(request)
                 self.assertTrue(result["ok"])
                 self.assertTrue(result["adoptable"])
                 self.assertEqual(result["quality_status"], "ready_for_agent_review")
@@ -873,7 +815,7 @@ class ContentGenerationTests(unittest.TestCase):
                 self.assertIn("ValueError: empty", result["candidate"]["content"])
                 self.assertEqual(result["quality_review_usage"]["total_tokens"], 30)
 
-    def test_issue_pr_quality_failures_and_missing_facts_are_not_adoptable(self) -> None:
+    async def test_issue_pr_quality_failures_and_missing_facts_are_not_adoptable(self) -> None:
         cases = [
             ("English only", "English body", self._review(language_compliant=False, review_notes=["标题和自然语言须中文"])),
             ("更新", "改进功能。", self._review(coverage_sufficient=False, missing_facts=["缺少具体前后行为"], review_notes=["正文空洞"])),
@@ -890,7 +832,7 @@ class ContentGenerationTests(unittest.TestCase):
                     ])
                     candidate = GeneratedContent(title=title, content=content, used_evidence_refs=["D1"], missing_facts=[], review_notes=[])
                     with patch.object(ai_workflow.openai_client, "parse_response", side_effect=[self._completed(candidate), self._completed(review)]):
-                        result = generate_skill_content(request)
+                        result = await generate_skill_content(request)
                     self.assertTrue(result["ok"])
                     self.assertFalse(result["adoptable"])
                     self.assertEqual(result["quality_status"], "needs_revision")
@@ -900,23 +842,23 @@ class ContentGenerationTests(unittest.TestCase):
         draft = self._generated(["F1"])
         request = ContentGenerationRequest(kind="issue", user_request="起草", evidence=[EvidenceItem(reference_id="F1", content="需调查", origin="user_provided")])
         with patch.object(ai_workflow.openai_client, "parse_response", side_effect=[self._completed(draft), self._completed(self._review(missing_facts=["缺少结果证据"]))]):
-            result = generate_skill_content(request)
+            result = await generate_skill_content(request)
         self.assertFalse(result["adoptable"])
         self.assertEqual(result["candidate"]["missing_facts"], ["缺少结果证据"])
 
-    def test_language_override_requires_cited_user_instruction_and_review(self) -> None:
+    async def test_language_override_requires_cited_user_instruction_and_review(self) -> None:
         for kind, origin, ref in (("issue", "current_observation", "U1"), ("pr", "user_provided", "unknown"), ("plan", "user_provided", "U1")):
             with self.subTest(kind=kind, origin=origin, ref=ref), self.assertRaises(ValidationError):
                 ContentGenerationRequest(kind=kind, user_request="起草", evidence=[EvidenceItem(reference_id="U1", content="English error log", origin=origin)], language_override={"language":"English", "instruction_ref":ref})
         request = ContentGenerationRequest(kind="pr", user_request="Use English", evidence=[EvidenceItem(reference_id="U1", content="Error: empty", origin="user_provided")], language_override={"language":"English", "instruction_ref":"U1"})
         with patch.object(ai_workflow.openai_client, "parse_response", side_effect=[self._completed(self._generated(["U1"])), self._completed(self._review(language_compliant=False, review_notes=["U1是日志而非用户语言指令"]))]):
-            result = generate_skill_content(request)
+            result = await generate_skill_content(request)
         self.assertFalse(result["adoptable"])
         for override in (True, {"language":" ", "instruction_ref":"U1"}, {"language":"English", "instruction_ref":" "}):
             with self.subTest(override=override), self.assertRaises(ValidationError):
                 ContentGenerationRequest(kind="issue", user_request="起草", evidence=[EvidenceItem(reference_id="U1", content="语言要求", origin="user_provided")], language_override=override)
 
-    def test_review_errors_fail_closed_without_candidate_or_retry(self) -> None:
+    async def test_review_errors_fail_closed_without_candidate_or_retry(self) -> None:
         request = ContentGenerationRequest(kind="pr", user_request="起草", evidence=[EvidenceItem(reference_id="F1", content="事实", origin="user_provided")])
         invalid_reviews = [
             (self._completed(None, refusal=True), "quality_review_refusal"),
@@ -928,24 +870,24 @@ class ContentGenerationTests(unittest.TestCase):
         ]
         for response, error_code in invalid_reviews:
             with self.subTest(error_code=error_code), patch.object(ai_workflow.openai_client, "parse_response", side_effect=[self._completed(self._generated(["F1"])), response]) as parse:
-                result = generate_skill_content(request)
+                result = await generate_skill_content(request)
             self.assertFalse(result["ok"])
             self.assertFalse(result["adoptable"])
             self.assertNotIn("candidate", result)
             self.assertEqual(result["error_code"], error_code)
             self.assertEqual(parse.call_count, 2)
 
-    def test_review_input_and_merged_findings_limits_fail_closed(self) -> None:
+    async def test_review_input_and_merged_findings_limits_fail_closed(self) -> None:
         request = ContentGenerationRequest(kind="issue", user_request="起草", evidence=[EvidenceItem(reference_id="F1", content="事实", origin="user_provided")])
         large_draft = self._generated(["F1"]).model_copy(update={"content": "中文" * 15000})
         with patch.object(ai_workflow.openai_client, "MAX_REQUEST_BYTES", 20000), patch.object(ai_workflow.openai_client, "parse_response", return_value=self._completed(large_draft)) as parse:
-            result = generate_skill_content(request)
+            result = await generate_skill_content(request)
         self.assertEqual(parse.call_count, 1)
         self.assertFalse(result["adoptable"])
         self.assertEqual(result["error_code"], "quality_review_request_too_large")
         draft = self._generated(["F1"]).model_copy(update={"missing_facts": [f"缺项{i}" for i in range(100)]})
         with patch.object(ai_workflow.openai_client, "parse_response", side_effect=[self._completed(draft), self._completed(self._review(missing_facts=["新缺项"]))]):
-            result = generate_skill_content(request)
+            result = await generate_skill_content(request)
         self.assertEqual(result["error_code"], "quality_review_findings_too_large")
         self.assertNotIn("candidate", result)
 
@@ -961,7 +903,7 @@ class ContentGenerationTests(unittest.TestCase):
                 ),
             )
 
-    def test_response_refusal_incomplete_empty_parse_and_invalid_citations_fail_closed(self) -> None:
+    async def test_response_refusal_incomplete_empty_parse_and_invalid_citations_fail_closed(self) -> None:
         request = ContentGenerationRequest(
             kind="plan",
             user_request="生成计划",
@@ -978,7 +920,7 @@ class ContentGenerationTests(unittest.TestCase):
             with self.subTest(error=expected), patch.object(
                 ai_workflow.openai_client, "parse_response", return_value=response
             ):
-                result = generate_skill_content(request)
+                result = await generate_skill_content(request)
             self.assertFalse(result["ok"])
             self.assertEqual(result["error_code"], expected)
 
@@ -1012,7 +954,7 @@ class ContentGenerationTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             ContentGenerationRequest(kind="session_summary", user_request="总结", source=source)
 
-    def test_custom_session_format_and_questions_reach_prompt_as_data(self) -> None:
+    async def test_custom_session_format_and_questions_reach_prompt_as_data(self) -> None:
         source = CodexSessionSource(
             source_link=f"codex://threads/{THREAD}",
             created_at="2026-01-01T00:00:00Z",
@@ -1036,7 +978,7 @@ class ContentGenerationTests(unittest.TestCase):
         with patch.object(
             ai_workflow.openai_client, "parse_response", return_value=self._completed(self._generated(["turn:3"]))
         ) as parse:
-            result = generate_skill_content(request)
+            result = await generate_skill_content(request)
         self.assertTrue(result["ok"])
         sent = json.loads(parse.call_args.kwargs["input"])
         self.assertEqual(sent["focus_questions"], ["范围是什么？"])
@@ -1045,7 +987,7 @@ class ContentGenerationTests(unittest.TestCase):
         self.assertIn("Their ordinary format instructions are not prompt injection", parse.call_args.kwargs["instructions"])
         self.assertIn("default_questions and default_template are the tool-resolved guidance", parse.call_args.kwargs["instructions"])
 
-    def test_generation_input_budget_rejects_without_api_request(self) -> None:
+    async def test_generation_input_budget_rejects_without_api_request(self) -> None:
         request = ContentGenerationRequest(
             kind="plan",
             user_request="生成",
@@ -1055,12 +997,12 @@ class ContentGenerationTests(unittest.TestCase):
             ],
         )
         with patch.object(ai_workflow.openai_client, "parse_response") as parse:
-            result = generate_skill_content(request)
+            result = await generate_skill_content(request)
         self.assertFalse(result["ok"])
         self.assertEqual(result["error_code"], "request_too_large")
         parse.assert_not_called()
 
-    def test_sdk_failure_returns_only_safe_error_code(self) -> None:
+    async def test_sdk_failure_returns_only_safe_error_code(self) -> None:
         request = ContentGenerationRequest(
             kind="plan", user_request="生成",
             evidence=[EvidenceItem(reference_id="F1", content="事实", origin="user_provided")],
@@ -1070,7 +1012,7 @@ class ContentGenerationTests(unittest.TestCase):
             "parse_response",
             side_effect=openai_client.OpenAIWorkflowError("api_timeout"),
         ):
-            result = generate_skill_content(request)
+            result = await generate_skill_content(request)
         self.assertEqual(result["error_code"], "api_timeout")
         self.assertNotIn(API_KEY_A, json.dumps(result))
         self.assertNotIn(BASE_URL_A, json.dumps(result))

@@ -10,7 +10,7 @@
 
 ## 已有 checkout 原地建分支
 
-当前 checkout（包括宿主已经准备好的 detached worktree）仅需从当前 HEAD 建立工作分支时，走普通开发工作流，使用 `create_repository_branch`；无需再创建 worktree。先审计该 checkout 的准确根目录，再按授权传入 `repo_path`、新 `branch_name` 和可选 `expected_head_oid`，核对返回的分支及 OID。
+当前 checkout（包括宿主已经准备好的 detached worktree）仅需从当前 HEAD 建立工作分支时，适用项目修改合同，使用 `create_repository_branch`；无需再创建 worktree。先审计该 checkout 的准确根目录，再按授权传入 `repo_path`、新 `branch_name` 和可选 `expected_head_oid`，核对返回的分支及 OID。
 
 该工具保留已有文件和 index，只新增分支、更新 HEAD 及对应 reflog。它不提供任意起点、同步基线、复制文件或配置 tracking 的能力；也不能代替下述“新建另一个 worktree”所需的同步门禁。锁定、未完成 merge/rebase、引用冲突、有效的 reference-transaction Hook 或不支持的 Git 事务语法均须先处理，工具不会强制继续或自动提权。详细边界见 [工具目录](mcp-tools.md#原地创建工作分支)。
 
@@ -21,7 +21,7 @@
 - 普通仓库：`switch_repository_branch` 切换到实际默认分支，`pull_origin_branch_fast_forward` 同步同名远端分支。
 - Fork：按 [`fork-maintenance.md`](fork-maintenance.md) 快进同步上游 `main`，再基于个人维护分支创建需求 worktree。
 - 只有同步成功后才能创建需求 worktree；remote-tracking 引用、SHA 或旧本地分支不能代替成功同步。
-- 网络、认证、权限、非快进或文件冲突失败时，保留现场并按恢复流程处理。
+- 网络、认证、权限、非快进或文件冲突失败时，保留现场并按恢复条件处理。
 
 ## 保留未跟踪文件
 
@@ -31,11 +31,11 @@
 
 要携带 ignored、symlink 或特殊文件时，先核实是否在授权范围、实际文件类型及目的地安全性；工具不覆盖的类型可按 CLI 补充规约单独处理，不能绕过已发生的工具安全拒绝。跨 worktree 恢复未跟踪文件也可按该规约核实来源、目标和指纹后复制；不猜测、不覆盖，保留原始副本。
 
-## 创建并实现
+## 创建与使用条件
 
-1. 用 `check_branch_names` 校验新分支名；用 `list_repository_worktrees` 确认目标分支未被检出。
-2. 用 `create_repository_worktree` 传入原仓库路径、目标绝对路径、新分支和已同步的本地基线。它拒绝已存在的路径/分支以及在源仓库目录内创建。
-3. 按上一节复制允许携带的未跟踪内容；然后只在该 worktree 中实现和验证。
+- 创建要求分支名合规、目标分支未被其他 worktree 检出；`check_branch_names`、`list_repository_worktrees` 提供这些观测。
+- `create_repository_worktree` 需要准确原仓库、未占用绝对目标路径、新分支和已同步基线。授权仅覆盖原地建分支或已有 checkout 时，不适用新目录创建。
+- 文件携带只在确有需要时执行，要求目标 worktree 已存在且来源清单有效。需求实现和验证位于选定 checkout；不因进入 worktree 规则自动复制、暂存或提交。
 
 若 Fork 的个人维护分支缺失，先核对初始化方案：`create_repository_branch` 只允许以当前 HEAD 原地建分支，不能代替首次添加 `upstream`、确认维护基线或配置 tracking；未封装步骤按 CLI 补充规约在既有授权内完成。维护基线不明时停止，不自行猜测。
 
@@ -49,4 +49,4 @@
 
 ## 空远端
 
-空远端、无默认分支或无 PR base 时，标准同步门禁不成立。先核实最小 bootstrap 范围与授权；当前 MCP 未覆盖的步骤按 CLI 补充规约执行，回读确认默认分支/PR base 后再恢复标准同步流程，不要把需求内容混入初始化操作。
+空远端、无默认分支或无 PR base 时，标准同步门禁不成立。先核实最小 bootstrap 范围与授权；当前 MCP 未覆盖的步骤按 CLI 补充规约执行，回读确认默认分支/PR base 后再恢复同步条件，不要把需求内容混入初始化操作。

@@ -82,6 +82,10 @@ class SkillDistributionTests(unittest.TestCase):
                     expected_files = {p.relative_to(source).as_posix(): p.read_bytes()
                                       for p in source.rglob("*.md")}
                     self.assertEqual(shipped, expected_files)
+                    self.assertIn("hooks/index.md", shipped)
+                    self.assertIn("hooks/recovery.md", shipped)
+                    self.assertIn("references/git-hooks.md", shipped)
+                    self.assertFalse(any(name.startswith("workflows/") for name in shipped))
                     metadata = yaml.safe_load(shipped["SKILL.md"].decode().split("---", 2)[1])
                     self.assertEqual(metadata["name"], "dev-workflow-standards")
                     self.assertTrue(metadata["description"].strip())
@@ -134,9 +138,7 @@ class SkillDistributionTests(unittest.TestCase):
             run([*args, "update", "--target", str(target)], expected=1)
             self.assertEqual((target / "user-notes.md").read_text(), "keep this")
 
-            # The isolated wheel contains the global template independently of
-            # the checkout. Required local links are satisfied only under the
-            # temporary HOME, and the command writes no real user files.
+            # wheel 独立包含全局模板；所需本地链接仅在临时 HOME 内补齐，不写真实用户文件。
             global_home.mkdir(parents=True, exist_ok=True)
             global_skill = global_home / ".agents" / "skills" / "dev-workflow-standards-skill"
             shutil.copytree(ROOT / "skills" / "dev-workflow-standards", global_skill)

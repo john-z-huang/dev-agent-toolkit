@@ -1,39 +1,32 @@
-"""MCP adapters for OpenAI-backed semantic workflow helpers."""
+"""语义判断、候选生成和输入审核的异步 MCP 入口，不负责流程调度。"""
 
 from __future__ import annotations
 
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
-from ..services import ai_workflow
-from ..services.api_input_review import ApiInputReviewRequest
-from ..services import api_input_review
+from ..services import ai_workflow, api_input_review
 from ..services.ai_workflow import (
     ContentGenerationRequest,
     SessionDecisionRequest,
-    WorkflowDecisionRequest,
 )
+from ..services.api_input_review import ApiInputReviewRequest
 from ._registration import _register_adapter
 
 
-def decide_skill_workflow(request: WorkflowDecisionRequest) -> dict:
-    """根据用户请求和固定优先级选择工作流建议；不会执行所选流程。"""
-    return ai_workflow.decide_skill_workflow(request)
+async def decide_codex_session_action(request: SessionDecisionRequest) -> dict:
+    """返回历史查询和持久化动作建议；不读取会话或写入 Serena Memory。"""
+    return await ai_workflow.decide_codex_session_action(request)
 
 
-def decide_codex_session_action(request: SessionDecisionRequest) -> dict:
-    """建议历史事实查询和持久化下一步；不会读取会话或写入 Serena Memory。"""
-    return ai_workflow.decide_codex_session_action(request)
-
-
-def generate_skill_content(request: ContentGenerationRequest) -> dict:
+async def generate_skill_content(request: ContentGenerationRequest) -> dict:
     """生成候选内容供 Agent 审阅；不会执行代码或外部操作。"""
-    return ai_workflow.generate_skill_content(request)
+    return await ai_workflow.generate_skill_content(request)
 
 
-def check_api_input(request: ApiInputReviewRequest) -> dict:
-    """本地阻断凭据后审查拟外发的完整purpose与content；只返回审核建议，不代发业务请求。"""
-    return api_input_review.check_api_input(request)
+async def check_api_input(request: ApiInputReviewRequest) -> dict:
+    """审核完整 purpose 与 content；不代发业务请求或授予其他操作权限。"""
+    return await api_input_review.check_api_input(request)
 
 
 def register_ai_workflow_tools(server: MCPServer) -> None:
@@ -44,5 +37,5 @@ def register_ai_workflow_tools(server: MCPServer) -> None:
         idempotent_hint=False,
         open_world_hint=True,
     )
-    for service in (decide_skill_workflow, decide_codex_session_action, generate_skill_content, check_api_input):
+    for service in (decide_codex_session_action, generate_skill_content, check_api_input):
         _register_adapter(server, service, annotations)

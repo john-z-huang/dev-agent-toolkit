@@ -1,4 +1,4 @@
-"""Shared mechanism for creating transparent, schema-preserving MCP adapters."""
+"""按服务的同步/异步属性注册 MCP 适配器，保持参数 Schema 和注解。"""
 
 import inspect
 from functools import wraps
@@ -12,6 +12,7 @@ from ._descriptions import PARAMETER_DESCRIPTIONS, TOOL_DESCRIPTIONS
 
 
 def _register_adapter(server: MCPServer, service: Callable[..., Any], annotations: ToolAnnotations) -> None:
+    """合并领域参数说明，并保留 MCP 对协程函数的识别和等待能力。"""
     service_name = service.__name__
     descriptions = PARAMETER_DESCRIPTIONS[service_name]
     signature = inspect.signature(service, follow_wrapped=False)
@@ -25,9 +26,18 @@ def _register_adapter(server: MCPServer, service: Callable[..., Any], annotation
         for parameter in signature.parameters.values()
     ]
 
-    @wraps(service)
-    def adapter(*args: Any, **kwargs: Any) -> Any:
-        return service(*args, **kwargs)
+    # MCP 根据包装器本身判断执行方式；仅使用 wraps 的同步包装器不能替代协程。
+    if inspect.iscoroutinefunction(service):
+        @wraps(service)
+        async def adapter(*args: Any, **kwargs: Any) -> Any:
+            return await service(*args, **kwargs)
+    else:
+        @wraps(service)
+        def adapter(*args: Any, **kwargs: Any) -> Any:
+            return service(*args, **kwargs)
 
-    adapter.__signature__ = signature.replace(parameters=parameters, return_annotation=type_hints.get("return", signature.return_annotation))
+    adapter.__signature__ = signature.replace(
+        parameters=parameters,
+        return_annotation=type_hints.get("return", signature.return_annotation),
+    )
     server.tool(description=TOOL_DESCRIPTIONS[service_name], annotations=annotations)(adapter)

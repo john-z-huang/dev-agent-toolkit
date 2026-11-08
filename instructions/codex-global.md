@@ -27,11 +27,11 @@ token-io-decoupling Skill 仅适用于 Coding 工作：项目或仓库探索、�
 
 ## 开发工作流规范
 
-开展项目探索、代码或配置修改、开发文档编写、修复、验证及 Git/GitHub 工作前，加载并阅读 [dev-workflow-standards Skill]({{HOME}}/.agents/skills/dev-workflow-standards-skill/SKILL.md)，再读取其 `workflows/index.md`，只选适用工作流及该工作流指定的参考文档，按序完成步骤和 Completion Gate。只有用户明确要求 worktree 时才选择 worktree 工作流。
+开展项目探索、代码或配置修改、开发文档编写、修复、验证及 Git/GitHub 工作前，加载并阅读 [dev-workflow-standards Skill]({{HOME}}/.agents/skills/dev-workflow-standards-skill/SKILL.md)，按其 [`hooks/index.md`]({{HOME}}/.agents/skills/dev-workflow-standards-skill/hooks/index.md) 选择当前动作适用的合同及参考资料；Agent 自行判断任务拆解和执行顺序。多 Hook 可同时适用，只描述进入、执行、离开和重查条件；仅明确要求才新建 worktree，已有 worktree 不触发重建。
 
-执行固定 Git/GitHub 操作时，先按工作流确认目标仓库，再查阅 Skill 的 [`references/mcp-tools.md`]({{HOME}}/.agents/skills/dev-workflow-standards-skill/references/mcp-tools.md)，按操作逐项调用其中列出的专用 MCP 工具，使用文档列明的工具名和参数。所有 repo-bound 调用都必须传入本次目标仓库/worktree 的绝对 `repo_path`；不得依赖 MCP 服务的启动目录推断仓库。处理仓库任务时，按适用工作流在确认仓库身份和范围时调用 `audit_repository_state`，并核对其返回的仓库、分支、工作区和 remote 信息；GitHub/Fork 流程还要确认实际默认分支和 Fork parent。后续调用按工作流要求使用专用审计、检查或操作工具，并核验返回结果。
+执行固定 Git/GitHub 操作时，核实当前动作的目标仓库，再查阅 Skill 的 [`references/mcp-tools.md`]({{HOME}}/.agents/skills/dev-workflow-standards-skill/references/mcp-tools.md)，按操作逐项调用其中列出的专用 MCP 工具，使用文档列明的工具名和参数。所有 repo-bound 调用都必须传入本次目标仓库/worktree 的绝对 `repo_path`；不得依赖 MCP 服务的启动目录推断仓库。处理仓库任务时，需要确认仓库身份和范围时调用 `audit_repository_state`，并核对其返回的仓库、分支、工作区和 remote 信息；GitHub/Fork 流程还要确认实际默认分支和 Fork parent。后续调用按各动作条件使用专用审计、检查或操作工具，并核验返回结果。
 
-MCP 工具仅封装目录中说明的固定操作：直接调用对应工具，不要把 shell、`git`、`gh`、测试命令或任意脚本作为参数，也不要把兼容脚本当成交互式工作流的后备方案。用户对写入或外部操作的明确授权必须先于调用；只读注解或工具可用性不构成授权，工具调用所需的 Codex 写入确认也不能替代用户授权。若工具缺失、失败，或所需操作未被封装，停止该操作，按 Skill 的 [`workflows/recovery-and-exceptions.md`]({{HOME}}/.agents/skills/dev-workflow-standards-skill/workflows/recovery-and-exceptions.md) 保留现场并报告证据、影响和所需的最小决定；不要改用手写 CLI 命令绕过专用工具。
+MCP 工具仅封装目录中说明的固定操作：直接调用对应工具，不要把 shell、`git`、`gh`、测试命令或任意脚本作为参数，兼容脚本同样受当前动作条件约束。用户对写入或外部操作的明确授权必须先于调用；只读注解或工具可用性不构成授权，工具调用所需的 Codex 写入确认也不能替代用户授权。没有对应工具或功能/参数未覆盖时，可在既有授权内按 Skill 的 CLI 补充边界完成所需操作；工具或服务实际失败、拒绝或写入不明时，按 [`hooks/recovery.md`]({{HOME}}/.agents/skills/dev-workflow-standards-skill/hooks/recovery.md) 保留现场，暂停依赖动作并核对实际效果，不换入口绕过；独立工作可继续。
 
 需要理解源代码逻辑、符号关系或调用链时，按该 Skill 的 [`references/code-understanding.md`]({{HOME}}/.agents/skills/dev-workflow-standards-skill/references/code-understanding.md) 使用 Serena 和适用的降级流程。纯文档、配置、精确文本查找或机械修改不强制使用 Serena。
 

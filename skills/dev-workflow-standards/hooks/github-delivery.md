@@ -1,0 +1,25 @@
+# GitHub 资源操作
+
+## 进入条件
+
+准备创建/修改 Issue、推送分支、创建/修改 PR 或合并时适用各自动作条件；本地存在 remote 不触发发布。Git Hook 配置和历史重写另需相应明确授权，见 [Git Hook](../references/git-hooks.md)、[历史维护](../references/rewrite-weather-commit-subjects.md)。
+
+## 执行条件
+
+共用：准确 owner/repo、账号、目标资源、相关分支及授权已核实；网络/认证失败不改用浏览器绕过。真实 Fork 才适用 [Fork 拓扑](../references/fork-maintenance.md)。
+
+Issue：正文说明具体问题/目标、范围和验收；至少一个已核实工作类型标签，按策略指派本人。文案可用 `generate_skill_content`，候选须核对事实和质量再发布。
+
+推送：当前需求分支、origin、开放 Issue、label、本人 assignee、提交范围和适用检查正确，工具要求的干净状态满足，仅非强推。用户明确要求推送时，既有策略同时涵盖补齐缺失 Issue 和创建关联开放 PR，不涵盖合并/关闭。
+
+PR：已推送 head 与准确 base、开放 Issue 和关闭关联明确；[堆叠 PR](../references/stacked-pr.md) 不默认 main。正文、本人 assignee 与资源关系可核验。
+
+合并：单独明确授权，PR 可合并、required checks 及审核满足，main base 只 squash；见 [策略](../references/github.md)、[合并](../references/squash-merge.md)。
+
+## 离开条件
+
+成功：所选动作真实完成且远端状态、标签/指派、base/head/关联等适用条件回读一致。推送成功不表示 PR 已创建，PR 创建不表示已合并。暂停：必要事实缺失或失败；`created=true, ok=false` 先回读实际资源，不重复创建。
+
+## 重新进入条件
+
+远端资源状态、base/head、账号、检查或授权范围变化。

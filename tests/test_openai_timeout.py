@@ -16,11 +16,11 @@ class ParsedContent(BaseModel):
     value: str
 
 
-class OpenAITimeoutTests(unittest.TestCase):
+class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
     @contextmanager
     def transport(self, handler, **environment):
         clients = []
-        client_type = httpx2.Client
+        client_type = httpx2.AsyncClient
 
         class CapturedClient(client_type):
             def __init__(self, **kwargs):
@@ -31,11 +31,11 @@ class OpenAITimeoutTests(unittest.TestCase):
             "OPENAI_API_KEY": "sk-test-timeout-key",
             "OPENAI_BASE_URL": "https://first.synthetic.invalid/v1",
             **environment,
-        }, clear=True), patch.object(openai_client.httpx2, "Client", CapturedClient):
+        }, clear=True), patch.object(openai_client.httpx2, "AsyncClient", CapturedClient):
             yield clients
         self.assertTrue(all(client.is_closed for client in clients))
 
-    def test_decisions_and_responses_recover_after_timeout(self):
+    async def test_decisions_and_responses_recover_after_timeout(self):
         for api in ("decisions", "responses"):
             requests = []
 
@@ -58,10 +58,10 @@ class OpenAITimeoutTests(unittest.TestCase):
                 return_value={"passed": True},
             ) as review:
                 if api == "decisions":
-                    result = openai_client.create_decision([], [])
+                    result = await openai_client.create_decision([], [])
                     self.assertEqual(result.answers, [])
                 else:
-                    result = openai_client.parse_response(
+                    result = await openai_client.parse_response(
                         instructions="Return synthetic data", input="Synthetic input",
                         text_format=ParsedContent, reasoning_effort="medium", max_output_tokens=64,
                     )
@@ -76,7 +76,7 @@ class OpenAITimeoutTests(unittest.TestCase):
                 self.assertEqual(json.loads(request.content)["model"], "gpt-6-luna")
             self.assertEqual(requests[0].content, requests[1].content)
 
-    def test_default_custom_and_disabled_retry_budgets_exhaust_safely(self):
+    async def test_default_custom_and_disabled_retry_budgets_exhaust_safely(self):
         for retries, attempts in ((None, 6), ("2", 3), ("0", 1)):
             requests = []
 
@@ -86,29 +86,28 @@ class OpenAITimeoutTests(unittest.TestCase):
 
             environment = {} if retries is None else {"OPENAI_TIMEOUT_MAX_RETRIES": retries}
             with self.subTest(retries=retries), self.transport(handler, **environment) as clients:
-                # The input review itself times out: the business call must not run
-                # or add an outer retry loop over the exhausted review.
+                # 审核本身已耗尽重试预算，业务请求不能启动，也不能从外层重跑审核。
                 with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                    openai_client.create_decision([], [])
+                    await openai_client.create_decision([], [])
                 self.assertEqual(raised.exception.error_code, "api_timeout")
                 self.assertTrue(raised.exception.api_input_review["external_review_performed"])
                 self.assertEqual(len(clients), attempts)
             self.assertEqual(len(requests), attempts)
 
-    def test_invalid_retry_configuration_sends_no_requests(self):
+    async def test_invalid_retry_configuration_sends_no_requests(self):
         for value in ("", "-1", "1.5", "true", "５", "secret-invalid-value"):
             with self.subTest(value=value), patch.dict(os.environ, {
                 "OPENAI_TIMEOUT_MAX_RETRIES": value,
-            }, clear=True), patch.object(openai_client, "OpenAI") as sdk, patch.object(
-                openai_client.httpx2, "Client"
+            }, clear=True), patch.object(openai_client, "AsyncOpenAI") as sdk, patch.object(
+                openai_client.httpx2, "AsyncClient"
             ) as http:
                 with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                    openai_client.create_decision([], [])
+                    await openai_client.create_decision([], [])
                 self.assertEqual(raised.exception.as_result(), {"error_code": "invalid_timeout_max_retries"})
                 sdk.assert_not_called()
                 http.assert_not_called()
 
-    def test_connection_and_http_errors_are_not_retried(self):
+    async def test_connection_and_http_errors_are_not_retried(self):
         for failure in ("connection", 401, 429, 503):
             requests = []
 
@@ -120,10 +119,10 @@ class OpenAITimeoutTests(unittest.TestCase):
 
             with self.subTest(failure=failure), self.transport(handler):
                 with self.assertRaises(openai_client.OpenAIWorkflowError):
-                    openai_client._create_policy_review_decision(purpose="Review input", content="Synthetic input", questions=[])
+                    await openai_client._create_policy_review_decision(purpose="Review input", content="Synthetic input", questions=[])
             self.assertEqual(len(requests), 1)
 
-    def test_retry_reads_current_credentials_endpoint_and_budget_per_call(self):
+    async def test_retry_reads_current_credentials_endpoint_and_budget_per_call(self):
         requests = []
 
         def handler(request):
@@ -135,14 +134,14 @@ class OpenAITimeoutTests(unittest.TestCase):
             return httpx2.Response(200, json={"answers": [], "refusal": None})
 
         with self.transport(handler, OPENAI_TIMEOUT_MAX_RETRIES="1"):
-            openai_client._create_policy_review_decision(purpose="Review input", content="Synthetic input", questions=[])
+            await openai_client._create_policy_review_decision(purpose="Review input", content="Synthetic input", questions=[])
             self.assertEqual(requests[0].url.host, "first.synthetic.invalid")
             self.assertEqual(requests[1].url.host, "second.synthetic.invalid")
             self.assertEqual(requests[1].headers["authorization"], "Bearer sk-test-replacement-key")
             os.environ["OPENAI_TIMEOUT_MAX_RETRIES"] = "0"
             requests.clear()
             with self.assertRaises(openai_client.OpenAIWorkflowError):
-                openai_client._create_policy_review_decision(purpose="Review input", content="Synthetic input", questions=[])
+                await openai_client._create_policy_review_decision(purpose="Review input", content="Synthetic input", questions=[])
             self.assertEqual(len(requests), 1)
 
 

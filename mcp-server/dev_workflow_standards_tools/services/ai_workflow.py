@@ -1,13 +1,22 @@
-"""OpenAI-assisted decisions and candidate content, bounded by local policy."""
+"""在本地规则约束内异步请求语义判断或候选内容，不执行候选中的操作。"""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import math
+from functools import partial
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
+import anyio
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    field_validator,
+    model_validator,
+)
 
 from ..infrastructure import openai_client
 from ..policy import (
@@ -24,22 +33,6 @@ from .codex_session_facts import CodexSessionSource, get_codex_session_summary_g
 
 class StrictInput(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-
-
-class WorkflowDecisionRequest(StrictInput):
-    user_request: str = Field(description="用户当前请求原文，非空且最多12000字符；布尔分类flags才是此路由的结构化判定输入。", min_length=1, max_length=12000)
-    explicit_worktree: StrictBool = Field(description="仅当用户明确要求使用/创建worktree时为true；false表示未明确要求。")
-    github_delivery: StrictBool = Field(description="当前请求是否需要Issue、推送、PR或合并等GitHub交付；false表示不需要。")
-    verification_only: StrictBool = Field(description="当前请求是否仅为测试/提交前检查/PR审计/清理等验证任务；false表示不是。")
-    special_operations: StrictBool = Field(description="当前请求是否涉及Hook、自动化或历史标题维护等特殊操作；false表示不涉及。")
-    blocked: StrictBool = Field(description="当前工作是否已被冲突、失败或不可继续条件阻塞；true最高优先级，false表示未分类为阻塞。")
-
-    @field_validator("user_request")
-    @classmethod
-    def require_nonblank_request(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("user_request 不能为空")
-        return value
 
 
 class SessionDecisionRequest(StrictInput):
@@ -181,15 +174,6 @@ class ContentQualityReview(StrictInput):
 
 MODEL_NAME = openai_client.MODEL_NAME
 DECISION_CHOICES = ("compliant", "requires_fix", "insufficient_evidence")
-WORKFLOW_CHOICES = (
-    "standard-development",
-    "worktree-development",
-    "github-delivery",
-    "verification-and-cleanup",
-    "special-operations",
-    "recovery-and-exceptions",
-    "clarify",
-)
 SESSION_LOOKUP_CHOICES = ("read_history", "query_project", "clarify", "blocked")
 SESSION_PERSISTENCE_CHOICES = (
     "create_summary",
@@ -210,18 +194,6 @@ _DECISION_DEVELOPER_RULES = (
     "listed clarification, block, or wait action required by its rules. Never invent a choice value."
 )
 
-_WORKFLOW_PROMPT = (
-    "Route the request by these exact ordered structured flags; they are authoritative observations of the request. "
-    "First, blocked=true selects recovery-and-exceptions and excludes every lower-priority route. Otherwise "
-    "explicit_worktree=true selects worktree-development and excludes lower-priority routes. Otherwise "
-    "github_delivery=true selects github-delivery. Otherwise special_operations=true selects special-operations. "
-    "Otherwise verification_only=true selects verification-and-cleanup. If all five flags are false, select "
-    "standard-development. These conditions and priority exactly define the route; do not reinterpret them from "
-    "free text. Select clarify only if the request itself is genuinely uninterpretable or internally ambiguous after "
-    "applying the flags. A missing repository path, unavailable tool, or lack of execution access is not a reason "
-    "to clarify the route. Never choose worktree-development unless explicit_worktree=true. This is advice only: "
-    "do not perform work or claim authorization."
-)
 _SESSION_LOOKUP_PROMPT = (
     "Decide only lookup_action, independently of persistence_action. Apply this exact order to the structured "
     "observations: if has_relevant_sources=false, choose query_project, regardless of other source fields; else if "
@@ -453,15 +425,16 @@ def _decision_questions(
     return prepared
 
 
-def _decisions(
+async def _decisions(
     questions: list[dict[str, Any]],
     facts: dict[str, Any],
     *,
     purpose: str = "Assess structured development workflow facts under the supplied decision question.",
 ) -> dict[str, str] | dict[str, Any]:
+    """请求固定选项判断，并核对答案数量、问题名称和合法枚举。"""
     api_input = [{"role": "user", "content": _json(facts)}]
     try:
-        response = openai_client.create_decision(api_input, questions, purpose=purpose)
+        response = await openai_client.create_decision(api_input, questions, purpose=purpose)
     except openai_client.OpenAIWorkflowError as error:
         return error.as_result()
 
@@ -495,13 +468,14 @@ def _question(name: str, instructions: str, values: tuple[str, ...], description
     }
 
 
-def _validation_result(
+async def _validation_result(
     local_result: dict[str, Any],
     *,
     question: dict[str, Any],
     facts: dict[str, Any],
     rules: str = "",
 ) -> dict[str, Any]:
+    """合并本地硬校验与模型判断；本地失败不联网，API 失败也不能放行。"""
     local_passed = local_result.get("passed") is True
     result = dict(local_result)
     result["local_passed"] = local_passed
@@ -512,7 +486,7 @@ def _validation_result(
         result["passed"] = False
         return result
     decision_questions = _decision_questions([question], rules)
-    answers = _decisions(
+    answers = await _decisions(
         decision_questions,
         facts,
         purpose=f"Apply the supplied {question['name']} decision policy to local observations.",
@@ -543,12 +517,18 @@ def _validation_result(
     return result
 
 
-def check_branch_names(
+async def check_branch_names(
     branch_names: list[str] | None = None,
     repo_path: str | None = None,
 ) -> dict[str, Any]:
-    """保留本地分支名硬校验，再用 Decisions 补充只读判断。"""
-    local = validation.check_branch_names(branch_names=branch_names, repo_path=repo_path)
+    """在线程中完成可能读取 Git 的本地校验，再等待 Decisions 补充判断。"""
+    local = await anyio.to_thread.run_sync(
+        partial(
+            validation.check_branch_names,
+            branch_names=list(branch_names) if branch_names is not None else None,
+            repo_path=repo_path,
+        )
+    )
     checked_names = [item.get("branch_name") for item in local.get("checks", [])]
     facts = {
         "branch_checks": [
@@ -573,7 +553,7 @@ def check_branch_names(
             "insufficient_evidence": "A required branch name/check result is missing or the supplied check data conflicts.",
         },
     )
-    result = _validation_result(
+    result = await _validation_result(
         local,
         question=question,
         facts=facts,
@@ -582,7 +562,7 @@ def check_branch_names(
     return result
 
 
-def check_commit_message(message: str) -> dict[str, Any]:
+async def check_commit_message(message: str) -> dict[str, Any]:
     """保留本地提交信息硬校验，再将必要正文交给 Decisions。"""
     local = validation.check_commit_message(message)
     subject = local.get("subject", "")
@@ -620,14 +600,14 @@ def check_commit_message(message: str) -> dict[str, Any]:
             "insufficient_evidence": "One or more of the three required local check booleans is missing or contradictory.",
         },
     )
-    return _validation_result(
+    return await _validation_result(
         local,
         question=question,
         facts=facts,
     )
 
 
-def audit_issue_pr_policy(
+async def audit_issue_pr_policy(
     repo_path: str,
     repo: str | None = None,
     issue_number: int | None = None,
@@ -635,14 +615,17 @@ def audit_issue_pr_policy(
     expected_base: str | None = None,
     expected_head: str | None = None,
 ) -> dict[str, Any]:
-    """运行原只读 Issue/PR 审计后，仅将脱敏的检查结果交给 Decisions。"""
-    local = validation.audit_issue_pr_policy(
-        repo_path=repo_path,
-        repo=repo,
-        issue_number=issue_number,
-        pr_number=pr_number,
-        expected_base=expected_base,
-        expected_head=expected_head,
+    """在线程中执行阻塞的 Git/gh 审计，仅将检查摘要交给 Decisions。"""
+    local = await anyio.to_thread.run_sync(
+        partial(
+            validation.audit_issue_pr_policy,
+            repo_path=repo_path,
+            repo=repo,
+            issue_number=issue_number,
+            pr_number=pr_number,
+            expected_base=expected_base,
+            expected_head=expected_head,
+        )
     )
     facts = {
         "local_check_passed": local.get("passed") is True,
@@ -670,82 +653,12 @@ def audit_issue_pr_policy(
             "insufficient_evidence": "The summary is missing or contradicts a fact needed for the requested local checks.",
         },
     )
-    return _validation_result(
+    return await _validation_result(
         local,
         question=question,
         facts=facts,
         rules="Apply only the requested-scope checks defined in this question's instructions to these local observations. Do not add checks for unrequested objects, fields, or external conditions. Local false is never overridable.",
     )
-
-
-def _workflow_expected(request: WorkflowDecisionRequest) -> str:
-    if request.blocked:
-        return "recovery-and-exceptions"
-    if request.explicit_worktree:
-        return "worktree-development"
-    if request.github_delivery:
-        return "github-delivery"
-    if request.special_operations:
-        return "special-operations"
-    if request.verification_only:
-        return "verification-and-cleanup"
-    return "standard-development"
-
-
-def decide_skill_workflow(request: WorkflowDecisionRequest) -> dict[str, Any]:
-    """向 Decisions 请求受固定工作流优先级约束的路由建议；不执行工作流。"""
-    if not isinstance(request, WorkflowDecisionRequest):
-        request = WorkflowDecisionRequest.model_validate(request)
-    facts = request.model_dump(mode="json")
-    question = _question(
-        "workflow",
-        "The structured flags are authoritative. Apply the ordered route and exclusions stated in the question instructions; do not infer a route from repository paths or tool availability.",
-        WORKFLOW_CHOICES,
-        {
-            "standard-development": "All higher-priority flags are false; this is the default ordinary development route.",
-            "worktree-development": "explicit_worktree=true and blocked=false; it outranks delivery and lower routes.",
-            "github-delivery": "github_delivery=true while blocked=false and explicit_worktree=false.",
-            "verification-and-cleanup": "verification_only=true and all higher-priority flags are false.",
-            "special-operations": "special_operations=true while blocked, explicit_worktree, and github_delivery are false.",
-            "recovery-and-exceptions": "blocked=true; this has highest priority regardless of every other flag.",
-            "clarify": "Only the request itself is genuinely uninterpretable or internally ambiguous; missing repo paths/access do not qualify.",
-        },
-    )
-    questions = _decision_questions([question], _WORKFLOW_PROMPT)
-    response = _decisions(
-        questions,
-        facts,
-        purpose="Recommend the development workflow from the supplied user request and local route facts.",
-    )
-    if "error_code" in response:
-        return {
-            "ok": False,
-            "error_code": response["error_code"],
-            **({"api_input_review": response["api_input_review"]} if isinstance(response.get("api_input_review"), dict) else {}),
-            **({"api_status_code": response["status_code"]} if response.get("status_code") else {}),
-            "requires_agent_review": True,
-        }
-    choice = response["workflow"]
-    expected = _workflow_expected(request)
-    allowed = {expected, "clarify"}
-    if choice not in allowed or (choice == "worktree-development" and not request.explicit_worktree):
-        return {
-            "ok": False,
-            "error_code": "decision_inconsistent_with_workflow_rules",
-            "requires_agent_review": True,
-        }
-    follow_up = "github-delivery" if choice == "worktree-development" and request.github_delivery else None
-    return {
-        "ok": True,
-        "workflow": choice,
-        "follow_up_workflow": follow_up,
-        "model": MODEL_NAME,
-        "input_hash": _fingerprint(facts),
-        "rules_hash": _fingerprint(questions),
-        "requires_agent_review": True,
-        "side_effects": False,
-        "review_note": "仅为分支建议；Agent仍须读取所选工作流、核实用户授权并执行其固定步骤。",
-    }
 
 
 def _session_expected_lookup(request: SessionDecisionRequest) -> str:
@@ -774,10 +687,12 @@ def _session_expected_persistence(request: SessionDecisionRequest) -> str:
     return "update_summary" if request.existing_summary else "create_summary"
 
 
-def decide_codex_session_action(request: SessionDecisionRequest) -> dict[str, Any]:
-    """向 Decisions 请求历史查询和持久化动作建议；不读会话或写Memory。"""
+async def decide_codex_session_action(request: SessionDecisionRequest) -> dict[str, Any]:
+    """等待历史查询和持久化动作建议；不读取原会话或写入 Memory。"""
     if not isinstance(request, SessionDecisionRequest):
         request = SessionDecisionRequest.model_validate(request)
+    # 本地一致性校验也使用同一快照，不受等待期间调用方修改输入的影响。
+    request = request.model_copy(deep=True)
     facts = request.model_dump(mode="json")
     questions = [
         _question(
@@ -804,7 +719,7 @@ def decide_codex_session_action(request: SessionDecisionRequest) -> dict[str, An
         ),
     ]
     questions = _decision_questions(questions)
-    response = _decisions(
+    response = await _decisions(
         questions,
         facts,
         purpose="Recommend history lookup and persistence actions from supplied source-state facts.",
@@ -872,13 +787,13 @@ def _generation_instruction(kind: str) -> str:
     return instructions
 
 
-def _review_issue_pr(request: ContentGenerationRequest, generated: GeneratedContent) -> dict[str, Any]:
+async def _review_issue_pr(request: ContentGenerationRequest, generated: GeneratedContent) -> dict[str, Any]:
     """通过统一客户端审查有界候选；模型建议不替代本地验证或发布授权。"""
     review_input = _json({"request": request.model_dump(mode="json"), "candidate": generated.model_dump(mode="json")})
     if len(review_input.encode("utf-8")) + len(_QUALITY_REVIEW_PROMPT.encode("utf-8")) > openai_client.MAX_REQUEST_BYTES:
         return {"ok": False, "error_code": "quality_review_request_too_large"}
     try:
-        response = openai_client.parse_response(
+        response = await openai_client.parse_response(
             instructions=_QUALITY_REVIEW_PROMPT,
             input=review_input,
             text_format=ContentQualityReview,
@@ -912,10 +827,15 @@ def _review_issue_pr(request: ContentGenerationRequest, generated: GeneratedCont
     }
 
 
-def generate_skill_content(request: ContentGenerationRequest) -> dict[str, Any]:
-    """生成待Agent审阅的文本候选；不执行代码、外部操作或Memory写入。"""
+async def generate_skill_content(request: ContentGenerationRequest) -> dict[str, Any]:
+    """生成供 Agent 审阅的候选，不执行代码、发布内容或写入 Memory。
+
+    Issue/PR 的生成结果还需质量审查；两阶段共用事实快照，各自通过出站审核。
+    """
     if not isinstance(request, ContentGenerationRequest):
         request = ContentGenerationRequest.model_validate(request)
+    # 同时冻结嵌套证据，确保后续质量审查不会混入等待期间新增的事实。
+    request = request.model_copy(deep=True)
     facts = request.model_dump(mode="json")
     if request.kind == "session_summary":
         try:
@@ -934,7 +854,7 @@ def generate_skill_content(request: ContentGenerationRequest) -> dict[str, Any]:
         return {"ok": False, "error_code": "request_too_large", "requires_agent_review": True}
     effort = _effort_for_kind(request.kind)
     try:
-        response = openai_client.parse_response(
+        response = await openai_client.parse_response(
             instructions=instructions,
             input=input_text,
             text_format=GeneratedContent,
@@ -981,7 +901,7 @@ def generate_skill_content(request: ContentGenerationRequest) -> dict[str, Any]:
         return {"ok": False, "error_code": "forbidden_attribution", "requires_agent_review": True}
     quality: dict[str, Any] = {}
     if request.kind in {"issue", "pr"}:
-        quality = _review_issue_pr(request, generated)
+        quality = await _review_issue_pr(request, generated)
         if not quality["ok"]:
             return {**quality, "adoptable": False, "requires_agent_review": True}
     return {

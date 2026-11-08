@@ -6,9 +6,9 @@
 
 ## 确认目标与授权
 
-1. 用 `audit_repository_state` 核对准确的需求 checkout 根路径、仓库身份、默认分支和 Fork parent；用 `list_repository_worktrees` 确认分支所在路径。所有 repo-bound 工具明确传入该目标的绝对 `repo_path`。
-2. 已有 PR 使用核验过的实际 base；尚无 PR 时，使用用户批准的依赖分支或仓库约定。Fork 按 [`fork-maintenance.md`](fork-maintenance.md) 使用个人维护基线；不得机械地选择 `main`。堆叠 PR 另读 [`stacked-pr.md`](stacked-pr.md)。
-3. 区分只读审计、fetch 的本地引用写入、merge/rebase 的工作区及历史写入、推送与 PR 更新。只读结果、工具可用或同步成功都不授予后续写入权限；沿用已有明确授权，不扩大到其他分支、checkout 或外部动作。
+- 用 `audit_repository_state` 核对准确的需求 checkout 根路径、仓库身份、默认分支和 Fork parent；用 `list_repository_worktrees` 确认分支所在路径。所有 repo-bound 工具明确传入该目标的绝对 `repo_path`。
+- 已有 PR 使用核验过的实际 base；尚无 PR 时，使用用户批准的依赖分支或仓库约定。Fork 按 [`fork-maintenance.md`](fork-maintenance.md) 使用个人维护基线；不得机械地选择 `main`。堆叠 PR 另读 [`stacked-pr.md`](stacked-pr.md)。
+- 区分只读审计、fetch 的本地引用写入、merge/rebase 的工作区及历史写入、推送与 PR 更新。只读结果、工具可用或同步成功都不授予后续写入权限；沿用已有明确授权，不扩大到其他分支、checkout 或外部动作。
 
 ## 获取基线与审计快照
 
@@ -27,7 +27,7 @@
 | 未发布需求分支与 base 分叉 | 使用 `rebase_repository_branch`；先核实发布状态，重放自己的需求提交。 |
 | 已发布需求分支与 base 分叉 | 使用 `merge_repository_branch`，保留已有公开提交；后续仍使用普通非强制 push。 |
 | 发布状态或提交边界不明 | 停止依赖这些事实的修改，补齐证据。 |
-| dirty、detached、锁定、未完成操作或冲突 | 保留现场，按 [`恢复流程`](../workflows/recovery-and-exceptions.md) 处理。 |
+| dirty、detached、锁定、未完成操作或冲突 | 保留现场，按 [`恢复条件`](../hooks/recovery.md) 处理。 |
 
 已发布包括已有远端需求分支；已知有 PR、协作者或下游分支消费者时，不能仅凭某个远端同名引用不存在就当作可改写的私有分支。工具的发布状态核验只证明其明确查询的范围，不取代这些已知事实。没有远端配置也不证明历史上从未发布。
 

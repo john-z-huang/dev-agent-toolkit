@@ -1,4 +1,4 @@
-"""Public review service for data intended for an external OpenAI API request."""
+"""外发输入审核服务：本地检测不通过时停止，语义审核只返回结果而不代发业务请求。"""
 
 from __future__ import annotations
 
@@ -213,8 +213,11 @@ def _validate_decision(response: Any) -> dict[str, str]:
     return results
 
 
-def review_api_input(purpose: str, content: str) -> dict[str, Any]:
-    """Run local checks first and only then ask Decisions to classify both fields."""
+async def review_api_input(purpose: str, content: str) -> dict[str, Any]:
+    """检测完整用途与内容，本地通过后异步请求 Decisions 逐字段分类。
+
+    通过私有客户端入口避免递归审核；取消继续传播，失败不能解释为放行。
+    """
     local = api_input_policy.inspect_api_input(purpose, content)
     if not local["passed"]:
         return _local_result(purpose, content, local)
@@ -227,7 +230,7 @@ def review_api_input(purpose: str, content: str) -> dict[str, Any]:
         separators=(",", ":"),
     )
     try:
-        response = openai_client._create_policy_review_decision(
+        response = await openai_client._create_policy_review_decision(
             purpose="Review the supplied two-field request for safe external API transmission.",
             content=audit_input,
             questions=_questions(),
@@ -287,8 +290,8 @@ def review_api_input(purpose: str, content: str) -> dict[str, Any]:
     return result
 
 
-def check_api_input(request: ApiInputReviewRequest) -> dict[str, Any]:
-    """Audit final outbound purpose/content; never sends a business request or grants permission."""
+async def check_api_input(request: ApiInputReviewRequest) -> dict[str, Any]:
+    """校验公开审核输入并等待结果；不代发业务请求，也不授予发布或写入权限。"""
     try:
         parsed = request if isinstance(request, ApiInputReviewRequest) else ApiInputReviewRequest.model_validate(request)
     except Exception:
@@ -315,4 +318,4 @@ def check_api_input(request: ApiInputReviewRequest) -> dict[str, Any]:
             "external_review_performed": False,
             "error_code": "invalid_input",
         }
-    return review_api_input(parsed.purpose, parsed.content)
+    return await review_api_input(parsed.purpose, parsed.content)
