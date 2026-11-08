@@ -130,6 +130,8 @@ uv tool uninstall dev-workflow-standards-mcp
 
 ## 使用
 
+可选的 [原生 Codex Hooks](codex-hooks/README.md) 将部分指令合同转换为实际宿主回调：会话与交付提示、MCP 目标仓库路径硬校验，以及结构化失败后的恢复提示。使用 `scripts/setup-codex-hooks.py` 预览或显式安装到目标项目；独立于 Skill/MCP 安装，不覆盖已有 hooks，不自动授予信任或后续操作权限。
+
 使用 [`SKILL.md`](skills/dev-workflow-standards/SKILL.md) 时按 [`Hook 索引`](skills/dev-workflow-standards/hooks/index.md) 读取当前动作适用的合同，由 Agent 判断操作组合；按 [`references/mcp-tools.md`](skills/dev-workflow-standards/references/mcp-tools.md) 调用对应工具。所有仓库操作都要传入本次目标项目的绝对 `repo_path`；服务器不会把启动时的目录当作目标仓库。
 
 Python 执行和依赖环境任务按需读取 [`references/python-environment.md`](skills/dev-workflow-standards/references/python-environment.md)，Shell 脚本开发和验证按需读取 [`references/shell-environment.md`](skills/dev-workflow-standards/references/shell-environment.md)。独立脚本无需先进入 Git 工作流；非开发任务不增加环境规则加载步骤。

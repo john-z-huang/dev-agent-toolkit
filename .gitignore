@@ -4,6 +4,10 @@
 # Code Agent
 .claude/
 
+# 由安装器生成的本机 Codex Hooks 快照（包含绝对路径）
+/.codex/hooks.json
+/.codex/hooks/dev_workflow.py
+
 # IDE
 .idea/
 .vscode/
