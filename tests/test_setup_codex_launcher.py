@@ -94,6 +94,44 @@ class SetupLauncherTests(unittest.TestCase):
                         ],
                     )
 
+    def test_hooks_operations_preserve_target_arguments_and_exit_status(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="hooks launcher ") as directory:
+            root = Path(directory)
+            uv = root / "uv"
+            uv.write_text(
+                "#!/bin/bash\nprintf '%s\\0' \"$@\"\nexit 23\n", encoding="utf-8"
+            )
+            uv.chmod(0o755)
+            project_scope = ["--project-root", str(root / "target ' *"), "--dry-run"]
+            global_scope = ["--global", "--dry-run"]
+            for operation, flag, arguments in (
+                ("--hooks-install", "--install", project_scope),
+                ("--hooks-update", "--update", project_scope),
+                ("--hooks-install", "--install", global_scope),
+                ("--hooks-install", "--install", [*global_scope, "--merge"]),
+                ("--hooks-update", "--update", global_scope),
+            ):
+                with self.subTest(operation=operation, arguments=arguments):
+                    result = subprocess.run(
+                        [str(LAUNCHER), operation, *arguments],
+                        cwd=root,
+                        env={**os.environ, "PATH": f"{root}:/usr/bin:/bin"},
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 23, result.stderr)
+                    self.assertEqual(
+                        result.stdout.decode().split("\0")[:-1],
+                        [
+                            "run",
+                            "--managed-python",
+                            "--",
+                            str(LAUNCHER.parent / "scripts/setup-codex-hooks.py"),
+                            flag,
+                            *arguments,
+                        ],
+                    )
+
     def test_launch_from_other_directory_preserves_arguments_and_exit_status(
         self,
     ) -> None:
@@ -132,7 +170,10 @@ class SetupLauncherTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             # 只提供入口定位所需命令，确保不会意外调用本机 uv。
-            (root / "dirname").symlink_to(shutil.which("dirname"))
+            dirname = shutil.which("dirname")
+            if dirname is None:
+                self.skipTest("requires dirname")
+            (root / "dirname").symlink_to(dirname)
             config = root / "config.toml"
             result = subprocess.run(
                 [str(LAUNCHER), "--install", "--config", str(config)],
