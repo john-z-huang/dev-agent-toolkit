@@ -4,14 +4,14 @@ Skill 指令从发布包复制为普通文件快照。开发仓库可以放在�
 
 ## 源码仓库的安装更新入口
 
-在源码仓库根目录使用 `setup`。需要 `uv` 位于 `PATH`，本机 Bash 3.2 可执行；从其他工作目录调用时使用脚本的绝对路径。
+在源码仓库根目录使用 `dws`。需要 `uv` 位于 `PATH`，本机 Bash 3.2 可执行；从其他工作目录调用时使用脚本的绝对路径。
 
 ```bash
 # 无参数只打印帮助并返回 0，不执行安装、注册或文件写入
-./setup
-./setup --help
+./dws
+./dws --help
 # 查看某项操作的选项
-./setup --skills-install --help
+./dws --skills-install --help
 ```
 
 操作参数放在首位，每次选择一项；其余参数传给对应管理程序：
@@ -23,9 +23,9 @@ Skill 指令从发布包复制为普通文件快照。开发仓库可以放在�
 | 全局 `AGENTS.md` | `--agents-install` | `--agents-update` | 仅管理全局指令，不安装软件包或注册 MCP。 |
 
 ```bash
-./setup --mcp-update --dry-run
-./setup --skills-update --dry-run
-./setup --agents-update --dry-run
+./dws --mcp-update --dry-run
+./dws --skills-update --dry-run
+./dws --agents-update --dry-run
 ```
 
 Skill 和全局指令操作通过 `uv tool dir --bin` 定位已安装完整发行包的 `dev-workflow-standards` 入口，不从源码开发环境读取资源。先按下文构建并安装完整 wheel，再选择所需的资源操作；更新软件包不会自动刷新指令快照。不在源码仓库中时，仍可使用下文的完整发行包 CLI 命令。
@@ -116,6 +116,6 @@ uv tool dir --bin
 
 原 `dev-workflow-standards-tools` 命令仍直接启动 stdio MCP。Skill 管理入口是另一个命令，不向该入口加入隐式安装动作。MCP 注册、环境变量名称转发及审批继续遵循原规则。
 
-源码入口的操作参数见本文前面的“源码仓库的安装更新入口”，注册、转发和审批选项见 [README 的 Codex 安装说明](https://github.com/john-z-huang/dev-workflow-standards#codex-中安装)。仅注册已有 MCP 安装可运行 `./setup --server dev-workflow-standards-tools`；仅修复已注册服务的转发声明使用 `--env-only`。无参数不再执行注册，只打印帮助。原 Python 入口及 `--install`、`--install --force` 等 MCP 参数仍兼容。
+源码入口的操作参数见本文前面的“源码仓库的安装更新入口”，注册、转发和审批选项见 [README 的 Codex 安装说明](https://github.com/john-z-huang/dev-workflow-standards#codex-中安装)。仅注册已有 MCP 安装可运行 `./dws --server dev-workflow-standards-tools`；仅修复已注册服务的转发声明使用 `--env-only`。无参数不再执行注册，只打印帮助。原 Python 入口及 `--install`、`--install --force` 等 MCP 参数仍兼容。
 
 根目录入口通过 `exec` 调用 `scripts/setup-codex-mcp.py` 执行 MCP 操作，两者必须保持仓库中的相对路径。入口不依赖调用者的工作目录，原样转发参数与退出状态。这两个脚本属于源码开发资产，不包含在 Skill 快照中。完整仓库结构和 Hook/历史兼容脚本见 [项目仓库](https://github.com/john-z-huang/dev-workflow-standards)。独立 Skill 不依赖这些脚本才能加载；固定操作优先按 [MCP 工具目录](mcp-tools.md) 调用已注册服务，未提供工具或功能未覆盖时按 [CLI 补充规约](cli-fallback.md) 在任务授权内完成。
