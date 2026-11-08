@@ -28,7 +28,7 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 
 安装为 uv tool 后，服务仍只读取自身进程的环境变量。Codex 主进程需要持有非空的 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，并在 `[mcp_servers.dev-workflow-standards-tools]` 中通过 `env_vars` 显式允许转发这两个名称。需要网络代理时，还应转发 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及其小写名称，使已配置的值进入 MCP 子进程。使用更新后的源码 setup 脚本时，这些名称会自动合并；已有注册可用下述 `--env-only` 补齐。脚本入口与独立 Skill 安装的区别见 [安装说明](installation.md#mcp-与源码辅助脚本)，字段语义见 [Codex MCP 官方说明](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)。终端中手动运行成功，只能证明该次进程拿到了配置，不能证明 Codex 启动的 MCP 子进程也收到了配置。
 
-需要用源码辅助脚本修复已有注册时，在源码仓库根目录运行 `uv run --managed-python -- scripts/setup-codex-mcp.py --env-only`；可添加 `--dry-run` 只检查不写入，或用 `--server NAME`、`--config PATH` 指定目标。脚本只合并变量名，保留其他配置，不读取凭据或代理值，也不发起 API 请求。它不会替调用进程加载凭据、配置代理服务、启用额外授权或修改 MCP 的请求配置规则。
+需要用源码辅助脚本修复已有注册时，在源码仓库根目录运行 `./scripts/setup-codex-mcp.sh --env-only`；可添加 `--dry-run` 只检查不写入，或用 `--server NAME`、`--config PATH` 指定目标。无参数执行入口仅打印使用帮助；安装或更新 MCP 须显式使用 `--mcp-install` 或 `--mcp-update`。`--env-only` 只合并变量名，保留其他配置，不读取凭据或代理值，也不发起 API 请求。它不会替调用进程加载凭据、配置代理服务、启用额外授权或修改 MCP 的请求配置规则。
 
 更改配置后须重新加载 MCP 服务，必要时退出后重开客户端以重新创建进程。`env_vars` 不会读取 Shell 配置文件或 `.env` 文件，也不会让已运行的子进程自动获得新变量；本服务不增加凭据文件、其他变量或默认地址回退。
 
