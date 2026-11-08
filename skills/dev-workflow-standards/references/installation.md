@@ -21,12 +21,22 @@ Skill 指令从发布包复制为普通文件快照。开发仓库可以放在�
 | MCP Server | `--mcp-install` | `--mcp-update` | 安装或更新软件包、注册服务并配置环境变量转发。 |
 | Skill | `--skills-install` | `--skills-update` | 仅管理 Skill 快照，不安装软件包或注册 MCP。 |
 | 全局 `AGENTS.md` | `--agents-install` | `--agents-update` | 仅管理全局指令，不安装软件包或注册 MCP。 |
+| 原生 Codex Hooks | `--hooks-install` | `--hooks-update` | 从源码管理项目级或用户全局 Hooks，不修改宿主信任。 |
 
 ```bash
 ./dws --mcp-update --dry-run
 ./dws --skills-update --dry-run
 ./dws --agents-update --dry-run
+./dws --hooks-install --project-root /absolute/path/to/target-project --dry-run
+./dws --hooks-update --project-root /absolute/path/to/target-project --dry-run
+./dws --hooks-install --global --dry-run
+./dws --hooks-update --global --dry-run
+./dws --hooks-install --global --merge --dry-run
 ```
+
+Hooks 操作通过 `uv tool` 安装或重装独立的 `dev-workflow-standards-hooks` 包，再调用已安装 CLI 的 `configure` 子命令注册命令绝对路径。运行时不依赖源码或 MCP 项目环境。`--project-root` 指定已有绝对项目目录，与 `--global` 互斥且必须二选一。全局目标默认 `~/.codex`，显式 `CODEX_HOME` 必须是已有绝对目录。`dws --dry-run` 只显示安装/注册计划，不核验配置冲突；精确只读预览应使用已安装 CLI 的 `configure ... --dry-run`。更新要求受管配置无本地修改，旧版受管脚本安装校验后迁移为命令注册，保留原脚本；未知旧资源不自动接管。全局和项目级 Hooks 会累积触发，不自动迁移或清理另一范围。详见 [原生 Hooks](codex-hooks.md)。
+
+若目标仅有其他工具的 `hooks.json`，安装时可显式加 `--merge`，先预览合并结果，再去掉 `--dry-run` 执行；正式合并先备份原字节到目标目录的 `hooks.json.backup-*`，保留原事件和字段。后续更新保留原 Hooks，但手工修改配置仍会阻止更新。已有本工具脚本或清单时拒绝合并，不覆盖未知旧安装。
 
 Skill 和全局指令操作通过 `uv tool dir --bin` 定位已安装完整发行包的 `dev-workflow-standards` 入口，不从源码开发环境读取资源。先按下文构建并安装完整 wheel，再选择所需的资源操作；更新软件包不会自动刷新指令快照。不在源码仓库中时，仍可使用下文的完整发行包 CLI 命令。
 

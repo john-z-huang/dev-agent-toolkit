@@ -82,7 +82,7 @@ uv tool install --force ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.w
 
 脚本从自身位置定位 `mcp-server/`，不依赖调用时的工作目录。它默认处理 `dev-workflow-standards-tools`，将 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 及上述四个代理变量的大写、小写名称合并到该服务的 `env_vars`。只有变量名会写入配置，脚本不读取或打印配置值，不发起 OpenAI 请求。
 
-入口参考 Homebrew 的 Gradle/Maven 命令脚本：Bash 根据显式操作参数选择入口，通过 `exec` 启动对应程序并保留退出状态。MCP 操作调用项目内的 `scripts/setup-codex-mcp.py` 实现；Skill 和全局指令操作通过 `uv tool dir --bin` 定位已安装的完整发行包入口，额外选项原样转发。支持本机 Bash 3.2；从其他工作目录调用时使用该入口的绝对路径。需要 `uv` 位于 `PATH`，Python 版本与依赖仍由实现脚本的 PEP 723 声明管理。根目录入口与 `scripts/setup-codex-mcp.py` 必须保持仓库中的相对路径，不单独复制入口或通过异目录符号链接调用。原 Python 命令仍兼容。
+入口参考 Homebrew 的 Gradle/Maven 命令脚本：Bash 根据显式操作参数选择入口，通过 `exec` 启动对应程序并保留退出状态。MCP 操作调用项目内的 `scripts/setup-codex-mcp.py` 实现；Skill 和全局指令操作通过 `uv tool dir --bin` 定位已安装的完整发行包入口，额外选项原样转发。支持本机 Bash 3.2；从其他工作目录调用时使用该入口的绝对路径。需要 `uv` 位于 `PATH`，MCP 和 Hooks 安装脚本的 Python 版本与依赖由各自 PEP 723 声明管理；Hooks 作为独立 uv tool 安装。根目录入口与对应源码组件必须保持仓库中的相对路径，不单独复制入口或通过异目录符号链接调用。原 Python 命令仍兼容。
 
 安装和更新按资源使用独立参数；操作参数必须放在首位，每次只选择一种资源：
 
@@ -91,13 +91,21 @@ uv tool install --force ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.w
 | `--mcp-install` | `--mcp-update` | 安装或更新软件包，注册 MCP 并配置变量转发；不更新 Skill 或全局指令。 |
 | `--skills-install` | `--skills-update` | 从已安装完整发行包复制或更新 Skill；不安装软件包、不注册 MCP。 |
 | `--agents-install` | `--agents-update` | 创建或更新全局 `AGENTS.md`；不安装软件包、不注册 MCP。 |
+| `--hooks-install` | `--hooks-update` | 从源码安装或更新项目级或用户全局 Codex Hooks；不修改宿主信任。 |
 
 ```bash
 ./dws --skills-install
 ./dws --skills-update --dry-run
 ./dws --agents-install --dry-run
 ./dws --agents-update --dry-run
+./dws --hooks-install --project-root /absolute/path/to/target-project --dry-run
+./dws --hooks-update --project-root /absolute/path/to/target-project --dry-run
+./dws --hooks-install --global --dry-run
+./dws --hooks-update --global --dry-run
+./dws --hooks-install --global --merge --dry-run  # 已有其他 Hooks 配置时显式合并
 ```
+
+Hooks 操作先通过 `uv tool` 安装或重装独立的 `dev-workflow-standards-hooks` 包，再使用已安装入口的 `configure` 子命令注册到 `hooks.json`。配置中的命令为该 CLI 的绝对路径，不依赖源码或项目 `.venv`。必须二选一：`--project-root` 指定已有绝对项目目录，或 `--global` 选择用户全局目录（默认 `~/.codex`；显式 `CODEX_HOME` 必须是已有绝对目录）。`dws --dry-run` 只显示安装和注册计划，不执行安装、目标校验或写入；需精确预览合并配置时，在包安装后使用 `"$(uv tool dir --bin)/dev-workflow-standards-hooks" configure --global --install --merge --dry-run`。更新拒绝本地修改，并可迁移校验通过的旧版受管脚本注册；旧脚本保留但不再调用。详见 [Hooks 安装与更新](codex-hooks/README.md#安装注册与更新)。
 
 Skill 选项包括 `--target`、`--dry-run`；全局指令选项包括 `--source`、`--dry-run`、`--adopt`、`--replace-local`。`--agents-install` 和 `--agents-update` 均复用管理 CLI 的 `agents update`：目标不存在时创建，已有未知文件仍需显式 `--adopt`，不会绕过备份或本地修改保护。资源操作使用已安装包内的内容；需要最新源码时，先独立更新完整发行包。各操作后加 `--help` 查看选项；原 MCP 参数 `--install`、`--install --force`、`--env-only` 仍兼容。
 
@@ -166,7 +174,7 @@ uv tool uninstall dev-workflow-standards-mcp
 
 ## 使用
 
-可选的 [原生 Codex Hooks](codex-hooks/README.md) 将部分指令合同转换为实际宿主回调：会话与交付提示、MCP 目标仓库路径硬校验，以及结构化失败后的恢复提示。使用 `scripts/setup-codex-hooks.py` 预览或显式安装到目标项目；独立于 Skill/MCP 安装，不覆盖已有 hooks，不自动授予信任或后续操作权限。
+可选的 [原生 Codex Hooks](codex-hooks/README.md) 将部分指令合同转换为实际宿主回调：会话与交付提示、MCP 目标仓库路径硬校验，以及结构化失败后的恢复提示。使用 `./dws --hooks-install` 或 `--hooks-update`，选择 `--global` 或显式 `--project-root`；独立于 Skill/MCP 安装，不覆盖未知或本地修改的 hooks，不自动授予信任或后续操作权限。
 
 使用 [`SKILL.md`](skills/dev-workflow-standards/SKILL.md) 时按 [`Hook 索引`](skills/dev-workflow-standards/hooks/index.md) 读取当前动作适用的合同，由 Agent 判断操作组合；按 [`references/mcp-tools.md`](skills/dev-workflow-standards/references/mcp-tools.md) 调用对应工具。所有仓库操作都要传入本次目标项目的绝对 `repo_path`；服务器不会把启动时的目录当作目标仓库。
 
