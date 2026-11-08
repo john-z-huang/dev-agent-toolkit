@@ -2,6 +2,36 @@
 
 Skill 指令从发布包复制为普通文件快照。开发仓库可以放在任意目录，不需要放入 Skill 扫描目录，也不使用指向源码的符号链接。安装软件包与更新已安装 Skill 是两个独立动作。
 
+## 源码仓库的安装更新入口
+
+在源码仓库根目录使用 `scripts/setup-codex-mcp.sh`。需要 `uv` 位于 `PATH`，本机 Bash 3.2 可执行；从其他工作目录调用时使用脚本的绝对路径。
+
+```bash
+# 无参数只打印帮助并返回 0，不执行安装、注册或文件写入
+./scripts/setup-codex-mcp.sh
+./scripts/setup-codex-mcp.sh --help
+# 查看某项操作的选项
+./scripts/setup-codex-mcp.sh --skills-install --help
+```
+
+操作参数放在首位，每次选择一项；其余参数传给对应管理程序：
+
+| 资源 | 安装参数 | 更新参数 | 执行范围 |
+| --- | --- | --- | --- |
+| MCP Server | `--mcp-install` | `--mcp-update` | 安装或更新软件包、注册服务并配置环境变量转发。 |
+| Skill | `--skills-install` | `--skills-update` | 仅管理 Skill 快照，不安装软件包或注册 MCP。 |
+| 全局 `AGENTS.md` | `--agents-install` | `--agents-update` | 仅管理全局指令，不安装软件包或注册 MCP。 |
+
+```bash
+./scripts/setup-codex-mcp.sh --mcp-update --dry-run
+./scripts/setup-codex-mcp.sh --skills-update --dry-run
+./scripts/setup-codex-mcp.sh --agents-update --dry-run
+```
+
+Skill 和全局指令操作通过 `uv tool dir --bin` 定位已安装完整发行包的 `dev-workflow-standards` 入口，不从源码开发环境读取资源。先按下文构建并安装完整 wheel，再选择所需的资源操作；更新软件包不会自动刷新指令快照。不在源码仓库中时，仍可使用下文的完整发行包 CLI 命令。
+
+Skill 支持 `--target` 和 `--dry-run`。全局指令支持 `--source`、`--dry-run`、`--adopt` 和 `--replace-local`；`--agents-install` 与 `--agents-update` 均转交 `agents update`，目标不存在时创建，已有未知文件仍需显式接管，备份与本地修改保护保持有效。预览后去掉 `--dry-run` 才执行对应写入，预览成功不表示已安装或更新。
+
 ## 安装发布包
 
 以下构建、安装和更新命令均在本仓库根目录执行。先构建完整 wheel，再从 `./dist/` 安装；示例对应当前版本 `0.2.0`，版本变更时使用该目录中实际生成的 wheel 文件名。本项目不假定已有公开包索引。
@@ -86,4 +116,6 @@ uv tool dir --bin
 
 原 `dev-workflow-standards-tools` 命令仍直接启动 stdio MCP。Skill 管理入口是另一个命令，不向该入口加入隐式安装动作。MCP 注册、环境变量名称转发及审批继续遵循原规则。
 
-需要源码安装配置脚本时，按仓库 [README 的 Codex 安装说明](https://github.com/john-z-huang/dev-workflow-standards#codex-中安装) 使用 `scripts/setup-codex-mcp.py`；该脚本属于源码开发资产，不包含在 Skill 快照中。完整仓库结构和 Hook/历史兼容脚本见 [项目仓库](https://github.com/john-z-huang/dev-workflow-standards)。独立 Skill 不依赖这些脚本才能加载；固定操作优先按 [MCP 工具目录](mcp-tools.md) 调用已注册服务，未提供工具或功能未覆盖时按 [CLI 补充规约](cli-fallback.md) 在任务授权内完成。
+源码入口的操作参数见本文前面的“源码仓库的安装更新入口”，注册、转发和审批选项见 [README 的 Codex 安装说明](https://github.com/john-z-huang/dev-workflow-standards#codex-中安装)。仅注册已有 MCP 安装可运行 `./scripts/setup-codex-mcp.sh --server dev-workflow-standards-tools`；仅修复已注册服务的转发声明使用 `--env-only`。无参数不再执行注册，只打印帮助。原 Python 入口及 `--install`、`--install --force` 等 MCP 参数仍兼容。
+
+MCP 操作通过 `exec` 调用同目录的 `setup-codex-mcp.py`，两者必须保留在同一目录。入口不依赖调用者的工作目录，原样转发参数与退出状态。这两个脚本属于源码开发资产，不包含在 Skill 快照中。完整仓库结构和 Hook/历史兼容脚本见 [项目仓库](https://github.com/john-z-huang/dev-workflow-standards)。独立 Skill 不依赖这些脚本才能加载；固定操作优先按 [MCP 工具目录](mcp-tools.md) 调用已注册服务，未提供工具或功能未覆盖时按 [CLI 补充规约](cli-fallback.md) 在任务授权内完成。
