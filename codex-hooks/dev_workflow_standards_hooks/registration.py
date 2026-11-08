@@ -6,63 +6,36 @@ import argparse
 import hashlib
 import json
 import os
-import shlex
 import sys
 import tempfile
 from pathlib import Path
+from typing import NotRequired, TypedDict
+
+from . import configuration
+from .configuration import (
+    HookConfiguration,
+    HookSetupError,
+    build_config,
+    merge_configuration,
+    validate_configuration,
+)
+
+# 保留既有构造函数的导入路径，配置实现统一在纯配置模块维护。
+command_group = configuration.command_group
 
 
-class HookSetupError(ValueError):
-    """只包含可安全展示的安装诊断。"""
+class HookManifest(TypedDict):
+    """受管文件指纹及可选的合并前配置；仅用于完整性检查。"""
+
+    format: int
+    files: dict[str, str]
+    base_configuration: NotRequired[HookConfiguration]
 
 
-def command_group(
-    executable: Path, status_message: str, matcher: str | None = None
-) -> dict:
-    handler = {
-        "type": "command",
-        "command": shlex.quote(str(executable)),
-        "timeout": 5,
-        "statusMessage": status_message,
-    }
-    group = {"hooks": [handler]}
-    if matcher is not None:
-        group["matcher"] = matcher
-    return group
-
-
-def build_config(executable: Path) -> dict:
-    tools = (
-        r"^(Bash|exec_command|shell|shell_command|apply_patch|"
-        r"mcp__(dev-workflow-standards-tools|dev_workflow_standards_tools)__.*)$"
-    )
-    return {
-        "hooks": {
-            "SessionStart": [command_group(executable, "加载会话开发约束与授权边界")],
-            "UserPromptSubmit": [command_group(executable, "提示本轮交付与验证要求")],
-            "PreToolUse": [
-                command_group(
-                    executable,
-                    "核验目标仓库路径与工具调用条件",
-                    r"^mcp__(dev-workflow-standards-tools|dev_workflow_standards_tools)__.*$",
-                ),
-                command_group(
-                    executable,
-                    "提示 Python/Shell 执行环境要求",
-                    r"^(Bash|exec_command|shell|shell_command)$",
-                ),
-                command_group(
-                    executable, "提示修改范围与现有内容保护", r"^apply_patch$"
-                ),
-            ],
-            "PostToolUse": [
-                command_group(executable, "识别工具失败并提示恢复要求", tools)
-            ],
-        }
-    }
-
-
-def managed_files(directory: Path, configuration: dict) -> dict[Path, bytes]:
+def managed_files(
+    directory: Path, configuration: HookConfiguration
+) -> dict[Path, bytes]:
+    """生成待写字节并拒绝目标目录链接；本函数不创建或覆盖文件。"""
     if directory.is_symlink() or (directory / "hooks").is_symlink():
         raise HookSetupError("目标 .codex 或 hooks 目录不能是符号链接")
     return {
@@ -76,7 +49,10 @@ def file_hashes(files: dict[Path, bytes]) -> dict[str, str]:
     return {path.name: hashlib.sha256(data).hexdigest() for path, data in files.items()}
 
 
-def validate_target(files: dict[Path, bytes], manifest: Path, update: bool) -> dict:
+def validate_target(
+    files: dict[Path, bytes], manifest: Path, update: bool
+) -> HookManifest | None:
+    """首次注册拒绝已有资源，更新核对清单及旧脚本；失败不写入。"""
     paths = [*files, manifest]
     if not update:
         paths.append(manifest.parent / "dev_workflow.py")
@@ -85,7 +61,7 @@ def validate_target(files: dict[Path, bytes], manifest: Path, update: bool) -> d
                 "目标已有 Hooks 资源。受管安装请用 --update；仅有 hooks.json 时，"
                 "可先加 --merge --dry-run 审阅合并计划。"
             )
-        return {}
+        return None
     if any(
         path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1
         for path in paths
@@ -105,45 +81,28 @@ def validate_target(files: dict[Path, bytes], manifest: Path, update: bool) -> d
     return validate_manifest(record, observed)
 
 
-def validate_manifest(record: object, observed: dict[str, str]) -> dict:
+def validate_manifest(record: object, observed: dict[str, str]) -> HookManifest:
+    """核对受管指纹及版本结构，将外部 JSON 转为明确的清单类型。"""
     if not isinstance(record, dict) or record.get("files") != observed:
         raise HookSetupError("受管文件已修改或清单不匹配；不会覆盖本地修改")
     schema = record.get("format")
     expected = {"format", "files"}
     if schema == 2 or (schema == 3 and "base_configuration" in record):
         expected.add("base_configuration")
-    if schema not in (1, 2, 3) or set(record) != expected:
+    if type(schema) is not int or schema not in (1, 2, 3) or set(record) != expected:
         raise HookSetupError("受管清单格式无效")
+    validated: HookManifest = {"format": schema, "files": observed}
     if "base_configuration" in record:
-        validate_configuration(record["base_configuration"])
-    return record
+        validated["base_configuration"] = validate_configuration(
+            record["base_configuration"]
+        )
+    return validated
 
 
-def validate_configuration(configuration: object) -> None:
-    if not isinstance(configuration, dict) or not isinstance(
-        configuration.get("hooks"), dict
-    ):
-        raise HookSetupError("已有 hooks.json 必须是包含 hooks 对象的 JSON 配置")
-    for groups in configuration["hooks"].values():
-        if not isinstance(groups, list) or any(
-            not isinstance(group, dict) for group in groups
-        ):
-            raise HookSetupError("已有 Hooks 事件必须是对象数组；请手工审阅")
-
-
-def merge_configuration(base: dict, configuration: dict) -> dict:
-    validate_configuration(base)
-    merged = {
-        **base,
-        "hooks": {event: list(groups) for event, groups in base["hooks"].items()},
-    }
-    for event, groups in configuration["hooks"].items():
-        target = merged["hooks"].setdefault(event, [])
-        target.extend(group for group in groups if group not in target)
-    return merged
-
-
-def merge_base(directory: Path, files: dict[Path, bytes], manifest: Path) -> dict:
+def merge_base(
+    directory: Path, files: dict[Path, bytes], manifest: Path
+) -> HookConfiguration:
+    """只接入现有普通配置；本工具脚本或清单残留时拒绝推断归属。"""
     config = directory / "hooks.json"
     # 只允许接入已有普通配置；脚本和清单有残留时不能推断安装归属。
     if config.is_symlink() or not config.is_file() or config.stat().st_nlink != 1:
@@ -153,12 +112,11 @@ def merge_base(directory: Path, files: dict[Path, bytes], manifest: Path) -> dic
     validate_target(
         {path: data for path, data in files.items() if path != config}, manifest, False
     )
-    base = json.loads(config.read_bytes())
-    validate_configuration(base)
-    return base
+    return validate_configuration(json.loads(config.read_bytes()))
 
 
 def backup_configuration(path: Path) -> None:
+    """独占保存原始配置字节并报告备份位置，失败时由调用者停止注册。"""
     descriptor, name = tempfile.mkstemp(prefix="hooks.json.backup-", dir=path.parent)
     with os.fdopen(descriptor, "wb") as stream:
         stream.write(path.read_bytes())
@@ -166,6 +124,7 @@ def backup_configuration(path: Path) -> None:
 
 
 def replace_file(path: Path, data: bytes) -> None:
+    """在同目录暂存并原子替换单个文件，异常时释放句柄及临时路径。"""
     # 单文件原子替换；多文件更新中断后由清单校验失败关闭。
     descriptor, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     temporary = Path(name)
@@ -177,33 +136,11 @@ def replace_file(path: Path, data: bytes) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def install(
-    directory: Path,
-    configuration: dict,
-    *,
-    update: bool,
-    dry_run: bool,
-    merge: bool = False,
-) -> dict:
-    files = managed_files(directory, configuration)
-    manifest = directory / "hooks/dev_workflow.manifest.json"
-    previous = {} if merge else validate_target(files, manifest, update)
-    base = (
-        merge_base(directory, files, manifest)
-        if merge
-        else previous.get("base_configuration")
-    )
-    if base is not None:
-        configuration = merge_configuration(base, configuration)
-        files = managed_files(directory, configuration)
-    record = {"format": 3, "files": file_hashes(files)}
-    if base is not None:
-        record["base_configuration"] = base
-    files[manifest] = (json.dumps(record, indent=2) + "\n").encode("utf-8")
-    if dry_run:
-        return configuration
-    if merge:
-        backup_configuration(directory / "hooks.json")
+def publish_files(files: dict[Path, bytes], *, update: bool, merge: bool) -> None:
+    """按注册模式发布文件；更新只替换变化内容，首次注册独占创建。
+
+    每个替换单独原子执行；中途失败时保留已发布内容供调用者核对。
+    """
     for path, data in files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         if update or (merge and path.name == "hooks.json"):
@@ -212,10 +149,43 @@ def install(
         else:
             with path.open("xb") as stream:
                 stream.write(data)
+
+
+def install(
+    directory: Path,
+    configuration: HookConfiguration,
+    *,
+    update: bool,
+    dry_run: bool,
+    merge: bool = False,
+) -> HookConfiguration:
+    """校验后注册配置并发布清单；预览不写入，显式合并先保存备份。
+
+    多文件发布不保证整体原子性；中断后需先核对实际配置和清单。
+    """
+    files = managed_files(directory, configuration)
+    manifest = directory / "hooks/dev_workflow.manifest.json"
+    previous = None if merge else validate_target(files, manifest, update)
+    base = previous.get("base_configuration") if previous is not None else None
+    if merge:
+        base = merge_base(directory, files, manifest)
+    if base is not None:
+        configuration = merge_configuration(base, configuration)
+        files = managed_files(directory, configuration)
+    record: HookManifest = {"format": 3, "files": file_hashes(files)}
+    if base is not None:
+        record["base_configuration"] = base
+    files[manifest] = (json.dumps(record, indent=2) + "\n").encode("utf-8")
+    if dry_run:
+        return configuration
+    if merge:
+        backup_configuration(directory / "hooks.json")
+    publish_files(files, update=update, merge=merge)
     return configuration
 
 
 def target_directory(args: argparse.Namespace, parser: argparse.ArgumentParser) -> Path:
+    """解析项目或全局目标，保留最终目录链接供注册校验拒绝。"""
     if args.project_root is not None:
         if not args.project_root.is_absolute() or not args.project_root.is_dir():
             parser.error("--project-root 必须是已存在的绝对目录")
@@ -255,6 +225,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(executable: Path, arguments: list[str]) -> int:
+    """注册 CLI 边界；输出候选配置，仅向用户返回安全诊断和退出码。"""
     parser = build_parser()
     args = parser.parse_args(arguments)
     if args.merge and not args.install:

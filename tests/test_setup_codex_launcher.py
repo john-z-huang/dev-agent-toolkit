@@ -170,7 +170,10 @@ class SetupLauncherTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             # 只提供入口定位所需命令，确保不会意外调用本机 uv。
-            (root / "dirname").symlink_to(shutil.which("dirname"))
+            dirname = shutil.which("dirname")
+            if dirname is None:
+                self.skipTest("requires dirname")
+            (root / "dirname").symlink_to(dirname)
             config = root / "config.toml"
             result = subprocess.run(
                 [str(LAUNCHER), "--install", "--config", str(config)],

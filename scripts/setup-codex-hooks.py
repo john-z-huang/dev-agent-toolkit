@@ -17,6 +17,7 @@ TOOL = "dev-workflow-standards-hooks"
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """声明安装阶段选项；软件包安装和配置注册仍是两个独立阶段。"""
     parser = argparse.ArgumentParser(description=__doc__)
     scope = parser.add_mutually_exclusive_group(required=True)
     scope.add_argument("--project-root", type=Path, help="目标项目的绝对目录")
@@ -50,6 +51,7 @@ def registration_arguments(args: argparse.Namespace) -> list[str]:
 
 
 def install_tool(command: list[str]) -> Path:
+    """执行 uv 安装并验证实际入口；失败时尚未开始配置注册。"""
     subprocess.run(command, check=True, capture_output=True, timeout=120)
     result = subprocess.run(
         ["uv", "tool", "dir", "--bin"],
@@ -68,6 +70,21 @@ def install_tool(command: list[str]) -> Path:
         timeout=10,
     )
     return executable
+
+
+def register_tool(executable: Path, arguments: list[str]) -> int:
+    """执行已安装注册器，保留退出码并区分失败与写入状态未知。"""
+    try:
+        result = subprocess.run([str(executable), *arguments], check=False, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        print(
+            "软件包已安装；Hooks 注册中断，请检查实际配置与备份后再处理。",
+            file=sys.stderr,
+        )
+        return 1
+    if result.returncode:
+        print("软件包已安装；Hooks 注册未完成，未回滚软件包。", file=sys.stderr)
+    return result.returncode
 
 
 def main() -> int:
@@ -97,17 +114,7 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    try:
-        result = subprocess.run([str(executable), *configure], check=False, timeout=30)
-    except (OSError, subprocess.SubprocessError):
-        print(
-            "软件包已安装；Hooks 注册中断，请检查实际配置与备份后再处理。",
-            file=sys.stderr,
-        )
-        return 1
-    if result.returncode:
-        print("软件包已安装；Hooks 注册未完成，未回滚软件包。", file=sys.stderr)
-    return result.returncode
+    return register_tool(executable, configure)
 
 
 if __name__ == "__main__":

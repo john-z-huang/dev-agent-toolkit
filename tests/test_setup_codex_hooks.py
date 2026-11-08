@@ -20,7 +20,7 @@ spec.loader.exec_module(setup)
 
 
 class HooksSetupTests(unittest.TestCase):
-    def test_dry_run_does_not_install_or_register(self):
+    def test_dry_run_does_not_install_or_register(self) -> None:
         with (
             patch.object(
                 sys,
@@ -35,7 +35,9 @@ class HooksSetupTests(unittest.TestCase):
             self.assertIn("uv tool install", output.getvalue())
             self.assertIn("configure --global --install --merge", output.getvalue())
 
-    def test_update_installs_package_then_verifies_and_registers_exact_entry(self):
+    def test_update_installs_package_then_verifies_and_registers_exact_entry(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory(prefix="hooks bin ") as directory:
             root = Path(directory)
             executable = root / setup.TOOL
@@ -63,7 +65,7 @@ class HooksSetupTests(unittest.TestCase):
             )
             self.assertIn("软件包已安装", output.getvalue())
 
-    def test_package_install_failure_never_registers_or_echoes_exception(self):
+    def test_package_install_failure_never_registers_or_echoes_exception(self) -> None:
         failure = subprocess.CalledProcessError(1, ["uv"], output="SENSITIVE_ERROR")
         with (
             patch.object(sys, "argv", [str(SETUP), "--global", "--install"]),
@@ -74,7 +76,9 @@ class HooksSetupTests(unittest.TestCase):
             self.assertEqual(run.call_count, 1)
             self.assertNotIn("SENSITIVE", output.getvalue())
 
-    def test_registration_timeout_reports_installed_package_and_uncertain_config(self):
+    def test_registration_timeout_reports_installed_package_and_uncertain_config(
+        self,
+    ) -> None:
         with (
             patch.object(sys, "argv", [str(SETUP), "--global", "--install"]),
             patch.object(

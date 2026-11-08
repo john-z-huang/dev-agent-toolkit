@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from codex_hooks_test_support import hooks_command
+from codex_hooks_test_support import InstalledHooksTestCase
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "codex-hooks/dev_workflow_standards_hooks/runtime.py"
@@ -132,9 +132,9 @@ class CodexHookTests(unittest.TestCase):
             {"exit_code": 1},
             {"structuredContent": {"ok": False}},
         ):
-            response["secret"] = "SENSITIVE_ERROR"
+            payload: dict[str, object] = {**response, "secret": "SENSITIVE_ERROR"}
             output = run_hook(
-                {"hook_event_name": "PostToolUse", "tool_response": response}
+                {"hook_event_name": "PostToolUse", "tool_response": payload}
             )
             self.assertIn("additionalContext", output["hookSpecificOutput"])
             self.assertNotIn("decision", output)
@@ -172,11 +172,13 @@ class CodexHookTests(unittest.TestCase):
             self.assertNotIn("SENSITIVE", result.stderr)
 
 
-class CodexHookInstallationTests(unittest.TestCase):
-    def test_pre_tool_status_matches_each_scenario_without_duplicate_handlers(self):
+class CodexHookInstallationTests(InstalledHooksTestCase):
+    def test_pre_tool_status_matches_each_scenario_without_duplicate_handlers(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             result = subprocess.run(
-                [*hooks_command(), "--project-root", directory],
+                [*self.configure_command, "--project-root", directory],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -211,10 +213,10 @@ class CodexHookInstallationTests(unittest.TestCase):
             ]
             self.assertEqual(len(messages), len(set(messages)))
 
-    def test_preview_install_execution_and_refusal_to_overwrite(self):
+    def test_preview_install_execution_and_refusal_to_overwrite(self) -> None:
         with tempfile.TemporaryDirectory(prefix="hooks ' quoted ") as directory:
             project = Path(directory).resolve()
-            command = [*hooks_command(), "--project-root", str(project)]
+            command = [*self.configure_command, "--project-root", str(project)]
             preview = subprocess.run(
                 command, capture_output=True, text=True, check=True
             )
@@ -246,11 +248,11 @@ class CodexHookInstallationTests(unittest.TestCase):
             subprocess.run([*command, "--update"], capture_output=True, check=True)
             self.assertEqual((project / ".codex/hooks.json").read_bytes(), before)
 
-    def test_global_install_update_and_local_change_protection(self):
+    def test_global_install_update_and_local_change_protection(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory).resolve()
             env = {**os.environ, "CODEX_HOME": str(home)}
-            command = [*hooks_command(), "--global"]
+            command = [*self.configure_command, "--global"]
             subprocess.run(
                 [*command, "--install", "--dry-run"],
                 env=env,
@@ -273,14 +275,14 @@ class CodexHookInstallationTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertEqual(config.read_bytes(), b"local changes")
 
-    def test_default_home_and_scope_validation(self):
+    def test_default_home_and_scope_validation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory).resolve()
             env = {
                 key: value for key, value in os.environ.items() if key != "CODEX_HOME"
             }
             env["HOME"] = str(home)
-            command = hooks_command()
+            command = self.configure_command
             subprocess.run(
                 [*command, "--global", "--install"],
                 env=env,
@@ -294,7 +296,7 @@ class CodexHookInstallationTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 2)
 
-    def test_update_refuses_modified_missing_and_linked_resources(self):
+    def test_update_refuses_modified_missing_and_linked_resources(self) -> None:
         for name in ("hooks.json", "hooks/dev_workflow.manifest.json"):
             for change in ("modified", "missing", "symlink", "hardlink"):
                 with (
@@ -303,7 +305,7 @@ class CodexHookInstallationTests(unittest.TestCase):
                 ):
                     home = Path(directory).resolve()
                     env = {**os.environ, "CODEX_HOME": str(home)}
-                    command = [*hooks_command(), "--global"]
+                    command = [*self.configure_command, "--global"]
                     subprocess.run(
                         [*command, "--install"],
                         env=env,
@@ -331,7 +333,7 @@ class CodexHookInstallationTests(unittest.TestCase):
                         )
                         self.assertEqual(result.returncode, 1, result.stderr)
 
-    def test_global_rejects_invalid_and_symlinked_home(self):
+    def test_global_rejects_invalid_and_symlinked_home(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             outside = root / "outside"
@@ -345,7 +347,7 @@ class CodexHookInstallationTests(unittest.TestCase):
                 (str(linked), 1),
             ):
                 result = subprocess.run(
-                    [*hooks_command(), "--global", "--install"],
+                    [*self.configure_command, "--global", "--install"],
                     env={**os.environ, "CODEX_HOME": target},
                     capture_output=True,
                     check=False,
@@ -353,7 +355,7 @@ class CodexHookInstallationTests(unittest.TestCase):
                 self.assertEqual(result.returncode, status, result.stderr)
             self.assertEqual(list(outside.iterdir()), [])
 
-    def test_update_migrates_legacy_snapshot_and_preserves_script(self):
+    def test_update_migrates_legacy_snapshot_and_preserves_script(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             scripts = root / "hooks"
@@ -372,7 +374,7 @@ class CodexHookInstallationTests(unittest.TestCase):
             }
             manifest.write_text(json.dumps(record))
             result = subprocess.run(
-                [*hooks_command(), "--global", "--update"],
+                [*self.configure_command, "--global", "--update"],
                 env={**os.environ, "CODEX_HOME": str(root)},
                 capture_output=True,
                 check=False,
