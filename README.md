@@ -1,12 +1,12 @@
 # dev-workflow-standards
 
-此项目将开发规范拆为两层：Skill 文档保留场景分析、顺序、授权与验收；本地 MCP 服务执行固定 Git/GitHub 操作，并提供只读的 Codex 会话事实辅助工具。当前维护的本地 MCP 服务为 Python 实现，由 `uv` 管理，并通过 `uv tool` 安装到本机供 Codex 使用。
+此项目将开发规范拆为两层：Skill 文档以声明式 Hooks 描述动作的进入、执行、离开和重查条件，由 Agent 自行规划顺序；本地 MCP 服务执行固定 Git/GitHub 操作，并提供只读的 Codex 会话事实辅助工具。当前维护的本地 MCP 服务为 Python 实现，由 `uv` 管理，并通过 `uv tool` 安装到本机供 Codex 使用。
 
-工作流判断与开发文案生成通过 OpenAI Python SDK 完成：判断使用 Decisions API，生成使用 Responses API。所有请求固定为 `gpt-6-luna`，强制在调用时读取 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`；缺少任意配置即拒绝请求，不使用默认凭据、默认地址或其他模型。Decisions 使用接口自身机制，生成按任务复杂度显式指定推理强度，默认 `medium`。
+领域规则判断与开发文案生成通过 OpenAI Python SDK 完成：判断使用 Decisions API，生成使用 Responses API。所有请求固定为 `gpt-6-luna`，强制在调用时读取 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`；缺少任意配置即拒绝请求，不使用默认凭据、默认地址或其他模型。Decisions 使用接口自身机制，生成按任务复杂度显式指定推理强度，默认 `medium`。
 
 `check_api_input` 默认允许向配置的审核服务发起外部 API 调用，无需前置审核、自我审核或逐次人工授权；它自身的本地敏感输入检测和配置检查仍先运行。当前任务所需项目内容通过完整输入审核后，允许向既定配置服务外发，无需重复确认。该规则同样适用于使用此入口的其他 MCP Server，不扩大 Git、Memory 或外部发布权限；用户明确禁止外发及更高优先级限制仍生效。完整协议及失败处理见 [API 输入审核](skills/dev-workflow-standards/references/api-input-review.md)。
 
-统一客户端为每次调用显式注入 `httpx2.Client(trust_env=True)`，读取服务进程的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（支持小写形式）。配置适用代理且目标未命中 `NO_PROXY` 时，请求通过代理；未配置代理时按库默认直连。代理配置或连接失败会返回安全错误，不回退直连。代理地址和认证信息不应写入仓库或日志。
+统一客户端为每次调用显式注入 `httpx2.AsyncClient(trust_env=True)`，读取服务进程的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（支持小写形式）。配置适用代理且目标未命中 `NO_PROXY` 时，请求通过代理；未配置代理时按库默认直连。代理配置或连接失败会返回安全错误，不回退直连。代理地址和认证信息不应写入仓库或日志。
 
 ## 独立安装 Skill
 
@@ -130,11 +130,11 @@ uv tool uninstall dev-workflow-standards-mcp
 
 ## 使用
 
-使用 [`SKILL.md`](skills/dev-workflow-standards/SKILL.md) 时按 [`workflows/index.md`](skills/dev-workflow-standards/workflows/index.md) 选择工作流，再按 [`references/mcp-tools.md`](skills/dev-workflow-standards/references/mcp-tools.md) 调用对应工具。所有仓库操作都要传入本次目标项目的绝对 `repo_path`；服务器不会把启动时的目录当作目标仓库。
+使用 [`SKILL.md`](skills/dev-workflow-standards/SKILL.md) 时按 [`Hook 索引`](skills/dev-workflow-standards/hooks/index.md) 读取当前动作适用的合同，由 Agent 判断操作组合；按 [`references/mcp-tools.md`](skills/dev-workflow-standards/references/mcp-tools.md) 调用对应工具。所有仓库操作都要传入本次目标项目的绝对 `repo_path`；服务器不会把启动时的目录当作目标仓库。
 
 Python 执行和依赖环境任务按需读取 [`references/python-environment.md`](skills/dev-workflow-standards/references/python-environment.md)，Shell 脚本开发和验证按需读取 [`references/shell-environment.md`](skills/dev-workflow-standards/references/shell-environment.md)。独立脚本无需先进入 Git 工作流；非开发任务不增加环境规则加载步骤。
 
-Git/GitHub 写操作必须先满足工作流中的用户授权和执行层审批；已有授权在原范围内持续有效。操作优先使用能够满足需求的 MCP 工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，Code Agent 可按 [`MCP 优先与 CLI 补充`](skills/dev-workflow-standards/references/cli-fallback.md) 自行选择相关 CLI、组合必要命令，完成查询或已授权写入，无须仅因工具缺口再问授权。工作流顺序、必要检查、沙箱和审批继续生效；工具/服务实际发生连接、权限、认证、网络、状态或校验失败时保留现场，不换入口绕过。服务本身仍只接受固定领域参数，不提供任意 shell、git、gh 或项目测试命令。
+Git/GitHub 写操作必须满足对应动作的用户授权和执行层审批；已有授权在原范围内持续有效。操作优先使用能够满足需求的 MCP 工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，Code Agent 可按 [`MCP 优先与 CLI 补充`](skills/dev-workflow-standards/references/cli-fallback.md) 自行选择相关 CLI、组合必要命令，完成查询或已授权写入，无须仅因工具缺口再问授权。动作条件、必要检查、沙箱和审批继续生效；工具/服务实际发生连接、权限、认证、网络、状态或校验失败时保留现场，不换入口绕过。服务本身仍只接受固定领域参数，不提供任意 shell、git、gh 或项目测试命令。
 
 已在当前 checkout 开始工作、需要从当前 HEAD 原地建立工作分支时，使用 `create_repository_branch`。它支持 detached HEAD 和普通分支，保留已暂存、未暂存及未跟踪内容；只新增本地分支并改变 HEAD，不创建其他 checkout。它与切换已有分支的 `switch_repository_branch`、创建新目录的 `create_repository_worktree` 分别适用不同场景。参数、OID 并发条件、Hook 限制和失败后的回读要求见 [`MCP 工具目录`](skills/dev-workflow-standards/references/mcp-tools.md#原地创建工作分支)。
 
@@ -146,7 +146,7 @@ Git/GitHub 写操作必须先满足工作流中的用户授权和执行层审批
 
 ### MCP 客户端可见的使用说明
 
-服务初始化指令说明工具分组、选择依据、通用前置条件和典型调用顺序；工具发现返回的描述说明各工具的用途、边界、前置步骤、结果含义及失败后的处理。参数 Schema 同时提供顶层参数和嵌套字段的说明，复杂输入附有合成示例。Code Agent 应先依据这些元数据选择工具，再按参数要求提供事实，无需先自行完成工具承担的判断或内容生成。
+服务初始化指令说明工具分组、选择依据、通用前置条件和真实数据依赖；工具发现返回的描述说明各工具的用途、边界、执行条件、结果含义及失败后的处理。参数 Schema 同时提供顶层参数和嵌套字段的说明，复杂输入附有合成示例。Code Agent 应先依据这些元数据选择工具，再按参数要求提供事实，无需先自行完成工具承担的判断或内容生成。
 
 维护服务或工具时，必须同步更新客户端可见的说明，不能只改本文件。尤其要区分只读与离线、本地校验与 API 建议、候选内容与已执行操作，以及操作失败与部分副作用。初始化和工具发现检查应验证说明、输入约束和工具注解与实现一致；说明不得改变已有参数类型、默认值或校验规则。
 
@@ -161,7 +161,6 @@ Git/GitHub 写操作必须先满足工作流中的用户授权和执行层审批
 ### API 判断与生成工具
 
 - `check_api_input`：通用外发内容预检，请求仅包含 `purpose` 和 `content` 两个必填非空字符串；先在本地检测凭据、登录令牌、不透明载荷及输入限制，再调用 Decisions 审核。不检查文件或目录路径；自动出站审核采用同一规则。其他 MCP Server 可按相同协议使用，无需指定目标工具或仓库。
-- `decide_skill_workflow`：根据明确流程条件选择工作流。
 - `decide_codex_session_action`：判断查询历史、查询项目、澄清/阻塞，以及摘要创建、更新或跳过的分支。
 - `generate_skill_content`：根据证据、查询重点和用户格式生成 Issue、PR、提交信息、计划、交接或历史会话摘要候选内容。
 
@@ -175,8 +174,8 @@ MCP 进程必须能继承上述两个 OpenAI 环境变量；需要代理时还�
 
 ## 项目结构
 
-- `skills/dev-workflow-standards/SKILL.md`：唯一 Skill 入口、共用边界和加载顺序。
-- `skills/dev-workflow-standards/workflows/`：场景判断、先后依赖、授权和完成条件。
+- `skills/dev-workflow-standards/SKILL.md`：唯一 Skill 入口、共用边界及按需条件索引。
+- `skills/dev-workflow-standards/hooks/`：独立动作的进入、执行、离开及重新核验条件。
 - `skills/dev-workflow-standards/references/`：按需加载的决策细节、独立安装说明和 MCP 工具映射。
 - `mcp-server/`：Python/uv MCP v2 stdio 服务和固定操作工具。
 - `instructions/codex-global.md`：版本化的全局指令源；通过独立 CLI 显式同步到用户目录。
@@ -237,3 +236,13 @@ uv run --locked --group codex-test -- python ../tests/codex_sdk_smoke.py --wheel
 所有 SDK 测试固定模型 `gpt-6-luna`、推理强度 `medium`，不接受命令行或环境变量覆盖，也不自动切换模型。两种模式都要求当前进程提供非空的 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL`；每次读取并显式配置测试 provider，不使用默认地址或其他登录凭据。真实值不写入仓库或配置文件，不输出原始 SDK/HTTP 错误。
 
 `--live` 会发起真实模型请求，并向 MCP 子进程转发两项 API 环境变量名称，以最小合成项目事实直接调用一次 `check_api_input` 的语义审核，产生相应用量；不向配置覆盖参数写入真实凭据。普通模式仍不向 MCP 转发 API 配置，并验证敏感合成输入被本地拦截。测试检查 Codex 回读的模型/推理强度、MCP 发现结果、直接调用结果、语义审核实际执行标记与当前策略版本，以及模型实际发出的 `item/completed` 工具调用事件；模型仅回复“测试通过”不会被采纳。测试不模拟桌面宿主对真实私有项目数据的全部审批规则。失败不重试或回退；总时限为 120 秒。输出仅含安全状态、固定模型/强度和实际工具调用计数。普通离线测试另覆盖配置缺失时零启动、环境读取、模型限制、错误脱敏及发布包依赖隔离。
+
+## 异步与指令迁移（#95 / #96）
+
+OpenAI 工具通过 `AsyncOpenAI` 和 `httpx2.AsyncClient` 原生异步等待；MCP 名称、参数 Schema、注解和返回结构保持兼容，仍一次调用完成后返回。同步本地工具继续由 MCP 工作线程执行；异步服务中的阻塞 Git/gh 查询仅局部交给线程。审核、生成及质量审查保持数据依赖，不自动并行；取消停止后续阶段与重试，通过有界屏蔽清理释放客户端。
+
+请求数据与 JSON Schema 在首次等待前固定，同一请求超时重试复用已审核内容；每次实际请求和重试仍重新读取当前两项环境配置。每次尝试独立创建/关闭客户端，不共享全局连接池；配置轮换后，任务内日志仍脱敏进行中请求的旧配置。审核自身只豁免递归语义审核，不豁免本地检测。
+
+本次移除公开 `decide_skill_workflow` 及固定路由输入/返回字段；调用方直接按当前动作条件选择工具，没有替代路由 API。Python 直接调用联网服务的方法现在需要 `await`，独立脚本可在顶层使用 `asyncio.run`，不能在 MCP 请求内嵌套事件循环。已检查本仓库及可访问的 token-io-decoupling、Serena 源码，未发现这两个外部项目的直接调用；这不证明其他用户没有集成。发布/更新前，下游应迁移同步 Python 调用和已移除的路由接口，旧工作流路径需更新为 Hook 路径。
+
+源码改动不自动安装发布包、更新已安装 Skill/全局 AGENTS 或重新加载 MCP；这些是独立动作。现有 `.githooks` 继续承担本地提交校验，与指令 Hooks 分开。

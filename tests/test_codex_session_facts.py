@@ -392,16 +392,16 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             self.assertIn(CLI_FALLBACK_DESCRIPTION, client.instructions)
             for phrase in ("Issue", "PR", "最小充分", "默认中文", "language_override", "needs_revision", "两次"):
                 self.assertIn(phrase, client.instructions)
-            for phrase in ("httpx2.Client(trust_env=True)", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "重新加载"):
+            for phrase in ("httpx2.AsyncClient(trust_env=True)", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "重新加载"):
                 self.assertIn(phrase, client.instructions)
             for phrase in ("OPENAI_TIMEOUT_SECONDS=180", "OPENAI_TIMEOUT_MAX_RETRIES", "最多6次", "api_timeout"):
                 self.assertIn(phrase, client.instructions)
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
         for name in (
             "check_branch_names", "check_commit_message", "audit_issue_pr_policy",
-            "decide_skill_workflow", "decide_codex_session_action", "generate_skill_content",
+            "decide_codex_session_action", "generate_skill_content",
         ):
-            for phrase in ("httpx2.Client(trust_env=True)", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"):
+            for phrase in ("httpx2.AsyncClient(trust_env=True)", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"):
                 self.assertIn(phrase, tools[name].description, name)
             self.assertNotIn("proxy", tools[name].input_schema.get("properties", {}))
             for phrase in ("OPENAI_TIMEOUT_MAX_RETRIES", "180", "invalid_timeout_max_retries", "SDK内部重试关闭"):
@@ -419,12 +419,13 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
         self.assertTrue(tool.annotations.open_world_hint)
         self.assertFalse(tool.annotations.idempotent_hint)
 
-    async def test_all_40_tools_registered_with_described_schemas(self) -> None:
+    async def test_all_39_tools_registered_with_described_schemas(self) -> None:
         self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
         tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 40)
+        self.assertEqual(len(tools), 39)
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 40)
+        self.assertEqual(len(by_name), 39)
+        self.assertNotIn("decide_skill_workflow", by_name)
         for tool in tools:
             self.assertTrue(tool.description, tool.name)
 
@@ -446,7 +447,6 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             "prepare_codex_session_memory",
         }
         ai_names = {
-            "decide_skill_workflow",
             "decide_codex_session_action",
             "generate_skill_content",
             "check_api_input",

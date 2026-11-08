@@ -38,9 +38,9 @@ class GlobalAgentsTests(unittest.TestCase):
             ("token skill", ".agents/skills/token-io-decoupling-skill/SKILL.md"),
             ("runtime", ".agents/skills/token-io-decoupling-skill/runtime.md"),
             ("dev skill", ".agents/skills/dev-workflow-standards-skill/SKILL.md"),
-            ("workflow index", ".agents/skills/dev-workflow-standards-skill/workflows/index.md"),
+            ("hook index", ".agents/skills/dev-workflow-standards-skill/hooks/index.md"),
             ("mcp tools", ".agents/skills/dev-workflow-standards-skill/references/mcp-tools.md"),
-            ("recovery", ".agents/skills/dev-workflow-standards-skill/workflows/recovery-and-exceptions.md"),
+            ("recovery", ".agents/skills/dev-workflow-standards-skill/hooks/recovery.md"),
             ("code understanding", ".agents/skills/dev-workflow-standards-skill/references/code-understanding.md"),
         )
         return "# Global instructions\n\n" + body + "\n\n" + "\n".join(
@@ -52,9 +52,9 @@ class GlobalAgentsTests(unittest.TestCase):
             ".agents/skills/token-io-decoupling-skill/SKILL.md",
             ".agents/skills/token-io-decoupling-skill/runtime.md",
             ".agents/skills/dev-workflow-standards-skill/SKILL.md",
-            ".agents/skills/dev-workflow-standards-skill/workflows/index.md",
+            ".agents/skills/dev-workflow-standards-skill/hooks/index.md",
             ".agents/skills/dev-workflow-standards-skill/references/mcp-tools.md",
-            ".agents/skills/dev-workflow-standards-skill/workflows/recovery-and-exceptions.md",
+            ".agents/skills/dev-workflow-standards-skill/hooks/recovery.md",
             ".agents/skills/dev-workflow-standards-skill/references/code-understanding.md",
         ):
             path = self.home / relative
@@ -108,8 +108,7 @@ class GlobalAgentsTests(unittest.TestCase):
         preview = self._manage(dry_run=True)
         self.assertEqual(preview["plan_action"], "unchanged")
         self.assertIsNone(preview["conflict"])
-        # An explicit adopt of the exact candidate records ownership without
-        # rewriting the target or taking an unnecessary backup.
+        # 显式 adopt 相同内容只登记受管关系，不重写目标或创建多余备份。
         adopted = self._manage(adopt=True)
         self.assertEqual(adopted["plan_action"], "adopt_metadata")
         self.assertIsNone(adopted["backup"])

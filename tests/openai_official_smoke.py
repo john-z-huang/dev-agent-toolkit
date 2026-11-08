@@ -1,7 +1,8 @@
-"""Opt-in smoke request using the repository's unified OpenAI client boundary."""
+"""显式启用的独立进程冒烟入口，复用统一 OpenAI 客户端及其安全约束。"""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -64,7 +65,8 @@ def _failure(error_code: str, status_code: int | None = None) -> dict[str, Any]:
     return result
 
 
-def _call_live() -> dict[str, Any]:
+async def _call_live() -> dict[str, Any]:
+    """在独立测试入口临时映射官方配置，等待请求后恢复原环境。"""
     api_key = os.environ.get(OFFICIAL_API_KEY_ENV, "").strip()
     base_url = os.environ.get(OFFICIAL_BASE_URL_ENV, "").strip()
     if not api_key:
@@ -77,7 +79,7 @@ def _call_live() -> dict[str, Any]:
     os.environ["OPENAI_API_KEY"] = api_key
     os.environ["OPENAI_BASE_URL"] = base_url
     try:
-        response = parse_response(
+        response = await parse_response(
             instructions="Return the required JSON object with ok set to true.",
             input="This is a connectivity smoke check. Return only the requested boolean field.",
             text_format=SmokeOutput,
@@ -119,7 +121,8 @@ def main(argv: list[str] | None = None) -> int:
             result["error_code"] = "invalid_arguments"
         print(json.dumps(result, separators=(",", ":"), sort_keys=True))
         return 2 if status != "success" else 0
-    result = _call_live()
+    # 事件循环只在脚本边界创建；生产 MCP 服务不调用此入口或修改全局环境。
+    result = asyncio.run(_call_live())
     print(json.dumps(result, separators=(",", ":"), sort_keys=True))
     return 0 if result["status"] == "success" else 1
 

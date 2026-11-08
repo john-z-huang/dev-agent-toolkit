@@ -6,16 +6,15 @@
 
 ## OpenAI 判断与生成
 
-所有 Decisions、Responses 和输入审核请求共用 `OPENAI_TIMEOUT_SECONDS=180` 秒；仅请求超时在调用处立即串行重试，`OPENAI_TIMEOUT_MAX_RETRIES` 环境变量为非负整数，未设置默认 `5`、`0` 关闭，空值或非法值在请求前安全失败。默认最多 6 次 API 尝试，SDK 内部重试关闭；预算耗尽返回 `api_timeout`，其他错误不自动重试。Agent 不再叠加整工具重试，按恢复流程处理。MCP 外层工具时限须覆盖多阶段请求与各自重试；细则见 [请求边界](openai-workflow-tools.md#配置与请求边界)。
+所有 Decisions、Responses 和输入审核请求共用 `OPENAI_TIMEOUT_SECONDS=180` 秒；仅请求超时在调用处立即串行重试，`OPENAI_TIMEOUT_MAX_RETRIES` 环境变量为非负整数，未设置默认 `5`、`0` 关闭，空值或非法值在请求前安全失败。默认最多 6 次 API 尝试，SDK 内部重试关闭；预算耗尽返回 `api_timeout`，其他错误不自动重试。Agent 不再叠加整工具重试，按恢复条件处理。MCP 外层工具时限须覆盖多阶段请求与各自重试；细则见 [请求边界](openai-workflow-tools.md#配置与请求边界)。
 
 以下工具通过 OpenAI Python SDK 调用固定的 `gpt-6-luna`，每次强制读取并显式使用 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，不提供模型或配置覆盖参数。API 工具具有 `open_world_hint=true`、`idempotent_hint=false`；只读注解表示不修改本地或 GitHub 资源，不表示没有外部 API 请求。接口失败、未知分支、拒绝或未完成的生成不能当作成功结果。
 
-所有 OpenAI 请求共用显式注入的 `httpx2.Client(trust_env=True)`，读取 MCP 进程的标准代理环境变量（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及小写形式）。配置适用代理且未匹配 `NO_PROXY` 时通过代理；无代理配置时按库默认直连，代理失败不回退直连。Codex 启动时须转发所需变量名并重新加载服务，详见 [代理与环境传递](openai-workflow-tools.md#codex-stdio-环境传递与排查)。
+所有 OpenAI 请求共用显式注入的 `httpx2.AsyncClient(trust_env=True)`，读取 MCP 进程的标准代理环境变量（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及小写形式）。配置适用代理且未匹配 `NO_PROXY` 时通过代理；无代理配置时按库默认直连，代理失败不回退直连。Codex 启动时须转发所需变量名并重新加载服务，详见 [代理与环境传递](openai-workflow-tools.md#codex-stdio-环境传递与排查)。
 
 | 工具 | 输入 | 返回 |
 |---|---|---|
 | `check_api_input` | 强类型 `request`，仅必填非空字符串 `purpose`、`content`；不接受目标工具名或仓库路径参数 | 默认允许联网审核，无需前置审核或逐次人工授权；自身仍先执行本地静态检测，再进行 Decisions 审核。不检查文件或目录路径，凭据、隐私及不透明载荷等审核继续。查看 `passed`、状态及安全修订提示。通过后允许当前任务所需项目内容向既定配置服务外发，无需重复确认；不扩大其他操作权限。实际出站仍强制复检，详见 [`API 输入审核`](api-input-review.md)。 |
-| `decide_skill_workflow` | 强类型 `request`：用户请求、明确 worktree、GitHub 交付、仅验证、特殊操作和阻塞条件 | Decisions 固定选项中的工作流分支，供 Agent 核对后采用。 |
 | `decide_codex_session_action` | 强类型 `request`：历史读取状态、事实覆盖、保存限制和新增事实来源 | Decisions 的查询与持久化分支；不能用当前新事实更新历史摘要。 |
 | `generate_skill_content` | 强类型 `request`：内容种类、用户目标/受众、分类型项目事实与来源、查询重点、格式、可选会话来源；Issue/PR 其他语言须 `language_override` 引用用户原文 | Responses 结构化候选；Issue/PR 生成后另做一次有界语义审查，须检查 `quality_status`/`adoptable` 与缺失项，`ok=true` 不等于可发布。不会自行读取仓库。 |
 
@@ -37,7 +36,7 @@
 
 `summary` 是 Code Agent 按默认模板或用户指定结构撰写的完整 Markdown 文档。准备工具令 `payload.content` 与其精确一致，来源元数据单独放在响应的 `metadata`；其中 `memory_project_root` 只表示当前 Serena 的目标项目，不能当作原会话的 `project_scope`。Code Agent 必须逐项核对 `evidence_refs` 与原会话，确保未混入当前会话的新事实。默认 `topic` 为 `codex-sessions`，禁止绝对路径、路径穿越和 `global` 跨项目主题；主题每段最多 100 个 UTF-8 字节，已有条目的名称须为同主题下以相同 thread ID 结尾的安全名称，并计入 Serena 自动添加的 `.md` 长度。`persistence_allowed` 只是调用参数，不能替代用户指令或实际权限。
 
-调用顺序：宿主 `read_thread` 读取来源 → 获取清单/模板并按用户要求总结 → 去重并处理优先级歧义 → Serena 激活准确项目、读取维护说明及已有记录 → 准备写入参数 → Serena `write_memory` → `read_memory` 回读。用户禁止持久化时仅只读参考；本工具不会绕过该限制。完整规约见 [`codex-session-facts.md`](codex-session-facts.md)。
+使用会话事实要求原文来源可追溯；准备摘要要求准确项目、去重及当前写入许可；保存成功以实际内容回读为准。这些是相应动作的数据条件，不规定统一调用路线。用户禁止持久化时仅只读参考；本工具不会绕过该限制。完整规约见 [`codex-session-facts.md`](codex-session-facts.md)。
 
 ## 检查与只读审计
 
@@ -80,11 +79,11 @@
 
 ### 已有 worktree 的基线同步工具
 
-完整顺序和策略见 [`worktree-base-sync.md`](worktree-base-sync.md)：审计仓库/实际 PR base → 在授权内 fetch → 审计需求 checkout → 固定并复核 OID → 已发布 merge、未发布 rebase → 重新验证。所有这些工具均不调用 OpenAI、不读会话、不写 Memory；fetch/merge/rebase 不包含 GitHub 推送或 PR base 更新。
+动作条件和策略见 [`worktree-base-sync.md`](worktree-base-sync.md)：同步要求准确实际 base、有效来源、当前发布状态及匹配 OID；已发布 merge、未发布 rebase，变更后的验证绑定新状态。所有这些工具均不调用 OpenAI、不读会话、不写 Memory；fetch/merge/rebase 不包含 GitHub 推送或 PR base 更新。
 
 - `base_ref` / rebase 的 `base_branch`：明确的本地分支、完整 `refs/heads/...`、`refs/remotes/...` 或完整提交 OID；不接受任意 revision 表达式或命令。使用刚获取的 `fetch_ref` 时同时传 `fetched_oid` 作为预期 base OID。直接使用 OID固定提交时，另行核对其来源引用是否已变化。
 - `remote`：已有配置的 remote 名称，不是 URL；审计默认 `null`，表示不联网而非“未发布”。rebase 的默认值为 `origin`；缺少配置、网络失败或结果未知时停止，不提供本地模式豁免。实际 live 查询仅核验该 remote 的同名分支；其他已知 PR、协作者和下游依赖仍由调用方核对。不要将 `null`、空字符串与省略混用。
-- `expected_head_oid` / `expected_base_oid`：完整 40/64 位十六进制提交 OID，merge 必填；rebase 可省略或 `null` 以兼容旧调用，但本流程必须提供刚核验的值。可选参数省略时使用调用时捕获的状态，不能据此声称比较过先前审计。写入前状态改变须重新审计。
+- `expected_head_oid` / `expected_base_oid`：完整 40/64 位十六进制提交 OID，merge 必填；rebase 可省略或 `null` 以兼容旧调用，但依赖先前审计的同步动作必须提供刚核验的值。可选参数省略时使用调用时捕获的状态，不能据此声称比较过先前审计。写入前状态改变须重新审计。
 - `old_base_oid`：rebase 可省略或 `null`；提供时为已核验的旧父分支边界完整 OID，要求属于当前 head 的祖先，用于 `--onto`。工具校验祖先关系，不判断提交的业务归属或证明父 PR 已 squash 集成。
 - 审计关系状态为 `up_to_date`（head 包含 base）、`fast_forwardable`（head 落后且可快进）、`diverged`（双方各有独有提交）；`blocked` 表示状态不允许同步，`unknown` 表示所需事实无法确认。`ahead_by` / `behind_by` 相对于所给 base，不能当作相对于远端需求分支的计数。发布状态与提交图关系分别核对。
 - `ok=true` 仅表示对应工具的观测或动作及回读满足条件。snapshot/fetch 时间和 OID 不是远端永不变化的保证。失败先检查 `error_code`、冲突路径和 `needs_review`；已执行但回读失败不能当作未发生写入，不盲目重试。成功也不代表项目测试通过。
@@ -92,7 +91,7 @@
 - 写工具使用共同 Git 目录下的协作锁并在动作前复核状态；这不锁定所有外部 Git 进程或普通文件编辑。默认不更新其他分支，不隐式 stash；正常 hooks 继续执行。受限continue/abort需按下节单独决定和调用，不自动恢复，不封装自动冲突解决或强推。
 - 新同步工具的远端 Git 子进程禁止终端凭据提示，超时为 120 秒；超时返回安全错误而非原始远端异常。fetch 超时也可能留下下载对象或 FETCH_HEAD 变化，先回读，不自动重试整个工具。
 
-最小调用顺序（合成数据；执行前核对目标并满足写入授权）：
+参数与数据依赖示例（合成数据；按实际所需动作选用，不是固定队列）：
 
 ```json
 {"repo_path":"/workspace/topic","remote":"origin","branch_name":"main"}
@@ -108,7 +107,7 @@
 
 ### 受管理操作的 continue/abort
 
-详细顺序见 [`worktree-recovery.md`](worktree-recovery.md)。服务在开始 merge/rebase 前建立当前 worktree Git 目录专属记录；冲突或结果不确定时保留。恢复前用固定 `base_oid` 作为 `base_ref` 调用审计，省略 `remote` 或传 `null`，读取 `recovery_context` 和 `current_state_fingerprint`。未完成操作使顶层同步 `status=blocked`；应单独核对恢复状态，不能要求它先变成 `up_to_date`。无记录、损坏、跨 worktree、未知复杂操作或原生状态不一致时不自动接管；任何恢复上下文本身都不提供写入授权。
+恢复前置条件见 [`worktree-recovery.md`](worktree-recovery.md)。服务在开始 merge/rebase 前建立当前 worktree Git 目录专属记录；冲突或结果不确定时保留。恢复前用固定 `base_oid` 作为 `base_ref` 调用审计，省略 `remote` 或传 `null`，读取 `recovery_context` 和 `current_state_fingerprint`。未完成操作使顶层同步 `status=blocked`；应单独核对恢复状态，不能要求它先变成 `up_to_date`。无记录、损坏、跨 worktree、未知复杂操作或原生状态不一致时不自动接管；任何恢复上下文本身都不提供写入授权。
 
 - 四个工具的 `repo_path` 都是准确 checkout 绝对根目录；`operation_id` 取最新 `recovery_context.operation_id`，不是自定义名称。`expected_current_head_oid` 取同一上下文的 `current_head_oid`，为当前完整 40/64 位提交 OID；rebase 中途可能是临时 detached HEAD，不能用 `original_head_oid` 代替。
 - `expected_state_fingerprint` 是重新审计得到的当前状态指纹，覆盖恢复记录、原生Git操作状态、index和相关工作目录内容；修改文件、暂存或操作状态变化后重新审计。指纹不是密码、全局锁或业务正确性证明，不能在其他checkout或其他操作上复用。

@@ -5,7 +5,7 @@ import socket
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from pydantic import BaseModel
 
@@ -50,7 +50,7 @@ class _ParsedContent(BaseModel):
     value: str
 
 
-class OpenAIProxyTests(unittest.TestCase):
+class OpenAIProxyTests(unittest.IsolatedAsyncioTestCase):
     def start_server(self, handler: type[BaseHTTPRequestHandler]) -> tuple[ThreadingHTTPServer, threading.Thread]:
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -62,16 +62,16 @@ class OpenAIProxyTests(unittest.TestCase):
 
     def capture_http_clients(self) -> tuple[list[object], object]:
         created: list[object] = []
-        client_type = openai_client.httpx2.Client
+        client_type = openai_client.httpx2.AsyncClient
 
         class CapturedClient(client_type):
             def __init__(self, *args: object, **kwargs: object) -> None:
                 super().__init__(*args, **kwargs)
                 created.append(self)
 
-        return created, patch.object(openai_client.httpx2, "Client", CapturedClient)
+        return created, patch.object(openai_client.httpx2, "AsyncClient", CapturedClient)
 
-    def test_sdk_initialization_failure_closes_created_transport(self) -> None:
+    async def test_sdk_initialization_failure_closes_created_transport(self) -> None:
         created, client_patch = self.capture_http_clients()
         env = {
             "OPENAI_API_KEY": "sk-test-proxy-key-value",
@@ -80,15 +80,15 @@ class OpenAIProxyTests(unittest.TestCase):
         with (
             patch.dict(os.environ, env, clear=True),
             client_patch,
-            patch.object(openai_client, "OpenAI", side_effect=RuntimeError("synthetic SDK failure")),
+            patch.object(openai_client, "AsyncOpenAI", side_effect=RuntimeError("synthetic SDK failure")),
         ):
             with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                openai_client.create_decision([], [])
+                await openai_client.create_decision([], [])
         self.assertEqual(raised.exception.error_code, "client_initialization_failed")
         self.assertEqual(len(created), 1)
         self.assertTrue(created[0].is_closed)
 
-    def test_http_proxy_variables_route_sdk_request_to_proxy(self) -> None:
+    async def test_http_proxy_variables_route_sdk_request_to_proxy(self) -> None:
         _ProxyHandler.requests = []
         proxy, _ = self.start_server(_ProxyHandler)
         proxy_url = f"http://127.0.0.1:{proxy.server_port}"
@@ -102,13 +102,13 @@ class OpenAIProxyTests(unittest.TestCase):
             }
             with self.subTest(proxy_name=proxy_name), patch.dict(os.environ, env, clear=True):
                 with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                    openai_client.create_decision([], [])
+                    await openai_client.create_decision([], [])
             self.assertEqual(raised.exception.error_code, "api_status_error")
             self.assertNotIn(proxy_url, str(raised.exception))
             self.assertEqual(len(_ProxyHandler.requests), 1)
             self.assertTrue(_ProxyHandler.requests[0].startswith("http://api.synthetic.invalid/"))
 
-    def test_https_proxy_uses_connect_and_parse_response_path(self) -> None:
+    async def test_https_proxy_uses_connect_and_parse_response_path(self) -> None:
         _ProxyHandler.connects = []
         proxy, _ = self.start_server(_ProxyHandler)
         proxy_url = f"http://127.0.0.1:{proxy.server_port}"
@@ -122,7 +122,7 @@ class OpenAIProxyTests(unittest.TestCase):
             }
             with self.subTest(proxy_name=proxy_name), patch.dict(os.environ, env, clear=True):
                 with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                    openai_client.parse_response(
+                    await openai_client.parse_response(
                         instructions="Return a value.",
                         input="Synthetic input.",
                         text_format=_ParsedContent,
@@ -132,7 +132,7 @@ class OpenAIProxyTests(unittest.TestCase):
             self.assertEqual(raised.exception.error_code, "api_connection_failed")
             self.assertEqual(_ProxyHandler.connects, ["api.synthetic.invalid:443"])
 
-    def test_no_proxy_routes_to_local_origin_without_contacting_proxy(self) -> None:
+    async def test_no_proxy_routes_to_local_origin_without_contacting_proxy(self) -> None:
         _ProxyHandler.requests = []
         _OriginHandler.requests = []
         proxy, _ = self.start_server(_ProxyHandler)
@@ -145,12 +145,12 @@ class OpenAIProxyTests(unittest.TestCase):
         }
         with patch.dict(os.environ, env, clear=True):
             with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                openai_client.create_decision([], [])
+                await openai_client.create_decision([], [])
         self.assertEqual(raised.exception.error_code, "api_status_error")
         self.assertEqual(len(_OriginHandler.requests), 1)
         self.assertEqual(_ProxyHandler.requests, [])
 
-    def test_sdk_closes_transport_after_success_and_request_failures(self) -> None:
+    async def test_sdk_closes_transport_after_success_and_request_failures(self) -> None:
         created, client_patch = self.capture_http_clients()
         with patch.dict(os.environ, {
             "OPENAI_API_KEY": "sk-test-proxy-key-value",
@@ -159,7 +159,7 @@ class OpenAIProxyTests(unittest.TestCase):
             "dev_workflow_standards_tools.services.api_input_review.review_api_input",
             return_value={"passed": True},
         ):
-            result = openai_client._invoke({"ok": True}, lambda _client: {"ok": True})
+            result = await openai_client._invoke({"ok": True}, AsyncMock(return_value={"ok": True}))
         self.assertEqual(result, {"ok": True})
         self.assertEqual(len(created), 1)
         self.assertTrue(created[-1].is_closed)
@@ -175,7 +175,7 @@ class OpenAIProxyTests(unittest.TestCase):
         }
         with patch.dict(os.environ, env, clear=True), client_patch:
             with self.assertRaises(openai_client.OpenAIWorkflowError):
-                openai_client.create_decision([], [])
+                await openai_client.create_decision([], [])
         self.assertEqual(len(_ProxyHandler.requests), 1)
         self.assertEqual(len(created), 1)
         self.assertTrue(created[-1].is_closed)
@@ -187,12 +187,12 @@ class OpenAIProxyTests(unittest.TestCase):
         env["http_proxy"] = f"http://127.0.0.1:{refused_port}"
         with patch.dict(os.environ, env, clear=True), client_patch:
             with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                openai_client.create_decision([], [])
+                await openai_client.create_decision([], [])
         self.assertEqual(raised.exception.error_code, "api_connection_failed")
         self.assertEqual(len(created), 1)
         self.assertTrue(created[-1].is_closed)
 
-    def test_bad_proxy_configuration_fails_before_sdk_creation(self) -> None:
+    async def test_bad_proxy_configuration_fails_before_sdk_creation(self) -> None:
         env = {
             "OPENAI_API_KEY": "sk-test-proxy-key-value",
             "OPENAI_BASE_URL": "http://api.synthetic.invalid/v1",
@@ -200,14 +200,14 @@ class OpenAIProxyTests(unittest.TestCase):
             "no_proxy": "",
         }
         with patch.dict(os.environ, env, clear=True), patch.object(
-            openai_client, "OpenAI"
+            openai_client, "AsyncOpenAI"
         ) as sdk_factory:
             with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                openai_client.create_decision([], [])
+                await openai_client.create_decision([], [])
         self.assertEqual(raised.exception.error_code, "client_initialization_failed")
         sdk_factory.assert_not_called()
 
-    def test_unavailable_proxy_never_falls_back_to_local_origin(self) -> None:
+    async def test_unavailable_proxy_never_falls_back_to_local_origin(self) -> None:
         _OriginHandler.requests = []
         origin, _ = self.start_server(_OriginHandler)
         with socket.socket() as listener:
@@ -221,7 +221,7 @@ class OpenAIProxyTests(unittest.TestCase):
         }
         with patch.dict(os.environ, env, clear=True):
             with self.assertRaises(openai_client.OpenAIWorkflowError) as raised:
-                openai_client.create_decision([], [])
+                await openai_client.create_decision([], [])
         self.assertEqual(raised.exception.error_code, "api_connection_failed")
         self.assertEqual(_OriginHandler.requests, [])
 

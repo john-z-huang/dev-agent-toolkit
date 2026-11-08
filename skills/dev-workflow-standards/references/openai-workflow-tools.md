@@ -5,10 +5,10 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 ## 配置与请求边界
 
 - Decisions、Responses 和输入安全审核的每次 API 请求统一显式使用 `OPENAI_TIMEOUT_SECONDS = 180.0`（3 分钟）。`OPENAI_TIMEOUT_MAX_RETRIES` 为可选环境变量，配置非负十进制整数重试次数：未设置默认 `5`，`0` 关闭；空字符串、负数或其他非法值在任何请求前返回 `invalid_timeout_max_retries`，不静默回退。该变量不改变模型、凭据、地址或代理配置，不接受工具参数覆盖。
-- 仅 SDK `APITimeoutError` 触发调用处重试，默认首次加 5 次重试，最多 6 次。每次超时后立即串行重发同一受检请求，每次新建客户端并重新读取当前凭据、端点及代理，最后关闭客户端；每个独立请求读取当前重试配置，SDK 的 `max_retries=0` 避免重试叠加。输入审核和业务请求各有预算，不在外层重新运行整条工作流。认证、权限、连接错误、HTTP 错误、拒绝和无效结果不自动重试；预算耗尽返回安全 `api_timeout`。Agent 收到该失败时不再自动叠加整工具重试，按恢复流程处理。
+- 仅 SDK `APITimeoutError` 触发调用处重试，默认首次加 5 次重试，最多 6 次。每次超时后立即串行重发同一受检请求，每次新建客户端并重新读取当前凭据、端点及代理，最后关闭客户端；每个独立请求读取当前重试配置，SDK 的 `max_retries=0` 避免重试叠加。输入审核和业务请求各有预算，不在外层重新运行整条工作流。认证、权限、连接错误、HTTP 错误、拒绝和无效结果不自动重试；预算耗尽返回安全 `api_timeout`。Agent 收到该失败时不再自动叠加整工具重试，按恢复条件处理。
 - 超时请求可能已经到达服务端，重试可能产生重复 API 用量。180 秒为底层请求超时配置，不能当作整工具总时限：普通生成有审核和生成两个阶段，Issue/PR 还有审核和质量审查，共四个阶段；默认每阶段最多 6 次请求。MCP 客户端的 `tool_timeout_sec` 须覆盖所需阶段和重试预算，具体还受网络各阶段超时语义影响，不能保证固定墙钟上限。本次不自动覆盖已有客户端时限。
 - 每次实际请求均从本地环境读取 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，两者都必须非空，并显式传给 SDK。缺少任意一项即停止请求，不使用 SDK 的默认凭据或地址，不从工具参数、其他变量或配置文件补齐。
-- 所有 Decisions 和 Responses 请求共用 `httpx2.Client(trust_env=True)`，每次调用新建并显式传入 SDK，结束后释放；SDK 初始化失败也关闭已创建的 HTTP 客户端。代理从服务进程的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（含小写形式）读取，选择及绕过规则遵循 httpx2；不接受工具参数覆盖代理。未配置代理时按库默认直连，目标匹配 `NO_PROXY` 时绕过代理；代理配置或连接失败不会回退直连。
+- 所有 Decisions 和 Responses 请求共用 `httpx2.AsyncClient(trust_env=True)`，每次调用新建并显式传入 SDK，结束后释放；SDK 初始化失败也关闭已创建的 HTTP 客户端。代理从服务进程的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（含小写形式）读取，选择及绕过规则遵循 httpx2；不接受工具参数覆盖代理。未配置代理时按库默认直连，目标匹配 `NO_PROXY` 时绕过代理；代理配置或连接失败不会回退直连。
 - 代码、文档和日志不得包含真实凭据或端点值。错误只返回安全分类，不输出原始异常、请求头、响应正文或环境变量值。工具不能让调用者覆盖模型、凭据或端点。
 - 所有请求固定使用 `gpt-6-luna`。判断使用 `client.decisions.create`；生成使用 `client.responses.parse` 和结构化输出，不回退到其他模型或接口。
 - Decisions 当前没有推理强度参数，判断使用 Decisions 自身机制，不发送不支持的 `reasoning` 参数；生成显式指定强度：提交信息为 `low`，计划和历史会话摘要为 `high`，其余为 `medium`，默认值为 `medium`。
@@ -43,7 +43,6 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 | `check_branch_names` | 维持原来的 `branch_names` / `repo_path` | 本地名称规则先检查；通过后才请求 Decisions。模型不能把本地失败改为通过。 |
 | `check_commit_message` | 维持原来的 `message` | 本地检查类型、中文说明及禁止署名；通过后再请求 Decisions，API 异常不能返回通过。 |
 | `audit_issue_pr_policy` | 维持原来的仓库、Issue/PR 编号和预期 base/head | 先通过既有只读审计，再提交精简规则事实判断；不发送整份 PR 内容，不创建或修改 GitHub 资源。 |
-| `decide_skill_workflow` | `request`：当前请求及明确的流程条件 | 从固定工作流中选择分支；未明确要求 worktree 时不能选择 worktree。 |
 | `decide_codex_session_action` | `request`：来源可访问性、读取覆盖、事实是否存在、保存限制和新增事实来源 | 分别返回查询动作和持久化动作；原文不可读不能当作无事实，当前新事实不能写入历史摘要，禁止保存时不能生成保存分支。 |
 
 原检查工具保留本地检查结果，并补充 API 判断信息。本地失败无需发送 API；API 拒绝、超时、错误、返回未知选项或缺少答案时均不能通过。判断返回固定枚举，不使用自由文本猜测分支，也不把置信度当作授权或验证证据。
@@ -51,25 +50,6 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 路径、精确名称和格式规则、创建时间排序、Git 写操作前置条件仍由本地代码执行。`get_codex_session_summary_guidance`、`order_codex_session_sources` 和 `prepare_codex_session_memory` 继续作为不联网的确定性助手；固定 Git 写工具及 Hook 不会因为模型的肯定结果而跳过自身检查。
 
 自定义重试次数时，向 MCP 子进程转发 `OPENAI_TIMEOUT_MAX_RETRIES`；setup 和 `--env-only` 会合并该变量名而不读取或写入其值。未设置时仍默认重试 5 次。
-
-### 工作流输入
-
-`decide_skill_workflow` 的 `request` 包含非空 `user_request`，以及显式布尔字段 `explicit_worktree`、`github_delivery`、`verification_only`、`special_operations`、`blocked`。使用真实布尔值，不能传字符串 `"false"`。
-
-```json
-{
-  "request": {
-    "user_request": "将已完成的改动提交后推送，并创建关联 PR",
-    "explicit_worktree": false,
-    "github_delivery": true,
-    "verification_only": false,
-    "special_operations": false,
-    "blocked": false
-  }
-}
-```
-
-分支按恢复、明确 worktree、GitHub 交付、特殊操作、仅验证、普通开发的条件选择；证据不足则澄清。工作流选择本身不执行其中的操作，后续仍须核对授权、仓库状态和对应 Completion Gate。
 
 ### 会话事实输入
 
@@ -158,3 +138,9 @@ Issue/PR 在本地硬校验后，通过同一统一客户端进行第二次有�
 生成与审查的缺失事实和审阅提示合并去重。`ok=true` 仅代表有效草稿与有效审查，不保证适合发布；仅所有审查项为真且合并 `missing_facts` 为空时 `adoptable=true`、`quality_status=ready_for_agent_review`。其余返回 `adoptable=false`、`quality_status=needs_revision`，须修订或补证后重新审阅。审查异常返回 `ok=false`、安全 `error_code`、`adoptable=false`，不返回可采纳候选；超出发现项上限同样失败关闭。模型审查不证明实际事实正确，通过仍需人工核对且不授予写入权限。离线 mock 仅验证流程、规则和结构，不证明真实语言质量；真实生成验证须另行授权最小脱敏数据。
 
 Code Agent 对照证据检查候选内容后，可修改或直接采纳。生成正文不自动写文件、Serena Memory、Issue 或 PR；需要持久化时继续使用对应的专用工具，并遵守当前用户授权。历史摘要通过 [`prepare_codex_session_memory`](mcp-tools.md) 准备写入参数，实际写入仍由 Serena 完成。
+
+## 原生异步执行
+
+六个 API 工具的服务函数均为 `async def`，MCP 原生等待最终结果；Python 直接调用方使用 `await`。无需先选路线或调用会话动作建议工具。同步的纯本地操作仍由 MCP 工作线程执行。
+
+审核、业务判断/生成和二次质量审查按真实数据依赖等待；不同请求可并发。出站 JSON、Schema 及生成事实在首次等待前固定；同一请求超时重试复用受检内容，每次尝试仍重读当前配置并独立创建/关闭客户端。取消传播至请求，停止后续阶段与重试；清理在最长 5 秒的取消屏蔽区等待，异常只记录安全分类，不覆盖原请求取消。配置轮换后，任务上下文内的旧配置仍参与日志脱敏，任务结束释放，不保存凭据到文件。
