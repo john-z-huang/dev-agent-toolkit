@@ -5,22 +5,20 @@ import importlib.util
 import io
 import json
 import os
-import sys
 import tempfile
 import tomllib
 import unittest
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
-from typing import ClassVar
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from dev_workflow_standards_tools.server import mcp
 from mcp import Client
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location(
-    "codex_sdk_smoke", Path(__file__).with_name("codex_sdk_smoke.py")
+    "codex_app_server_smoke", Path(__file__).with_name("codex_app_server_smoke.py")
 )
 smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
@@ -53,13 +51,14 @@ def _local_smoke_tool_result(tool_name: str) -> dict:
 
 
 class _LocalSmokeClient:
-    """持有一份合成工具 Schema 和请求记录的本地 SDK 协议替身。"""
+    """使用原始 JSON 字典的本地 App Server 协议替身。"""
 
-    def __init__(self, config: dict, *, schema: dict, instances: list[object]) -> None:
+    def __init__(self, *, schema: dict, instances: list[object], **config):
         self.config = config
         self.schema = schema
         self.requests = []
         self.closed = False
+        self.cli_info = {"path": "/synthetic/bin/codex", "version": "0.167.0"}
         instances.append(self)
 
     def __enter__(self):
@@ -74,23 +73,22 @@ class _LocalSmokeClient:
     def initialize(self):
         pass
 
-    def thread_start(self, params):
-        return SimpleNamespace(
-            model=smoke.MODEL,
-            reasoning_effort=SimpleNamespace(value=smoke.EFFORT),
-            model_provider="sdk_test",
-            thread=SimpleNamespace(id="synthetic-thread"),
-        )
-
-    def request(self, method, params, response_model=None):
+    def request(self, method, params):
         self.requests.append((method, params))
+        if method == "thread/start":
+            return {
+                "model": smoke.MODEL,
+                "reasoningEffort": smoke.EFFORT,
+                "modelProvider": "app_server_test",
+                "thread": {"id": "synthetic-thread"},
+            }
         if method == "mcpServerStatus/list":
-            return SimpleNamespace(
-                data=[
-                    SimpleNamespace(
-                        name=smoke.SERVER,
-                        tools_error=None,
-                        tools={
+            return {
+                "data": [
+                    {
+                        "name": smoke.SERVER,
+                        "toolsError": None,
+                        "tools": {
                             smoke.TOOL: {
                                 "name": smoke.TOOL,
                                 "inputSchema": {"type": "object"},
@@ -100,14 +98,14 @@ class _LocalSmokeClient:
                                 "inputSchema": self.schema,
                             },
                         },
-                        server_capabilities={"tools": {}},
-                    )
+                        "serverCapabilities": {"tools": {}},
+                    }
                 ]
-            )
+            }
         return _local_smoke_tool_result(params["tool"])
 
 
-class CodexSDKContractTests(unittest.TestCase):
+class CodexAppServerContractTests(unittest.TestCase):
     def test_live_review_forwards_names_without_putting_secrets_in_overrides(self):
         configuration = {
             "OPENAI_API_KEY": "synthetic-key",
@@ -202,7 +200,7 @@ class CodexSDKContractTests(unittest.TestCase):
                     {"structuredContent": {**body, field: value}}
                 )
 
-    def test_missing_or_blank_config_stops_before_subprocess_or_sdk(self):
+    def test_missing_or_blank_config_stops_before_subprocess_or_app_server(self):
         cases = (
             {},
             {"OPENAI_API_KEY": "fake", "OPENAI_BASE_URL": " "},
@@ -212,12 +210,12 @@ class CodexSDKContractTests(unittest.TestCase):
             with (
                 self.subTest(names=list(environment)),
                 patch.dict(os.environ, environment, clear=True),
-                patch.object(smoke, "execute_sdk") as sdk,
+                patch.object(smoke, "execute_app_server") as app_server,
                 patch.object(smoke.subprocess, "run") as process,
             ):
                 with self.assertRaises(smoke.SmokeFailure):
                     smoke.run(Path("unused.whl"), live=True)
-                sdk.assert_not_called()
+                app_server.assert_not_called()
                 process.assert_not_called()
 
     def test_reads_current_environment_without_fallback(self):
@@ -244,7 +242,8 @@ class CodexSDKContractTests(unittest.TestCase):
             )
         self.assertEqual(config["model"], "gpt-6-luna")
         self.assertEqual(config["model_reasoning_effort"], "medium")
-        provider = config["model_providers"]["sdk_test"]
+        self.assertTrue(all(value is False for value in config["features"].values()))
+        provider = config["model_providers"]["app_server_test"]
         self.assertEqual(provider["base_url"], configuration["OPENAI_BASE_URL"])
         self.assertEqual(provider["env_key"], "OPENAI_API_KEY")
         self.assertFalse(provider["requires_openai_auth"])
@@ -257,7 +256,7 @@ class CodexSDKContractTests(unittest.TestCase):
         self.assertNotIn(
             configuration["OPENAI_API_KEY"], "\n".join(smoke.overrides(config))
         )
-        # SDK 命令行覆盖值必须是合法 TOML，并保留全部受控字段。
+        # App Server 命令行覆盖值必须是合法 TOML，并保留全部受控字段。
         parsed = tomllib.loads("\n".join(smoke.overrides(config)))
         self.assertEqual(parsed, config)
 
@@ -328,7 +327,9 @@ class CodexSDKContractTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(smoke.SmokeFailure):
                 smoke.check_api_input_result(invalid)
 
-    def test_sdk_driver_discovers_schema_and_calls_installed_issue_tool_locally(self):
+    def test_app_server_driver_discovers_schema_and_calls_installed_issue_tool_locally(
+        self,
+    ):
         schema = self._check_api_input_schema()
         installed_executable = Path(
             "/synthetic/uv/tools/server/bin/dev-workflow-standards-tools"
@@ -342,19 +343,11 @@ class CodexSDKContractTests(unittest.TestCase):
         clients: list[object] = []
         client_factory = partial(_LocalSmokeClient, schema=schema, instances=clients)
 
-        modules = {
-            "openai_codex": SimpleNamespace(CodexConfig=lambda **kwargs: kwargs),
-            "openai_codex.client": SimpleNamespace(CodexClient=client_factory),
-            "openai_codex.generated.v2_all": SimpleNamespace(
-                ListMcpServerStatusResponse=object,
-                McpServerToolCallResponse=object,
-            ),
-        }
         with (
             tempfile.TemporaryDirectory() as temporary,
-            patch.dict(sys.modules, modules),
+            patch.object(smoke, "AppServerClient", client_factory),
         ):
-            result = smoke.execute_sdk(
+            result = smoke.execute_app_server(
                 Path(temporary),
                 Path(installed_info["module"]).parent.parent,
                 {
@@ -444,7 +437,7 @@ class CodexSDKContractTests(unittest.TestCase):
         self.assertEqual(call.args[0][1:3], ["-I", "-c"])
         self.assertEqual(call.kwargs["env"], {"PATH": os.defpath})
 
-    def test_installed_version_mismatch_stops_before_sdk_startup(self):
+    def test_installed_version_mismatch_stops_before_app_server_startup(self):
         with tempfile.TemporaryDirectory() as temporary:
             executable, _, module = self._fake_installed_entrypoint(Path(temporary))
             with (
@@ -464,13 +457,13 @@ class CodexSDKContractTests(unittest.TestCase):
                         stdout=json.dumps({"version": "9.9.9", "server": str(module)}),
                     ),
                 ),
-                patch.object(smoke, "execute_sdk") as sdk,
+                patch.object(smoke, "execute_app_server") as app_server,
                 self.assertRaisesRegex(
                     smoke.SmokeFailure, "installed_package_mismatch"
                 ),
             ):
                 smoke.run(installed_executable=executable)
-        sdk.assert_not_called()
+        app_server.assert_not_called()
 
     def test_installed_mode_uses_exact_executable_and_skips_package_install(self):
         executable = Path("/synthetic/uv/tools/server/bin/dev-workflow-standards-tools")
@@ -489,13 +482,17 @@ class CodexSDKContractTests(unittest.TestCase):
                 clear=True,
             ),
             patch.object(smoke, "inspect_installed_executable", return_value=installed),
-            patch.object(smoke, "execute_sdk", return_value={"ok": True}) as sdk,
+            patch.object(
+                smoke, "execute_app_server", return_value={"ok": True}
+            ) as app_server,
             patch.object(smoke.subprocess, "run") as process,
         ):
             self.assertEqual(smoke.run(installed_executable=executable), {"ok": True})
         process.assert_not_called()
-        self.assertEqual(sdk.call_args.kwargs["installed_info"], installed)
-        self.assertEqual(sdk.call_args.args[1], Path(installed["module"]).parent.parent)
+        self.assertEqual(app_server.call_args.kwargs["installed_info"], installed)
+        self.assertEqual(
+            app_server.call_args.args[1], Path(installed["module"]).parent.parent
+        )
 
     def test_model_words_without_real_tool_event_cannot_pass(self):
         with self.assertRaisesRegex(smoke.SmokeFailure, "missing_actual_mcp_call"):
@@ -507,6 +504,41 @@ class CodexSDKContractTests(unittest.TestCase):
                     ],
                 }
             )
+
+    def test_live_turn_consumes_json_notifications_and_rejects_failed_status(self):
+        item = {
+            "type": "mcpToolCall",
+            "server": smoke.SERVER,
+            "tool": smoke.TOOL,
+            "arguments": smoke.ARGUMENTS,
+            "status": "completed",
+            "result": _local_smoke_tool_result(smoke.TOOL),
+        }
+        for status in ("completed", "failed", "interrupted"):
+            events = [
+                {"method": "item/completed", "params": {"item": item}},
+                {"method": "turn/completed", "params": {"turn": {"status": status}}},
+            ]
+            client = SimpleNamespace(
+                request=Mock(return_value={"turn": {"id": "synthetic-turn"}}),
+                next_turn_notification=Mock(side_effect=events),
+            )
+            with self.subTest(status=status):
+                if status == "completed":
+                    self.assertEqual(
+                        smoke._read_live_turn(client, "synthetic-thread", "probe"), 1
+                    )
+                else:
+                    with self.assertRaisesRegex(
+                        smoke.SmokeFailure, "model_turn_failed"
+                    ):
+                        smoke._read_live_turn(client, "synthetic-thread", "probe")
+            client.next_turn_notification.assert_called_with(
+                "synthetic-thread", "synthetic-turn"
+            )
+            params = client.request.call_args.args[1]
+            self.assertEqual(params["model"], "gpt-6-luna")
+            self.assertEqual(params["effort"], "medium")
 
     def test_real_event_result_is_checked_for_tool_arguments_and_output(self):
         item = {
@@ -539,50 +571,27 @@ class CodexSDKContractTests(unittest.TestCase):
         with self.assertRaisesRegex(smoke.SmokeFailure, "unexpected_agent_action"):
             smoke.check_turn(turn)
 
-    def test_sdk_model_readback_mismatch_prevents_any_model_or_tool_request(self):
-        class FakeClient:
-            requests: ClassVar[list[object]] = []
-            closed = False
+    def test_app_server_model_readback_mismatch_prevents_any_model_or_tool_request(
+        self,
+    ):
+        clients = []
+        factory = partial(_LocalSmokeClient, schema={}, instances=clients)
+        original = _LocalSmokeClient.request
 
-            def __init__(self, config):
-                self.config = config
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                self.close()
-
-            def initialize(self):
-                pass
-
-            def close(self):
-                self.closed = True
-
-            def thread_start(self, params):
-                self.requests.append(params)
-                return SimpleNamespace(
-                    model="unexpected-model",
-                    reasoning_effort=SimpleNamespace(value="medium"),
-                    model_provider="sdk_test",
-                )
-
-            def request(self, *args, **kwargs):
+        def mismatched(client, method, params):
+            if method != "thread/start":
                 raise AssertionError("must stop before discovery/tool/model request")
+            result = original(client, method, params)
+            result["model"] = "unexpected-model"
+            return result
 
-        modules = {
-            "openai_codex": SimpleNamespace(CodexConfig=lambda **kwargs: kwargs),
-            "openai_codex.client": SimpleNamespace(CodexClient=FakeClient),
-            "openai_codex.generated.v2_all": SimpleNamespace(
-                ListMcpServerStatusResponse=object, McpServerToolCallResponse=object
-            ),
-        }
         with (
             tempfile.TemporaryDirectory() as temporary,
-            patch.dict(sys.modules, modules),
+            patch.object(smoke, "AppServerClient", factory),
+            patch.object(_LocalSmokeClient, "request", mismatched),
             self.assertRaisesRegex(smoke.SmokeFailure, "model_or_effort_mismatch"),
         ):
-            smoke.execute_sdk(
+            smoke.execute_app_server(
                 Path(temporary),
                 Path(temporary) / "site",
                 {
@@ -591,12 +600,13 @@ class CodexSDKContractTests(unittest.TestCase):
                 },
                 live=True,
             )
-        self.assertEqual(FakeClient.requests[0]["model"], "gpt-6-luna")
+        self.assertEqual(clients[0].requests[0][1]["model"], "gpt-6-luna")
         self.assertEqual(
-            FakeClient.requests[0]["config"]["model_reasoning_effort"], "medium"
+            clients[0].requests[0][1]["config"]["model_reasoning_effort"], "medium"
         )
+        self.assertTrue(clients[0].closed)
 
-    def test_cli_is_opt_in_and_never_echoes_raw_sdk_errors(self):
+    def test_cli_is_opt_in_and_never_echoes_raw_app_server_errors(self):
         with (
             patch.object(
                 smoke,
@@ -617,24 +627,22 @@ class CodexSDKContractTests(unittest.TestCase):
             smoke.main(["--wheel", "test.whl"])
             self.assertFalse(run.call_args.kwargs["live"])
 
-    def test_sdk_dependency_is_test_only(self):
-        project = tomllib.loads((ROOT / "mcp-server" / "pyproject.toml").read_text())
-        self.assertTrue(
-            any(
-                item.startswith("openai-codex")
-                for item in project["dependency-groups"]["codex-test"]
-            )
+    def test_sdk_dependency_is_removed(self):
+        project = tomllib.loads((ROOT / "mcp-server/pyproject.toml").read_text())
+        self.assertNotIn("codex-test", project.get("dependency-groups", {}))
+        lock = tomllib.loads((ROOT / "mcp-server/uv.lock").read_text())
+        self.assertFalse(
+            any(item["name"].startswith("openai-codex") for item in lock["package"])
         )
         self.assertFalse(
             any("codex" in item for item in project["project"]["dependencies"])
         )
-        for source in (ROOT / "mcp-server" / "dev_workflow_standards_tools").rglob(
-            "*.py"
-        ):
-            self.assertNotIn("openai_codex", source.read_text())
+        for path in (ROOT / "mcp-server/dev_workflow_standards_tools").rglob("*.py"):
+            self.assertNotIn("openai_codex", path.read_text())
+            self.assertNotIn("codex_app_server_client", path.read_text())
 
 
-class CodexSDKDiscoveredSchemaTests(unittest.IsolatedAsyncioTestCase):
+class CodexAppServerDiscoveredSchemaTests(unittest.IsolatedAsyncioTestCase):
     async def test_helper_accepts_the_real_mcp_discovery_schema(self):
         async with Client(mcp, raise_exceptions=True) as client:
             listed = await client.list_tools()
