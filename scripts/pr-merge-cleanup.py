@@ -47,7 +47,10 @@ def run_command(cmd, check=True):
     )
     if check and result.returncode != 0:
         error_msg = result.stderr.strip() or result.stdout.strip() or "命令执行失败"
-        print(f"错误: {' '.join(cmd)} 执行失败 (退出码 {result.returncode})", file=sys.stderr)
+        print(
+            f"错误: {' '.join(cmd)} 执行失败 (退出码 {result.returncode})",
+            file=sys.stderr,
+        )
         if error_msg:
             print(f"  详情: {error_msg}", file=sys.stderr)
         sys.exit(3)
@@ -139,7 +142,10 @@ def delete_branch(branch_name, merged_head_oid=None):
         check=False,
     )
     if local_head.returncode != 0:
-        print(f"错误: 无法读取本地分支 {branch_name} 的 head SHA，拒绝强制删除", file=sys.stderr)
+        print(
+            f"错误: 无法读取本地分支 {branch_name} 的 head SHA，拒绝强制删除",
+            file=sys.stderr,
+        )
         sys.exit(3)
 
     local_head_oid = local_head.stdout.strip()

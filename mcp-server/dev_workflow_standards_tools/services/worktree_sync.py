@@ -6,23 +6,24 @@ import os
 import re
 import stat
 import subprocess
+from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from pydantic import StrictBool
+from typing import Any
 
-from typing import Any, Iterator
+from pydantic import StrictBool
 
 try:
     import fcntl
 except ImportError:  # pragma: no cover - unsupported host; writes fail closed below
     fcntl = None  # type: ignore[assignment]
 
-from ..infrastructure.paths import _validated_repo_path
 from ..infrastructure.git import _valid_remote_branch
+from ..infrastructure.paths import _validated_repo_path
 from . import create_branch
 from . import worktree_recovery as recovery
-
 
 _HEX_OID = re.compile(r"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$")
 _REMOTE_NAME = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._/-]*$")
@@ -69,7 +70,9 @@ def _network_git(root: str, *args: str):
             env={**os.environ, "GIT_NO_LAZY_FETCH": "1", "GIT_TERMINAL_PROMPT": "0"},
         )
     except subprocess.TimeoutExpired as exc:
-        raise _SyncFailure("git_timeout", "remote Git 操作超时；应先只读检查仓库状态") from exc
+        raise _SyncFailure(
+            "git_timeout", "remote Git 操作超时；应先只读检查仓库状态"
+        ) from exc
     except (OSError, UnicodeError, TypeError, ValueError) as exc:
         raise _SyncFailure("git_unavailable", "无法安全启动 remote Git 操作") from exc
 
@@ -82,13 +85,18 @@ def _redirecting_environment() -> bool:
 
 def _root(repo_path: str) -> str:
     if _redirecting_environment():
-        raise _SyncFailure("git_environment_redirected", "检测到可能重定向仓库、对象库或 index 的 Git 环境变量")
+        raise _SyncFailure(
+            "git_environment_redirected",
+            "检测到可能重定向仓库、对象库或 index 的 Git 环境变量",
+        )
     try:
         root, error = _validated_repo_path(repo_path)
     except (OSError, UnicodeError, TypeError, ValueError):
         raise _SyncFailure("invalid_repo_path", "无法安全解析 repo_path") from None
     if error or root is None:
-        raise _SyncFailure("invalid_repo_path", "repo_path 必须精确指向可访问的 Git 仓库根目录")
+        raise _SyncFailure(
+            "invalid_repo_path", "repo_path 必须精确指向可访问的 Git 仓库根目录"
+        )
     return root
 
 
@@ -96,13 +104,20 @@ def _oid(value: Any, field: str, *, required: bool = False) -> str | None:
     if value is None and not required:
         return None
     if not isinstance(value, str) or not _HEX_OID.fullmatch(value):
-        raise _SyncFailure("invalid_oid", f"{field} 必须为 40 或 64 位十六进制 OID" if value is not None else f"{field} 不能为空")
+        raise _SyncFailure(
+            "invalid_oid",
+            f"{field} 必须为 40 或 64 位十六进制 OID"
+            if value is not None
+            else f"{field} 不能为空",
+        )
     return value.lower()
 
 
 def _remote_name(root: str, remote: Any) -> str:
     if not isinstance(remote, str) or not remote or not _REMOTE_NAME.fullmatch(remote):
-        raise _SyncFailure("invalid_remote", "remote 必须是已配置 remote 的名称，不接受 URL")
+        raise _SyncFailure(
+            "invalid_remote", "remote 必须是已配置 remote 的名称，不接受 URL"
+        )
     configured = _git(root, "remote")
     if configured.returncode != 0:
         raise _SyncFailure("remote_state_unavailable", "无法核实已配置的 remote 名称")
@@ -125,8 +140,12 @@ def _validated_branch(root: str, value: Any, field: str = "branch_name") -> str:
     return name
 
 
-def _capture_oid(root: str, rev: str, *, code: str = "repository_state_unavailable") -> str:
-    result = _git(root, "rev-parse", "--verify", "--end-of-options", f"{rev}^{{commit}}")
+def _capture_oid(
+    root: str, rev: str, *, code: str = "repository_state_unavailable"
+) -> str:
+    result = _git(
+        root, "rev-parse", "--verify", "--end-of-options", f"{rev}^{{commit}}"
+    )
     if result.returncode != 0:
         raise _SyncFailure(code, "无法解析指定的 commit OID")
     oid = result.stdout.strip().lower()
@@ -138,18 +157,24 @@ def _capture_oid(root: str, rev: str, *, code: str = "repository_state_unavailab
 def _resolve_ref(root: str, value: Any) -> tuple[str, str]:
     """Resolve only local branch refs, remote-tracking refs, or a full commit OID."""
     if not isinstance(value, str) or not value:
-        raise _SyncFailure("invalid_base_ref", "base_ref 必须是本地分支、remote-tracking ref 或完整 commit OID")
+        raise _SyncFailure(
+            "invalid_base_ref",
+            "base_ref 必须是本地分支、remote-tracking ref 或完整 commit OID",
+        )
     if _HEX_OID.fullmatch(value):
         oid = value.lower()
         return oid, _capture_oid(root, oid, code="base_oid_unavailable")
 
-    if value.startswith("refs/heads/") or value.startswith("refs/remotes/"):
+    if value.startswith(("refs/heads/", "refs/remotes/")):
         ref = value
     else:
         ref = f"refs/heads/{value}"
     checked = _git(root, "check-ref-format", ref)
     if checked.returncode != 0:
-        raise _SyncFailure("invalid_base_ref", "base_ref 必须是 refs/heads、refs/remotes 下的准确 ref 或完整 OID")
+        raise _SyncFailure(
+            "invalid_base_ref",
+            "base_ref 必须是 refs/heads、refs/remotes 下的准确 ref 或完整 OID",
+        )
     symbolic = _git(root, "symbolic-ref", "-q", "--no-recurse", ref)
     if symbolic.returncode == 0:
         raise _SyncFailure("symbolic_ref_rejected", "base_ref 不能是符号引用")
@@ -171,14 +196,16 @@ def _head(root: str) -> tuple[str, str | None, str | None]:
         ref = symbolic.stdout.strip()
         if not ref.startswith("refs/heads/"):
             raise _SyncFailure("head_unavailable", "HEAD 未指向普通本地分支")
-        return oid, ref[len("refs/heads/"):], ref
+        return oid, ref[len("refs/heads/") :], ref
     if symbolic.returncode == 1:
         return oid, None, None
     raise _SyncFailure("head_unavailable", "无法核实 HEAD 分支身份")
 
 
 def _status(root: str) -> tuple[bool, list[str]]:
-    result = _git(root, "--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=all")
+    result = _git(
+        root, "--no-optional-locks", "status", "--porcelain=v1", "--untracked-files=all"
+    )
     if result.returncode != 0:
         raise _SyncFailure("worktree_state_unavailable", "无法核实工作区状态")
     lines = result.stdout.splitlines()
@@ -200,7 +227,9 @@ def _operation_flags(root: str) -> dict[str, bool]:
         except FileNotFoundError:
             flags[key] = False
         except OSError:
-            raise _SyncFailure("operation_state_unavailable", "无法检查 Git 操作状态") from None
+            raise _SyncFailure(
+                "operation_state_unavailable", "无法检查 Git 操作状态"
+            ) from None
     return flags
 
 
@@ -218,8 +247,12 @@ def _locked_worktree(root: str) -> bool:
             records[-1].append(field)
     for record in records:
         if f"worktree {expected}" in record:
-            return any(item == "locked" or item.startswith("locked ") for item in record)
-    raise _SyncFailure("worktree_state_unavailable", "Git worktree 列表中找不到目标目录")
+            return any(
+                item == "locked" or item.startswith("locked ") for item in record
+            )
+    raise _SyncFailure(
+        "worktree_state_unavailable", "Git worktree 列表中找不到目标目录"
+    )
 
 
 def _metadata_locked(root: str, branch_name: str | None) -> bool:
@@ -239,7 +272,9 @@ def _metadata_locked(root: str, branch_name: str | None) -> bool:
         except FileNotFoundError:
             continue
         except OSError:
-            raise _SyncFailure("repository_state_unavailable", "无法检查 Git 元数据锁") from None
+            raise _SyncFailure(
+                "repository_state_unavailable", "无法检查 Git 元数据锁"
+            ) from None
     return False
 
 
@@ -301,15 +336,23 @@ def _verify_head(root: str, expected: str) -> tuple[str, str | None]:
 
 
 def _read_remote_branch_oid(root: str, remote: str, branch_name: str) -> str | None:
-    result = _network_git(root, "ls-remote", "--exit-code", "--refs", remote, f"refs/heads/{branch_name}")
+    result = _network_git(
+        root, "ls-remote", "--exit-code", "--refs", remote, f"refs/heads/{branch_name}"
+    )
     if result.returncode == 2 and not result.stdout.strip():
         return None
     if result.returncode != 0:
-        raise _SyncFailure("publication_check_failed", "无法通过指定 remote 核实需求分支发布状态")
+        raise _SyncFailure(
+            "publication_check_failed", "无法通过指定 remote 核实需求分支发布状态"
+        )
     rows = [line.split("\t", 1) for line in result.stdout.splitlines()]
-    matches = [row for row in rows if len(row) == 2 and row[1] == f"refs/heads/{branch_name}"]
+    matches = [
+        row for row in rows if len(row) == 2 and row[1] == f"refs/heads/{branch_name}"
+    ]
     if len(matches) != 1 or not _HEX_OID.fullmatch(matches[0][0]):
-        raise _SyncFailure("publication_check_failed", "remote 返回了缺失或不明确的分支状态")
+        raise _SyncFailure(
+            "publication_check_failed", "remote 返回了缺失或不明确的分支状态"
+        )
     return matches[0][0].lower()
 
 
@@ -329,21 +372,33 @@ def _read_ref_oid(root: str, ref: str, *, missing_ok: bool) -> str | None:
     return _capture_oid(root, ref, code="ref_state_unavailable")
 
 
-def _relation(root: str, head_oid: str, base_oid: str) -> tuple[str, str | None, int, int]:
+def _relation(
+    root: str, head_oid: str, base_oid: str
+) -> tuple[str, str | None, int, int]:
     merge_base = _git(root, "merge-base", "--all", head_oid, base_oid)
     if merge_base.returncode == 0:
-        bases = [line.strip().lower() for line in merge_base.stdout.splitlines() if line.strip()]
-        merge_base_oid = bases[0] if len(bases) == 1 and _HEX_OID.fullmatch(bases[0]) else None
+        bases = [
+            line.strip().lower()
+            for line in merge_base.stdout.splitlines()
+            if line.strip()
+        ]
+        merge_base_oid = (
+            bases[0] if len(bases) == 1 and _HEX_OID.fullmatch(bases[0]) else None
+        )
     elif merge_base.returncode == 1:
         merge_base_oid = None
     else:
         raise _SyncFailure("history_state_unavailable", "无法读取提交图关系")
-    counts = _git(root, "rev-list", "--left-right", "--count", f"{head_oid}...{base_oid}")
+    counts = _git(
+        root, "rev-list", "--left-right", "--count", f"{head_oid}...{base_oid}"
+    )
     if counts.returncode != 0:
         raise _SyncFailure("history_state_unavailable", "无法统计 head/base 提交差异")
     pair = counts.stdout.strip().split()
     if len(pair) != 2 or not all(value.isdecimal() for value in pair):
-        raise _SyncFailure("history_state_unavailable", "Git 返回了无效 ahead/behind 统计")
+        raise _SyncFailure(
+            "history_state_unavailable", "Git 返回了无效 ahead/behind 统计"
+        )
     ahead, behind = int(pair[0]), int(pair[1])
     if behind == 0:
         status = "up_to_date"
@@ -361,7 +416,9 @@ def _common_dir(root: str) -> Path:
     try:
         common = Path(result.stdout.strip()).resolve(strict=True)
     except (OSError, RuntimeError, ValueError):
-        raise _SyncFailure("common_dir_unavailable", "无法解析 Git common-dir") from None
+        raise _SyncFailure(
+            "common_dir_unavailable", "无法解析 Git common-dir"
+        ) from None
     if not common.is_dir():
         raise _SyncFailure("common_dir_unavailable", "Git common-dir 不可访问")
     return common
@@ -370,7 +427,9 @@ def _common_dir(root: str) -> Path:
 @contextmanager
 def _sync_lock(root: str) -> Iterator[None]:
     if fcntl is None:
-        raise _SyncFailure("sync_lock_unavailable", "当前平台不支持 worktree 同步协作锁")
+        raise _SyncFailure(
+            "sync_lock_unavailable", "当前平台不支持 worktree 同步协作锁"
+        )
     common = _common_dir(root)
     lock_path = common / ".worktree-base-sync.lock"
     flags = os.O_CREAT | os.O_RDWR
@@ -381,15 +440,21 @@ def _sync_lock(root: str) -> Iterator[None]:
     try:
         descriptor = os.open(lock_path, flags, 0o600)
     except OSError:
-        raise _SyncFailure("sync_lock_unavailable", "无法建立 worktree 同步协作锁") from None
+        raise _SyncFailure(
+            "sync_lock_unavailable", "无法建立 worktree 同步协作锁"
+        ) from None
     try:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
-            raise _SyncFailure("sync_lock_unavailable", "worktree 同步协作锁不是安全的普通文件")
+            raise _SyncFailure(
+                "sync_lock_unavailable", "worktree 同步协作锁不是安全的普通文件"
+            )
         try:
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
-            raise _SyncFailure("sync_busy", "另一个遵守协作锁的同步操作正在运行") from None
+            raise _SyncFailure(
+                "sync_busy", "另一个遵守协作锁的同步操作正在运行"
+            ) from None
         yield
     finally:
         try:
@@ -403,7 +468,14 @@ def _timestamp() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _audit_result(root: str | None, *, status: str, error_code: str | None = None, error: str | None = None, **values: Any) -> dict[str, Any]:
+def _audit_result(
+    root: str | None,
+    *,
+    status: str,
+    error_code: str | None = None,
+    error: str | None = None,
+    **values: Any,
+) -> dict[str, Any]:
     return {
         "ok": error_code is None,
         "repo_path": root,
@@ -442,7 +514,9 @@ def _recovery_failure(exc: recovery._RecoveryFailure) -> _SyncFailure:
     return _SyncFailure(exc.code, exc.message)
 
 
-def audit_worktree_base_sync(repo_path: str, base_ref: str, remote: str | None = None) -> dict[str, Any]:
+def audit_worktree_base_sync(
+    repo_path: str, base_ref: str, remote: str | None = None
+) -> dict[str, Any]:
     """Read local HEAD/base relationships and optional live publication status; never fetches."""
     root: str | None = None
     base_oid: str | None = None
@@ -459,17 +533,28 @@ def audit_worktree_base_sync(repo_path: str, base_ref: str, remote: str | None =
         state = _state(root)
         recovery_fields = _recovery_fields(root)
         _, base_oid = _resolve_ref(root, base_ref)
-        status, merge_base_oid, ahead_by, behind_by = _relation(root, state["head_oid"], base_oid)
+        status, merge_base_oid, ahead_by, behind_by = _relation(
+            root, state["head_oid"], base_oid
+        )
         if remote is not None:
             remote_name = _remote_name(root, remote)
             if state["branch_name"] is None:
-                raise _SyncFailure("detached_head", "detached HEAD 没有可查询的需求分支发布状态")
+                raise _SyncFailure(
+                    "detached_head", "detached HEAD 没有可查询的需求分支发布状态"
+                )
             network_accessed = True
-            publication_remote_oid = _read_remote_branch_oid(root, remote_name, state["branch_name"])
-            publication_status = "published" if publication_remote_oid else "unpublished"
+            publication_remote_oid = _read_remote_branch_oid(
+                root, remote_name, state["branch_name"]
+            )
+            publication_status = (
+                "published" if publication_remote_oid else "unpublished"
+            )
         if (
-            state["dirty"] or state["operation_in_progress"] or state["unmerged_index"]
-            or state["locked"] or state["detached"]
+            state["dirty"]
+            or state["operation_in_progress"]
+            or state["unmerged_index"]
+            or state["locked"]
+            or state["detached"]
             or recovery_fields["recovery_context"].get("status") != "none"
         ):
             status = "blocked"
@@ -530,151 +615,132 @@ def audit_worktree_base_sync(repo_path: str, base_ref: str, remote: str | None =
         )
 
 
-def fetch_repository_branch(repo_path: str, remote: str, branch_name: str) -> dict[str, Any]:
-    """Fetch one remote branch through FETCH_HEAD, then CAS its tracking ref without rewinds."""
+@dataclass
+class _FetchProgress:
+    """保留 fetch 各阶段的实际进展；None 表示写入结果尚无法确定。"""
+
+    remote: str
+    branch: str
     root: str | None = None
     ref: str | None = None
-    branch = str(branch_name)
-    remote_name = remote
     before_oid: str | None = None
     fetched_oid: str | None = None
-    network_accessed = False
-    fetch_started = False
+    fetch_started: bool = False
     fetch_head_written: bool | None = False
-    tracking_update_started = False
+    tracking_update_started: bool = False
     tracking_ref_updated: bool | None = False
+
+    def result(
+        self, error_code: str | None = None, error: str | None = None
+    ) -> dict[str, Any]:
+        succeeded = error_code is None
+        return {
+            "ok": succeeded,
+            "repo_path": self.root,
+            "remote": self.remote,
+            "branch_name": self.branch,
+            "fetch_ref": self.ref,
+            "previous_oid": self.before_oid,
+            "fetched_oid": self.fetched_oid,
+            "fetched_at": _timestamp() if succeeded else None,
+            "fetch_head_written": self.fetch_head_written,
+            "objects_may_be_downloaded": self.fetch_started,
+            "tracking_ref_updated": self.tracking_ref_updated,
+            "network_accessed": self.fetch_started,
+            "needs_review": not succeeded
+            and (self.fetch_started or self.tracking_update_started),
+            "error_code": error_code,
+            "error": error,
+        }
+
+
+def _zero_oid(root: str) -> str:
+    result = _git(root, "rev-parse", "--show-object-format")
+    if result.returncode != 0:
+        raise _SyncFailure(
+            "object_format_unavailable", "无法确定 Git 对象格式以安全比较引用"
+        )
+    object_format = result.stdout.strip()
+    if object_format == "sha1":
+        return "0" * 40
+    if object_format == "sha256":
+        return "0" * 64
+    raise _SyncFailure("object_format_unavailable", "Git 返回了不支持的对象格式")
+
+
+def _fetch_tracking_ref(root: str, progress: _FetchProgress) -> dict[str, Any]:
+    """先下载到 FETCH_HEAD，再以原 OID 为条件更新跟踪引用。"""
+    assert progress.ref is not None
+    progress.before_oid = _read_ref_oid(root, progress.ref, missing_ok=True)
+    progress.fetch_started = True
+    fetched = _network_git(
+        root,
+        "fetch",
+        "--atomic",
+        "--quiet",
+        "--no-tags",
+        "--no-prune",
+        "--no-prune-tags",
+        "--no-auto-maintenance",
+        "--no-recurse-submodules",
+        "--refmap=",
+        progress.remote,
+        f"refs/heads/{progress.branch}",
+    )
+    if fetched.returncode != 0:
+        progress.fetch_head_written = None
+        return progress.result(
+            "fetch_failed",
+            "固定远端分支 fetch 失败；FETCH_HEAD 或对象库可能已变化，目标跟踪引用未指定给 fetch 更新",
+        )
+    progress.fetch_head_written = True
+    progress.fetched_oid = _capture_oid(
+        root, "FETCH_HEAD", code="fetch_readback_failed"
+    )
+    if progress.before_oid is not None and not _merge_base_ancestor(
+        root, progress.before_oid, progress.fetched_oid
+    ):
+        return progress.result(
+            "fetch_rewind_rejected",
+            "远端 tip 不是既有 remote-tracking tip 的后代；已保留 FETCH_HEAD/对象，未更新跟踪引用",
+        )
+    zero_oid = _zero_oid(root)
+    expected_old_oid = progress.before_oid or zero_oid
+    progress.tracking_update_started = True
+    progress.tracking_ref_updated = None
+    updated = _git(
+        root,
+        "update-ref",
+        "--no-deref",
+        progress.ref,
+        progress.fetched_oid,
+        expected_old_oid,
+    )
+    after_oid = _read_ref_oid(root, progress.ref, missing_ok=True)
+    progress.tracking_ref_updated = after_oid == progress.fetched_oid
+    if updated.returncode != 0 or not progress.tracking_ref_updated:
+        return progress.result(
+            "fetch_ref_update_failed",
+            "fetch 已取得对象，但 remote-tracking 引用的条件更新或回读未通过；先核对引用状态",
+        )
+    return progress.result()
+
+
+def fetch_repository_branch(
+    repo_path: str, remote: str, branch_name: str
+) -> dict[str, Any]:
+    """Fetch one remote branch through FETCH_HEAD, then CAS its tracking ref without rewinds."""
+    progress = _FetchProgress(remote=remote, branch=str(branch_name))
     try:
         root = _root(repo_path)
-        branch = _validated_branch(root, branch_name)
-        remote_name = _remote_name(root, remote)
-        ref = f"refs/remotes/{remote_name}/{branch}"
+        progress.root = root
+        progress.branch = _validated_branch(root, branch_name)
+        progress.remote = _remote_name(root, remote)
+        progress.ref = f"refs/remotes/{progress.remote}/{progress.branch}"
         with _sync_lock(root):
-            before_oid = _read_ref_oid(root, ref, missing_ok=True)
-            fetch_started = True
-            network_accessed = True
-            fetched = _network_git(
-                root,
-                "fetch",
-                "--atomic",
-                "--quiet",
-                "--no-tags",
-                "--no-prune",
-                "--no-prune-tags",
-                "--no-auto-maintenance",
-                "--no-recurse-submodules",
-                "--refmap=",
-                remote_name,
-                f"refs/heads/{branch}",
-            )
-            if fetched.returncode != 0:
-                fetch_head_written = None
-                tracking_ref_updated = False
-                return {
-                    "ok": False,
-                    "repo_path": root,
-                    "remote": remote_name,
-                    "branch_name": branch,
-                    "fetch_ref": ref,
-                    "previous_oid": before_oid,
-                    "fetched_oid": None,
-                    "fetched_at": None,
-                    "fetch_head_written": None,
-                    "objects_may_be_downloaded": True,
-                    "tracking_ref_updated": False,
-                    "network_accessed": network_accessed,
-                    "needs_review": True,
-                    "error_code": "fetch_failed",
-                    "error": "固定远端分支 fetch 失败；FETCH_HEAD 或对象库可能已变化，目标跟踪引用未指定给 fetch 更新",
-                }
-            fetch_head_written = True
-            fetched_oid = _capture_oid(root, "FETCH_HEAD", code="fetch_readback_failed")
-            if before_oid is not None and not _merge_base_ancestor(root, before_oid, fetched_oid):
-                return {
-                    "ok": False,
-                    "repo_path": root,
-                    "remote": remote_name,
-                    "branch_name": branch,
-                    "fetch_ref": ref,
-                    "previous_oid": before_oid,
-                    "fetched_oid": fetched_oid,
-                    "fetched_at": None,
-                    "fetch_head_written": True,
-                    "objects_may_be_downloaded": True,
-                    "tracking_ref_updated": False,
-                    "network_accessed": network_accessed,
-                    "needs_review": True,
-                    "error_code": "fetch_rewind_rejected",
-                    "error": "远端 tip 不是既有 remote-tracking tip 的后代；已保留 FETCH_HEAD/对象，未更新跟踪引用",
-                }
-            format_result = _git(root, "rev-parse", "--show-object-format")
-            if format_result.returncode != 0:
-                raise _SyncFailure("object_format_unavailable", "无法确定 Git 对象格式以安全比较引用")
-            object_format = format_result.stdout.strip()
-            if object_format == "sha1":
-                zero_oid = "0" * 40
-            elif object_format == "sha256":
-                zero_oid = "0" * 64
-            else:
-                raise _SyncFailure("object_format_unavailable", "Git 返回了不支持的对象格式")
-            expected_old_oid = before_oid or zero_oid
-            tracking_update_started = True
-            tracking_ref_updated = None
-            updated = _git(root, "update-ref", "--no-deref", ref, fetched_oid, expected_old_oid)
-            after_oid = _read_ref_oid(root, ref, missing_ok=True)
-            tracking_ref_updated = after_oid == fetched_oid
-            if updated.returncode != 0 or not tracking_ref_updated:
-                return {
-                    "ok": False,
-                    "repo_path": root,
-                    "remote": remote_name,
-                    "branch_name": branch,
-                    "fetch_ref": ref,
-                    "previous_oid": before_oid,
-                    "fetched_oid": fetched_oid,
-                    "fetched_at": None,
-                    "fetch_head_written": True,
-                    "objects_may_be_downloaded": True,
-                    "tracking_ref_updated": tracking_ref_updated,
-                    "network_accessed": network_accessed,
-                    "needs_review": True,
-                    "error_code": "fetch_ref_update_failed",
-                    "error": "fetch 已取得对象，但 remote-tracking 引用的条件更新或回读未通过；先核对引用状态",
-                }
-            return {
-                "ok": True,
-                "repo_path": root,
-                "remote": remote_name,
-                "branch_name": branch,
-                "fetch_ref": ref,
-                "previous_oid": before_oid,
-                "fetched_oid": fetched_oid,
-                "fetched_at": _timestamp(),
-                "fetch_head_written": True,
-                "objects_may_be_downloaded": True,
-                "tracking_ref_updated": True,
-                "network_accessed": network_accessed,
-                "needs_review": False,
-                "error_code": None,
-                "error": None,
-            }
+            return _fetch_tracking_ref(root, progress)
     except _SyncFailure as exc:
-        return {
-            "ok": False,
-            "repo_path": root,
-            "remote": remote_name,
-            "branch_name": branch,
-            "fetch_ref": ref,
-            "previous_oid": before_oid,
-            "fetched_oid": fetched_oid,
-            "fetched_at": None,
-            "fetch_head_written": fetch_head_written,
-            "objects_may_be_downloaded": fetch_started,
-            "tracking_ref_updated": tracking_ref_updated,
-            "network_accessed": network_accessed,
-            "needs_review": fetch_started or tracking_update_started,
-            "error_code": exc.code,
-            "error": exc.message,
-        }
+        return progress.result(exc.code, exc.message)
 
 
 def _assert_expected_oid(actual: str, expected: str | None, field: str) -> None:
@@ -683,7 +749,13 @@ def _assert_expected_oid(actual: str, expected: str | None, field: str) -> None:
         raise _SyncFailure("stale_oid", f"当前 {field} 与预期 OID 不匹配")
 
 
-def _preflight(root: str, branch_name: str, base_ref: str, expected_head_oid: str | None, expected_base_oid: str | None) -> dict[str, Any]:
+def _preflight(
+    root: str,
+    branch_name: str,
+    base_ref: str,
+    expected_head_oid: str | None,
+    expected_base_oid: str | None,
+) -> dict[str, Any]:
     state = _check_writable_state(root, branch_name)
     if _branch_ref_oid(root, branch_name) != state["head_oid"]:
         raise _SyncFailure("branch_ref_changed", "当前直接分支引用与 HEAD 不匹配")
@@ -693,7 +765,9 @@ def _preflight(root: str, branch_name: str, base_ref: str, expected_head_oid: st
     return {**state, "base_ref": resolved_ref, "base_oid": base_oid}
 
 
-def _common_result(root: str | None, branch_name: str, base_ref: Any, **values: Any) -> dict[str, Any]:
+def _common_result(
+    root: str | None, branch_name: str, base_ref: Any, **values: Any
+) -> dict[str, Any]:
     return {
         "ok": False,
         "repo_path": root,
@@ -714,14 +788,22 @@ def _merge_base_ancestor(root: str, ancestor: str, descendant: str) -> bool:
         return False
     raise _SyncFailure("history_state_unavailable", "无法核实提交祖先关系")
 
+
 def _reject_branch_merge_options(root: str, branch_name: str) -> None:
-    result = _git(root, "config", "--null", "--get-all", f"branch.{branch_name}.mergeOptions")
+    result = _git(
+        root, "config", "--null", "--get-all", f"branch.{branch_name}.mergeOptions"
+    )
     if result.returncode == 1 and not result.stdout:
         return
     if result.returncode != 0:
-        raise _SyncFailure("merge_options_unavailable", "无法核实当前分支的 mergeOptions 配置")
+        raise _SyncFailure(
+            "merge_options_unavailable", "无法核实当前分支的 mergeOptions 配置"
+        )
     if result.stdout:
-        raise _SyncFailure("merge_options_rejected", "当前分支配置了 mergeOptions，可能改变普通基线合并语义")
+        raise _SyncFailure(
+            "merge_options_rejected",
+            "当前分支配置了 mergeOptions，可能改变普通基线合并语义",
+        )
 
 
 def _branch_ref_oid(root: str, branch_name: str) -> str:
@@ -736,14 +818,27 @@ def _branch_ref_oid(root: str, branch_name: str) -> str:
 
 def _clean_readback(root: str) -> bool:
     dirty, _ = _status(root)
-    return not dirty and not _unmerged_index(root) and not any(_operation_flags(root).values())
+    return (
+        not dirty
+        and not _unmerged_index(root)
+        and not any(_operation_flags(root).values())
+    )
 
 
 def _conflict_paths(root: str) -> list[str]:
-    result = _git(root, "diff", "--no-ext-diff", "--no-textconv", "--name-only", "--diff-filter=U", "-z")
+    result = _git(
+        root,
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--name-only",
+        "--diff-filter=U",
+        "-z",
+    )
     if result.returncode != 0:
         raise _SyncFailure("conflict_readback_failed", "无法读取冲突路径")
     return [path for path in result.stdout.split("\0") if path]
+
 
 def _paths_from_git(root: str, *args: str) -> set[str]:
     result = _git(root, *args)
@@ -761,35 +856,93 @@ def _ignored_path_collisions(
     include_replay: bool = True,
 ) -> list[str]:
     """Protect ignored user files only where the planned tree transition touches them."""
-    ignored = _paths_from_git(root, "ls-files", "--others", "--ignored", "--exclude-standard", "-z")
+    ignored = _paths_from_git(
+        root, "ls-files", "--others", "--ignored", "--exclude-standard", "-z"
+    )
     if not ignored:
         return []
-    changed = _paths_from_git(root, "diff", "--no-ext-diff", "--no-textconv", "--name-only", "--no-renames", "-z", head_oid, base_oid)
+    changed = _paths_from_git(
+        root,
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--name-only",
+        "--no-renames",
+        "-z",
+        head_oid,
+        base_oid,
+    )
     if include_replay:
         replay_boundary = old_base_oid or base_oid
-        commits_result = _git(root, "rev-list", "--reverse", "--topo-order", f"{replay_boundary}..{head_oid}")
+        commits_result = _git(
+            root,
+            "rev-list",
+            "--reverse",
+            "--topo-order",
+            f"{replay_boundary}..{head_oid}",
+        )
         if commits_result.returncode != 0:
-            raise _SyncFailure("path_state_unavailable", "无法核实 rebase 将重放的提交路径")
+            raise _SyncFailure(
+                "path_state_unavailable", "无法核实 rebase 将重放的提交路径"
+            )
         for commit_oid in commits_result.stdout.splitlines():
             if commit_oid:
-                changed.update(_paths_from_git(
-                    root, "diff-tree", "--no-ext-diff", "--no-textconv", "--root", "--no-commit-id", "--name-only", "--no-renames", "-m", "-r", "-z", commit_oid
-                ))
+                changed.update(
+                    _paths_from_git(
+                        root,
+                        "diff-tree",
+                        "--no-ext-diff",
+                        "--no-textconv",
+                        "--root",
+                        "--no-commit-id",
+                        "--name-only",
+                        "--no-renames",
+                        "-m",
+                        "-r",
+                        "-z",
+                        commit_oid,
+                    )
+                )
 
     def overlaps(left: str, right: str) -> bool:
-        return left == right or left.startswith(right + "/") or right.startswith(left + "/")
+        return (
+            left == right
+            or left.startswith(right + "/")
+            or right.startswith(left + "/")
+        )
 
-    return sorted({ignored_path for ignored_path in ignored if any(overlaps(ignored_path, path) for path in changed)})
+    return sorted(
+        {
+            ignored_path
+            for ignored_path in ignored
+            if any(overlaps(ignored_path, path) for path in changed)
+        }
+    )
 
 
-def _planned_replay_oids(root: str, head_oid: str, base_oid: str, old_base_oid: str | None) -> list[str]:
+def _planned_replay_oids(
+    root: str, head_oid: str, base_oid: str, old_base_oid: str | None
+) -> list[str]:
     boundary = old_base_oid or base_oid
-    result = _git(root, "rev-list", "--reverse", "--topo-order", "--no-merges", f"{boundary}..{head_oid}")
+    result = _git(
+        root,
+        "rev-list",
+        "--reverse",
+        "--topo-order",
+        "--no-merges",
+        f"{boundary}..{head_oid}",
+    )
     if result.returncode != 0:
-        raise _SyncFailure("replay_plan_unavailable", "无法核实 rebase 的简单提交重放序列")
+        raise _SyncFailure(
+            "replay_plan_unavailable", "无法核实 rebase 的简单提交重放序列"
+        )
     commits = result.stdout.splitlines()
-    if len(commits) > 20_000 or any(not _HEX_OID.fullmatch(commit) for commit in commits):
-        raise _SyncFailure("replay_plan_unsupported", "rebase 提交重放序列无效或超过数量上限")
+    if len(commits) > 20_000 or any(
+        not _HEX_OID.fullmatch(commit) for commit in commits
+    ):
+        raise _SyncFailure(
+            "replay_plan_unsupported", "rebase 提交重放序列无效或超过数量上限"
+        )
     return [commit.lower() for commit in commits]
 
 
@@ -827,8 +980,49 @@ def _recovery_paths(
             )
         )
     if len(changed) > 4096:
-        raise _SyncFailure("recovery_scope_unsupported", "同步影响路径超过恢复记录的数量上限")
+        raise _SyncFailure(
+            "recovery_scope_unsupported", "同步影响路径超过恢复记录的数量上限"
+        )
     return sorted(changed)
+
+
+def _clear_recovery_record(root: str, record: dict[str, Any] | None) -> None:
+    """统一转换清理错误，避免成功执行 Git 后将记录清理失败误报为成功。"""
+    if record is None:
+        return
+    try:
+        recovery.clear_managed_operation(root, record, git=_git)
+    except recovery._RecoveryFailure as exc:
+        raise _recovery_failure(exc) from None
+
+
+def _rebase_old_boundary(
+    root: str, old_base_oid: str | None, head_oid: str
+) -> str | None:
+    """显式重放边界必须是当前 head 的严格祖先，且能解析到提交。"""
+    old_boundary = _oid(old_base_oid, "old_base_oid")
+    if old_boundary is not None:
+        old_boundary = _capture_oid(root, old_boundary, code="old_base_unavailable")
+        if not _merge_base_ancestor(root, old_boundary, head_oid):
+            raise _SyncFailure(
+                "old_base_not_ancestor", "old_base_oid 必须是当前 head 的祖先"
+            )
+        if old_boundary == head_oid:
+            raise _SyncFailure(
+                "empty_rebase_range",
+                "old_base_oid 与当前 head 相同，没有可验证的子需求提交",
+            )
+    return old_boundary
+
+
+def _check_rebase_publication(
+    root: str, remote_name: str, branch: str, result: dict[str, Any]
+) -> None:
+    """记录实时远端 tip；存在同名公开分支时拒绝改写历史。"""
+    published_oid = _read_remote_branch_oid(root, remote_name, branch)
+    result["publication_remote_oid"] = published_oid
+    if published_oid is not None:
+        raise _SyncFailure("published_branch", "remote 上存在同名需求分支；禁止 rebase")
 
 
 def rebase_repository_branch(
@@ -866,40 +1060,48 @@ def rebase_repository_branch(
         expected_base = _oid(expected_base_oid, "expected_base_oid")
         result.update(repo_path=root, branch_name=branch, remote=remote_name)
         with _sync_lock(root):
-            initial = _preflight(root, branch, base_branch, expected_head, expected_base)
-            old_boundary = _oid(old_base_oid, "old_base_oid")
-            if old_boundary is not None:
-                old_boundary = _capture_oid(root, old_boundary, code="old_base_unavailable")
-                if not _merge_base_ancestor(root, old_boundary, initial["head_oid"]):
-                    raise _SyncFailure("old_base_not_ancestor", "old_base_oid 必须是当前 head 的祖先")
-                if old_boundary == initial["head_oid"]:
-                    raise _SyncFailure("empty_rebase_range", "old_base_oid 与当前 head 相同，没有可验证的子需求提交")
+            initial = _preflight(
+                root, branch, base_branch, expected_head, expected_base
+            )
+            old_boundary = _rebase_old_boundary(root, old_base_oid, initial["head_oid"])
 
             network_accessed = True
             result["network_accessed"] = True
-            published_oid = _read_remote_branch_oid(root, remote_name, branch)
-            result["publication_remote_oid"] = published_oid
-            if published_oid is not None:
-                raise _SyncFailure("published_branch", "remote 上存在同名需求分支；禁止 rebase")
+            _check_rebase_publication(root, remote_name, branch, result)
 
             # Re-read branch, worktree, head and base immediately before rewriting history.
-            current = _preflight(root, branch, initial["base_ref"], initial["head_oid"], initial["base_oid"])
-            if current["head_oid"] != initial["head_oid"] or current["base_oid"] != initial["base_oid"]:
+            current = _preflight(
+                root,
+                branch,
+                initial["base_ref"],
+                initial["head_oid"],
+                initial["base_oid"],
+            )
+            if (
+                current["head_oid"] != initial["head_oid"]
+                or current["base_oid"] != initial["base_oid"]
+            ):
                 raise _SyncFailure("stale_oid", "执行前 head/base OID 已变化")
-            if old_boundary is not None and not _merge_base_ancestor(root, old_boundary, current["head_oid"]):
-                raise _SyncFailure("old_base_not_ancestor", "old_base_oid 不再是当前 head 的祖先")
+            if old_boundary is not None and not _merge_base_ancestor(
+                root, old_boundary, current["head_oid"]
+            ):
+                raise _SyncFailure(
+                    "old_base_not_ancestor", "old_base_oid 不再是当前 head 的祖先"
+                )
             collisions = _ignored_path_collisions(
                 root, current["head_oid"], current["base_oid"], old_boundary
             )
             if collisions:
                 result["ignored_path_collisions"] = collisions
-                raise _SyncFailure("ignored_path_collision", "rebase 目标会覆盖被忽略的用户文件；工具拒绝改写")
-            published_oid = _read_remote_branch_oid(root, remote_name, branch)
-            result["publication_remote_oid"] = published_oid
-            if published_oid is not None:
-                raise _SyncFailure("published_branch", "remote 上存在同名需求分支；禁止 rebase")
+                raise _SyncFailure(
+                    "ignored_path_collision",
+                    "rebase 目标会覆盖被忽略的用户文件；工具拒绝改写",
+                )
+            _check_rebase_publication(root, remote_name, branch, result)
 
-            replay_oids = _planned_replay_oids(root, initial["head_oid"], initial["base_oid"], old_boundary)
+            replay_oids = _planned_replay_oids(
+                root, initial["head_oid"], initial["base_oid"], old_boundary
+            )
             affected_paths = _recovery_paths(
                 root, initial["head_oid"], initial["base_oid"], replay_oids
             )
@@ -940,7 +1142,11 @@ def rebase_repository_branch(
             if not action_succeeded:
                 paths = _conflict_paths(root)
                 state_now = _state(root)
-                conflict = state_now["operation_in_progress"] or state_now["unmerged_index"] or bool(paths)
+                conflict = (
+                    state_now["operation_in_progress"]
+                    or state_now["unmerged_index"]
+                    or bool(paths)
+                )
                 result.update(
                     head_oid_before=initial["head_oid"],
                     head_oid_after=state_now["head_oid"],
@@ -953,15 +1159,19 @@ def rebase_repository_branch(
                     error="rebase 未完成；现场已保留，未执行 continue、abort、reset 或回滚",
                 )
                 result["still_in_progress"] = bool(state_now["operation_in_progress"])
-                if record is not None:
-                    result.update(_recovery_fields(root))
+                result.update(_recovery_fields(root))
                 return result
 
             final_oid, final_branch, _ = _head(root)
             ref_oid = _branch_ref_oid(root, branch)
             ancestor = _merge_base_ancestor(root, initial["base_oid"], final_oid)
             clean = _clean_readback(root)
-            if final_branch != branch or ref_oid != final_oid or not ancestor or not clean:
+            if (
+                final_branch != branch
+                or ref_oid != final_oid
+                or not ancestor
+                or not clean
+            ):
                 result.update(
                     head_oid_before=initial["head_oid"],
                     head_oid_after=final_oid,
@@ -974,11 +1184,7 @@ def rebase_repository_branch(
                 )
                 result.update(_recovery_fields(root))
                 return result
-            if record is not None:
-                try:
-                    recovery.clear_managed_operation(root, record, git=_git)
-                except recovery._RecoveryFailure as exc:
-                    raise _recovery_failure(exc) from None
+            _clear_recovery_record(root, record)
             result.update(
                 ok=True,
                 rebased=True,
@@ -1000,7 +1206,8 @@ def rebase_repository_branch(
             base_oid=initial.get("base_oid"),
             old_base_oid=old_base_oid,
             conflict_paths=[],
-            ignored_path_collisions=collisions or result.get("ignored_path_collisions", []),
+            ignored_path_collisions=collisions
+            or result.get("ignored_path_collisions", []),
             action_started=action_started,
             rebased=action_succeeded if action_started else False,
             needs_review=action_started or record_created,
@@ -1012,6 +1219,48 @@ def rebase_repository_branch(
         if record_created and root is not None:
             result.update(_recovery_fields(root))
         return result
+
+
+def _require_remote_tip_in_history(
+    root: str, remote_oid: str | None, head_oid: str
+) -> None:
+    """已发布分支的远端 tip 必须在本地对象库中，且已包含于当前历史。"""
+    if remote_oid is None:
+        return
+    object_check = _git(root, "cat-file", "-e", f"{remote_oid}^{{commit}}")
+    if object_check.returncode != 0:
+        raise _SyncFailure(
+            "remote_tip_missing_locally",
+            "remote 分支 tip 不在本地对象库；拒绝隐式获取或 lazy fetch",
+        )
+    if not _merge_base_ancestor(root, remote_oid, head_oid):
+        raise _SyncFailure(
+            "remote_branch_not_included", "本地 head 尚未包含 remote 同名分支 tip"
+        )
+
+
+def _verified_merge_type(root: str, initial: dict[str, Any], final_oid: str) -> str:
+    """区分无变化、快进与合并提交，并核对合并提交保留两个指定父提交。"""
+    if final_oid == initial["head_oid"]:
+        merge_type = "up_to_date"
+    elif final_oid == initial["base_oid"]:
+        merge_type = "fast_forward"
+    else:
+        merge_type = "merge_commit"
+    if merge_type == "merge_commit":
+        parents = _git(root, "rev-list", "--parents", "-n", "1", final_oid)
+        parent_oids = (
+            parents.stdout.strip().split()[1:] if parents.returncode == 0 else []
+        )
+        if (
+            initial["head_oid"] not in parent_oids
+            or initial["base_oid"] not in parent_oids
+        ):
+            raise _SyncFailure(
+                "merge_readback_failed",
+                "merge commit 未保留原 head 与指定 base 的父提交",
+            )
+    return merge_type
 
 
 def merge_repository_branch(
@@ -1056,40 +1305,43 @@ def merge_repository_branch(
             result["network_accessed"] = True
             remote_oid = _read_remote_branch_oid(root, remote_name, branch)
             result["publication_remote_oid"] = remote_oid
-            if remote_oid is not None:
-                object_check = _git(root, "cat-file", "-e", f"{remote_oid}^{{commit}}")
-                if object_check.returncode != 0:
-                    raise _SyncFailure("remote_tip_missing_locally", "remote 分支 tip 不在本地对象库；拒绝隐式获取或 lazy fetch")
-                if not _merge_base_ancestor(root, remote_oid, initial["head_oid"]):
-                    raise _SyncFailure("remote_branch_not_included", "本地 head 尚未包含 remote 同名分支 tip")
+            _require_remote_tip_in_history(root, remote_oid, initial["head_oid"])
             collisions = _ignored_path_collisions(
                 root, initial["head_oid"], initial["base_oid"], include_replay=False
             )
             if collisions:
                 result["ignored_path_collisions"] = collisions
-                raise _SyncFailure("ignored_path_collision", "merge 目标会覆盖被忽略的用户文件；工具拒绝合并")
+                raise _SyncFailure(
+                    "ignored_path_collision",
+                    "merge 目标会覆盖被忽略的用户文件；工具拒绝合并",
+                )
 
             # Recheck the exact local and remote snapshots immediately before merging.
-            current = _preflight(root, branch, initial["base_ref"], expected_head, expected_base)
-            if current["head_oid"] != initial["head_oid"] or current["base_oid"] != initial["base_oid"]:
+            current = _preflight(
+                root, branch, initial["base_ref"], expected_head, expected_base
+            )
+            if (
+                current["head_oid"] != initial["head_oid"]
+                or current["base_oid"] != initial["base_oid"]
+            ):
                 raise _SyncFailure("stale_oid", "执行前 head/base OID 已变化")
             _reject_branch_merge_options(root, branch)
             remote_oid = _read_remote_branch_oid(root, remote_name, branch)
             result["publication_remote_oid"] = remote_oid
-            if remote_oid is not None:
-                object_check = _git(root, "cat-file", "-e", f"{remote_oid}^{{commit}}")
-                if object_check.returncode != 0:
-                    raise _SyncFailure("remote_tip_missing_locally", "remote 分支 tip 不在本地对象库；拒绝隐式获取或 lazy fetch")
-                if not _merge_base_ancestor(root, remote_oid, current["head_oid"]):
-                    raise _SyncFailure("remote_branch_not_included", "本地 head 尚未包含 remote 同名分支 tip")
+            _require_remote_tip_in_history(root, remote_oid, current["head_oid"])
             collisions = _ignored_path_collisions(
                 root, current["head_oid"], current["base_oid"], include_replay=False
             )
             if collisions:
                 result["ignored_path_collisions"] = collisions
-                raise _SyncFailure("ignored_path_collision", "merge 目标会覆盖被忽略的用户文件；工具拒绝合并")
+                raise _SyncFailure(
+                    "ignored_path_collision",
+                    "merge 目标会覆盖被忽略的用户文件；工具拒绝合并",
+                )
 
-            affected_paths = _recovery_paths(root, initial["head_oid"], initial["base_oid"])
+            affected_paths = _recovery_paths(
+                root, initial["head_oid"], initial["base_oid"]
+            )
             record_created = True
             record = _begin_recovery_record(
                 root,
@@ -1125,7 +1377,11 @@ def merge_repository_branch(
             if not action_succeeded:
                 paths = _conflict_paths(root)
                 state_now = _state(root)
-                conflict = state_now["operation_in_progress"] or state_now["unmerged_index"] or bool(paths)
+                conflict = (
+                    state_now["operation_in_progress"]
+                    or state_now["unmerged_index"]
+                    or bool(paths)
+                )
                 result.update(
                     head_oid_before=initial["head_oid"],
                     head_oid_after=state_now["head_oid"],
@@ -1146,7 +1402,12 @@ def merge_repository_branch(
             ref_oid = _branch_ref_oid(root, branch)
             ancestor = _merge_base_ancestor(root, initial["base_oid"], final_oid)
             clean = _clean_readback(root)
-            if final_branch != branch or ref_oid != final_oid or not ancestor or not clean:
+            if (
+                final_branch != branch
+                or ref_oid != final_oid
+                or not ancestor
+                or not clean
+            ):
                 result.update(
                     head_oid_before=initial["head_oid"],
                     head_oid_after=final_oid,
@@ -1159,22 +1420,8 @@ def merge_repository_branch(
                 )
                 result.update(_recovery_fields(root))
                 return result
-            if final_oid == initial["head_oid"]:
-                merge_type = "up_to_date"
-            elif final_oid == initial["base_oid"]:
-                merge_type = "fast_forward"
-            else:
-                merge_type = "merge_commit"
-            if merge_type == "merge_commit":
-                parents = _git(root, "rev-list", "--parents", "-n", "1", final_oid)
-                parent_oids = parents.stdout.strip().split()[1:] if parents.returncode == 0 else []
-                if initial["head_oid"] not in parent_oids or initial["base_oid"] not in parent_oids:
-                    raise _SyncFailure("merge_readback_failed", "merge commit 未保留原 head 与指定 base 的父提交")
-            if record is not None:
-                try:
-                    recovery.clear_managed_operation(root, record, git=_git)
-                except recovery._RecoveryFailure as exc:
-                    raise _recovery_failure(exc) from None
+            merge_type = _verified_merge_type(root, initial, final_oid)
+            _clear_recovery_record(root, record)
             result.update(
                 ok=True,
                 merged=True,
@@ -1198,7 +1445,8 @@ def merge_repository_branch(
             action_started=action_started,
             merge_type=None,
             conflict_paths=[],
-            ignored_path_collisions=collisions or result.get("ignored_path_collisions", []),
+            ignored_path_collisions=collisions
+            or result.get("ignored_path_collisions", []),
             needs_review=action_started or record_created,
             error_code=exc.code,
             error=exc.message,
@@ -1210,6 +1458,26 @@ def merge_repository_branch(
         return result
 
 
+def _recovery_request_head(
+    operation_id: str, expected_current_head_oid: str, expected_state_fingerprint: str
+) -> str:
+    """先校验客户端并发令牌的格式，再访问恢复现场。"""
+    if not isinstance(operation_id, str) or not recovery._UUID.fullmatch(operation_id):
+        raise _SyncFailure("invalid_operation_id", "operation_id 必须是标准 UUID")
+    expected_head = _oid(
+        expected_current_head_oid, "expected_current_head_oid", required=True
+    )
+    if not isinstance(expected_state_fingerprint, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", expected_state_fingerprint
+    ):
+        raise _SyncFailure(
+            "invalid_state_fingerprint",
+            "expected_state_fingerprint 必须是 64 位小写 SHA-256",
+        )
+    assert expected_head is not None
+    return expected_head
+
+
 def _validate_recovery_request(
     root: str,
     kind: str,
@@ -1217,11 +1485,9 @@ def _validate_recovery_request(
     expected_current_head_oid: str,
     expected_state_fingerprint: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    if not isinstance(operation_id, str) or not recovery._UUID.fullmatch(operation_id):
-        raise _SyncFailure("invalid_operation_id", "operation_id 必须是标准 UUID")
-    expected_head = _oid(expected_current_head_oid, "expected_current_head_oid", required=True)
-    if not isinstance(expected_state_fingerprint, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_state_fingerprint):
-        raise _SyncFailure("invalid_state_fingerprint", "expected_state_fingerprint 必须是 64 位小写 SHA-256")
+    expected_head = _recovery_request_head(
+        operation_id, expected_current_head_oid, expected_state_fingerprint
+    )
     try:
         snapshot = recovery.recovery_snapshot(root, git=_git)
     except recovery._RecoveryFailure as exc:
@@ -1231,13 +1497,17 @@ def _validate_recovery_request(
         raise _SyncFailure("worktree_locked", "目标 worktree 或 Git 元数据已锁定")
     context = snapshot["recovery_context"]
     if context.get("status") != "managed_in_progress" or context.get("kind") != kind:
-        raise _SyncFailure("recovery_operation_unavailable", "当前没有可继续或中止的匹配受管理操作")
+        raise _SyncFailure(
+            "recovery_operation_unavailable", "当前没有可继续或中止的匹配受管理操作"
+        )
     if context.get("operation_id") != operation_id:
         raise _SyncFailure("stale_operation_id", "operation_id 与当前受管理操作不匹配")
     if context.get("current_head_oid") != expected_head:
         raise _SyncFailure("stale_head", "当前 HEAD 已变化；请重新审计并核对恢复现场")
     if snapshot.get("current_state_fingerprint") != expected_state_fingerprint:
-        raise _SyncFailure("stale_state_fingerprint", "当前恢复状态已变化；请重新审计并核对恢复现场")
+        raise _SyncFailure(
+            "stale_state_fingerprint", "当前恢复状态已变化；请重新审计并核对恢复现场"
+        )
     try:
         record = recovery.read_managed_operation(root, git=_git)
     except recovery._RecoveryFailure as exc:
@@ -1247,7 +1517,9 @@ def _validate_recovery_request(
     return record, snapshot
 
 
-def _recovery_result(root: str | None, kind: str, action: str, operation_id: str) -> dict[str, Any]:
+def _recovery_result(
+    root: str | None, kind: str, action: str, operation_id: str
+) -> dict[str, Any]:
     return {
         "ok": False,
         "repo_path": root,
@@ -1267,6 +1539,51 @@ def _recovery_result(root: str | None, kind: str, action: str, operation_id: str
     }
 
 
+def _continued_operation_readback(
+    root: str, record: dict[str, Any], protected: dict[str, Any], kind: str
+) -> tuple[str, bool]:
+    """continue 后一起核对分支、保留历史、操作标记和受保护内容。"""
+    final_oid, final_branch, _ = _head(root)
+    branch_oid = _branch_ref_oid(root, record["branch_name"])
+    state = _state(root)
+    base_ancestor = _merge_base_ancestor(root, record["base_oid"], final_oid)
+    if kind == "merge":
+        parents = _git(root, "rev-list", "--parents", "-n", "1", final_oid)
+        parent_oids = (
+            parents.stdout.strip().split()[1:] if parents.returncode == 0 else []
+        )
+        history_ok = (
+            record["original_head_oid"] in parent_oids
+            and record["base_oid"] in parent_oids
+        )
+    else:
+        history_ok = base_ancestor
+    try:
+        protected_ok = recovery.verify_protected_worktree(
+            root, record, protected, git=_git
+        )
+    except recovery._RecoveryFailure as exc:
+        raise _recovery_failure(exc) from None
+    matches = not (
+        state["operation_in_progress"]
+        or final_branch != record["branch_name"]
+        or branch_oid != final_oid
+        or not history_ok
+        or not protected_ok
+    )
+    return final_oid, matches
+
+
+def _continue_protected_snapshot(root: str, record: dict[str, Any]) -> dict[str, Any]:
+    """先确认冲突已暂存且未夹带无关修改，再捕获应保留的内容。"""
+    try:
+        recovery.validate_continue_worktree(root, record, git=_git)
+        protected = recovery.protected_worktree_snapshot(root, record, git=_git)
+    except recovery._RecoveryFailure as exc:
+        raise _recovery_failure(exc) from None
+    return protected
+
+
 def _continue_managed_operation(
     repo_path: str,
     kind: str,
@@ -1284,39 +1601,49 @@ def _continue_managed_operation(
         result["repo_path"] = root
         with _sync_lock(root):
             record, _ = _validate_recovery_request(
-                root, kind, operation_id, expected_current_head_oid, expected_state_fingerprint
+                root,
+                kind,
+                operation_id,
+                expected_current_head_oid,
+                expected_state_fingerprint,
             )
-            try:
-                recovery.validate_continue_worktree(root, record, git=_git)
-                protected = recovery.protected_worktree_snapshot(root, record, git=_git)
-            except recovery._RecoveryFailure as exc:
-                raise _recovery_failure(exc) from None
+            protected = _continue_protected_snapshot(root, record)
             if kind == "rebase":
                 remote_name = _remote_name(root, record["remote"])
                 network_accessed = True
                 result["network_accessed"] = True
-                published = _read_remote_branch_oid(root, remote_name, record["branch_name"])
+                published = _read_remote_branch_oid(
+                    root, remote_name, record["branch_name"]
+                )
                 if published is not None:
-                    raise _SyncFailure("published_branch", "rebase 分支现已发布；继续会改写已发布历史")
+                    raise _SyncFailure(
+                        "published_branch", "rebase 分支现已发布；继续会改写已发布历史"
+                    )
 
             # Revalidate the exact client snapshot and resolution state immediately before one native continue.
             record, _ = _validate_recovery_request(
-                root, kind, operation_id, expected_current_head_oid, expected_state_fingerprint
+                root,
+                kind,
+                operation_id,
+                expected_current_head_oid,
+                expected_state_fingerprint,
             )
-            try:
-                recovery.validate_continue_worktree(root, record, git=_git)
-                protected = recovery.protected_worktree_snapshot(root, record, git=_git)
-            except recovery._RecoveryFailure as exc:
-                raise _recovery_failure(exc) from None
+            protected = _continue_protected_snapshot(root, record)
             if kind == "rebase":
-                published = _read_remote_branch_oid(root, remote_name, record["branch_name"])
+                published = _read_remote_branch_oid(
+                    root, remote_name, record["branch_name"]
+                )
                 if published is not None:
-                    raise _SyncFailure("published_branch", "rebase 分支现已发布；继续会改写已发布历史")
+                    raise _SyncFailure(
+                        "published_branch", "rebase 分支现已发布；继续会改写已发布历史"
+                    )
 
             before_oid = _capture_oid(root, "HEAD", code="head_unavailable")
             action_started = True
             result["action_started"] = True
-            args = ["merge", "--continue"] if kind == "merge" else ["rebase", "--continue"]
+            args = (
+                ["merge", "--continue"] if kind == "merge" else ["rebase", "--continue"]
+            )
             continued = _git_fixed_editor(root, *args)
             if continued.returncode != 0:
                 fields = _recovery_fields(root)
@@ -1327,33 +1654,18 @@ def _continue_managed_operation(
                     head_oid_after=_head(root)[0],
                     still_in_progress=still_in_progress,
                     needs_review=True,
-                    error_code=f"{kind}_continue_failed" if still_in_progress else "recovery_state_uncertain",
+                    error_code=f"{kind}_continue_failed"
+                    if still_in_progress
+                    else "recovery_state_uncertain",
                     error="Git continue 未完成；未循环重试，恢复记录和现场已保留",
                     **fields,
                 )
                 return result
 
-            final_oid, final_branch, _ = _head(root)
-            branch_oid = _branch_ref_oid(root, record["branch_name"])
-            state = _state(root)
-            base_ancestor = _merge_base_ancestor(root, record["base_oid"], final_oid)
-            if kind == "merge":
-                parents = _git(root, "rev-list", "--parents", "-n", "1", final_oid)
-                parent_oids = parents.stdout.strip().split()[1:] if parents.returncode == 0 else []
-                history_ok = record["original_head_oid"] in parent_oids and record["base_oid"] in parent_oids
-            else:
-                history_ok = base_ancestor
-            try:
-                protected_ok = recovery.verify_protected_worktree(root, record, protected, git=_git)
-            except recovery._RecoveryFailure as exc:
-                raise _recovery_failure(exc) from None
-            if (
-                state["operation_in_progress"]
-                or final_branch != record["branch_name"]
-                or branch_oid != final_oid
-                or not history_ok
-                or not protected_ok
-            ):
+            final_oid, readback_ok = _continued_operation_readback(
+                root, record, protected, kind
+            )
+            if not readback_ok:
                 result.update(
                     head_oid_before=before_oid,
                     head_oid_after=final_oid,
@@ -1363,10 +1675,7 @@ def _continue_managed_operation(
                     **_recovery_fields(root),
                 )
                 return result
-            try:
-                recovery.clear_managed_operation(root, record, git=_git)
-            except recovery._RecoveryFailure as exc:
-                raise _recovery_failure(exc) from None
+            _clear_recovery_record(root, record)
             result.update(
                 ok=True,
                 completed=True,
@@ -1402,7 +1711,11 @@ def continue_repository_merge(
     expected_state_fingerprint: str,
 ) -> dict[str, Any]:
     return _continue_managed_operation(
-        repo_path, "merge", operation_id, expected_current_head_oid, expected_state_fingerprint
+        repo_path,
+        "merge",
+        operation_id,
+        expected_current_head_oid,
+        expected_state_fingerprint,
     )
 
 
@@ -1413,7 +1726,11 @@ def continue_repository_rebase(
     expected_state_fingerprint: str,
 ) -> dict[str, Any]:
     return _continue_managed_operation(
-        repo_path, "rebase", operation_id, expected_current_head_oid, expected_state_fingerprint
+        repo_path,
+        "rebase",
+        operation_id,
+        expected_current_head_oid,
+        expected_state_fingerprint,
     )
 
 
@@ -1444,9 +1761,37 @@ def _git_fixed_editor(root: str, *args: str):
             },
         )
     except subprocess.TimeoutExpired as exc:
-        raise _SyncFailure("git_timeout", "Git recovery continue 超时；必须先重新审计操作状态") from exc
+        raise _SyncFailure(
+            "git_timeout", "Git recovery continue 超时；必须先重新审计操作状态"
+        ) from exc
     except (OSError, UnicodeError, TypeError, ValueError) as exc:
-        raise _SyncFailure("git_unavailable", "无法安全启动 Git recovery continue") from exc
+        raise _SyncFailure(
+            "git_unavailable", "无法安全启动 Git recovery continue"
+        ) from exc
+
+
+def _aborted_operation_readback(
+    root: str, record: dict[str, Any], protected: dict[str, Any]
+) -> tuple[str, bool]:
+    """abort 后核对原始分支/OID、操作结束状态及范围外内容。"""
+    final_oid, final_branch, _ = _head(root)
+    branch_oid = _branch_ref_oid(root, record["branch_name"])
+    flags = _operation_flags(root)
+    no_operation = not any(flags.values())
+    try:
+        protected_ok = recovery.verify_protected_worktree(
+            root, record, protected, git=_git
+        )
+    except recovery._RecoveryFailure as exc:
+        raise _recovery_failure(exc) from None
+    matches = not (
+        not no_operation
+        or final_branch != record["branch_name"]
+        or final_oid != record["original_head_oid"]
+        or branch_oid != record["original_head_oid"]
+        or not protected_ok
+    )
+    return final_oid, matches
 
 
 def _abort_managed_operation(
@@ -1472,7 +1817,11 @@ def _abort_managed_operation(
         result["repo_path"] = root
         with _sync_lock(root):
             record, _ = _validate_recovery_request(
-                root, kind, operation_id, expected_current_head_oid, expected_state_fingerprint
+                root,
+                kind,
+                operation_id,
+                expected_current_head_oid,
+                expected_state_fingerprint,
             )
             try:
                 protected = recovery.protected_worktree_snapshot(root, record, git=_git)
@@ -1480,17 +1829,29 @@ def _abort_managed_operation(
                 raise _recovery_failure(exc) from None
             # The exact state token is checked again after the protected-content scan.
             record, _ = _validate_recovery_request(
-                root, kind, operation_id, expected_current_head_oid, expected_state_fingerprint
+                root,
+                kind,
+                operation_id,
+                expected_current_head_oid,
+                expected_state_fingerprint,
             )
             try:
-                protected_again = recovery.protected_worktree_snapshot(root, record, git=_git)
+                protected_again = recovery.protected_worktree_snapshot(
+                    root, record, git=_git
+                )
             except recovery._RecoveryFailure as exc:
                 raise _recovery_failure(exc) from None
             if protected_again != protected:
-                raise _SyncFailure("stale_recovery_snapshot", "工作区在 abort 前发生变化；请重新审计")
+                raise _SyncFailure(
+                    "stale_recovery_snapshot", "工作区在 abort 前发生变化；请重新审计"
+                )
             action_started = True
             result["action_started"] = True
-            aborted = _git(root, "merge", "--abort") if kind == "merge" else _git(root, "rebase", "--abort")
+            aborted = (
+                _git(root, "merge", "--abort")
+                if kind == "merge"
+                else _git(root, "rebase", "--abort")
+            )
             if aborted.returncode != 0:
                 result.update(
                     needs_review=True,
@@ -1499,21 +1860,10 @@ def _abort_managed_operation(
                     **_recovery_fields(root),
                 )
                 return result
-            final_oid, final_branch, _ = _head(root)
-            branch_oid = _branch_ref_oid(root, record["branch_name"])
-            flags = _operation_flags(root)
-            no_operation = not any(flags.values())
-            try:
-                protected_ok = recovery.verify_protected_worktree(root, record, protected, git=_git)
-            except recovery._RecoveryFailure as exc:
-                raise _recovery_failure(exc) from None
-            if (
-                not no_operation
-                or final_branch != record["branch_name"]
-                or final_oid != record["original_head_oid"]
-                or branch_oid != record["original_head_oid"]
-                or not protected_ok
-            ):
+            final_oid, readback_ok = _aborted_operation_readback(
+                root, record, protected
+            )
+            if not readback_ok:
                 result.update(
                     head_oid_after=final_oid,
                     needs_review=True,
@@ -1522,10 +1872,7 @@ def _abort_managed_operation(
                     **_recovery_fields(root),
                 )
                 return result
-            try:
-                recovery.clear_managed_operation(root, record, git=_git)
-            except recovery._RecoveryFailure as exc:
-                raise _recovery_failure(exc) from None
+            _clear_recovery_record(root, record)
             result.update(
                 ok=True,
                 aborted=True,
@@ -1560,7 +1907,10 @@ def abort_repository_merge(
     expected_state_fingerprint: str,
     confirm_discard_resolution_work: StrictBool,
 ) -> dict[str, Any]:
-    if not isinstance(confirm_discard_resolution_work, bool) or confirm_discard_resolution_work is not True:
+    if (
+        not isinstance(confirm_discard_resolution_work, bool)
+        or confirm_discard_resolution_work is not True
+    ):
         result = _recovery_result(None, "merge", "abort", str(operation_id))
         result.update(
             error_code="discard_acknowledgement_required",
@@ -1584,7 +1934,10 @@ def abort_repository_rebase(
     expected_state_fingerprint: str,
     confirm_discard_resolution_work: StrictBool,
 ) -> dict[str, Any]:
-    if not isinstance(confirm_discard_resolution_work, bool) or confirm_discard_resolution_work is not True:
+    if (
+        not isinstance(confirm_discard_resolution_work, bool)
+        or confirm_discard_resolution_work is not True
+    ):
         result = _recovery_result(None, "rebase", "abort", str(operation_id))
         result.update(
             error_code="discard_acknowledgement_required",

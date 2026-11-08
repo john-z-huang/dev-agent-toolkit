@@ -40,7 +40,10 @@ class ApiInputPolicyTests(unittest.TestCase):
             ("-----BEGIN PRIVATE KEY-----", "credential"),
             ("https://account:secret-value@example.invalid/path", "credential"),
             ("https://private_synthetic_value_123@example.invalid/path", "credential"),
-            ("https://api.example.invalid/?token=private_synthetic_value_123", "credential"),
+            (
+                "https://api.example.invalid/?token=private_synthetic_value_123",
+                "credential",
+            ),
         )
         for value, category in cases:
             with self.subTest(rule=value.split(":", 1)[0]):
@@ -62,7 +65,9 @@ class ApiInputPolicyTests(unittest.TestCase):
                 result = self.inspect("See " + path)
                 self.assertTrue(result["passed"])
                 self.assertEqual(result["findings"], [])
-                both_fields = policy.inspect_api_input("Purpose refers to " + path, "Content refers to " + path)
+                both_fields = policy.inspect_api_input(
+                    "Purpose refers to " + path, "Content refers to " + path
+                )
                 self.assertTrue(both_fields["passed"])
                 self.assertEqual(both_fields["findings"], [])
 
@@ -83,10 +88,14 @@ class ApiInputPolicyTests(unittest.TestCase):
                 self.assertEqual(result["findings"], [])
 
     def test_credential_still_blocks_when_same_content_contains_path(self):
-        result = self.inspect(r"See C:\Users\alice\project\file.txt; token=synthetic-sensitive-token-value")
+        result = self.inspect(
+            r"See C:\Users\alice\project\file.txt; token=synthetic-sensitive-token-value"
+        )
         self.assertFalse(result["passed"])
         self.assertEqual(result["findings"][0]["category"], "credential")
-        self.assertTrue(all(item["category"] == "credential" for item in result["findings"]))
+        self.assertTrue(
+            all(item["category"] == "credential" for item in result["findings"])
+        )
 
     def test_explicit_encoded_payload_is_bounded_and_rejected(self):
         result = self.inspect("base64: " + "YWJjZA==" * 8)
@@ -97,11 +106,17 @@ class ApiInputPolicyTests(unittest.TestCase):
     def test_current_configuration_values_are_blocked_without_being_returned(self):
         configured_key = "synthetic-config-secret-that-never-leaves-test"
         configured_url = "https://synthetic-endpoint.invalid/v1"
-        with patch.dict(os.environ, {"OPENAI_API_KEY": configured_key, "OPENAI_BASE_URL": configured_url}, clear=True):
+        with patch.dict(
+            os.environ,
+            {"OPENAI_API_KEY": configured_key, "OPENAI_BASE_URL": configured_url},
+            clear=True,
+        ):
             for value in (configured_key, configured_url):
                 result = self.inspect("prefix " + value + " suffix")
                 self.assertFalse(result["passed"])
-                self.assertEqual(result["findings"][0]["rule_id"], "credential.exact_configuration")
+                self.assertEqual(
+                    result["findings"][0]["rule_id"], "credential.exact_configuration"
+                )
                 self.assertNotIn(value, str(result))
 
     def test_size_and_invalid_inputs_fail_closed_without_echoing(self):
@@ -127,7 +142,9 @@ class ApiInputPolicyTests(unittest.TestCase):
         self.assertTrue(self.inspect(escaped)["passed"])
 
     def test_json_escaped_sensitive_assignments_are_still_detected(self):
-        serialized = json.dumps({"input": json.dumps({"password": "private_synthetic_value_123"})})
+        serialized = json.dumps(
+            {"input": json.dumps({"password": "private_synthetic_value_123"})}
+        )
         result = self.inspect(serialized)
         self.assertFalse(result["passed"])
         self.assertEqual(result["findings"][0]["rule_id"], "credential.assignment")
@@ -147,6 +164,7 @@ class ApiInputPolicyTests(unittest.TestCase):
         self.assertFalse(result["passed"])
         self.assertEqual(result["error_code"], "invalid_input")
         self.assertEqual(result["findings"][0]["rule_id"], "input.invalid_unicode")
+
 
 if __name__ == "__main__":
     unittest.main()

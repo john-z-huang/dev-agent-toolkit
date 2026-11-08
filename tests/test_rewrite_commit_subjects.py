@@ -8,7 +8,6 @@ import sys
 import unittest
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).parents[1] / "scripts" / "rewrite_commit_subjects.py"
 PYTHON = sys.executable
 

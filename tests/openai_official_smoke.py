@@ -4,18 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 from typing import Any, Literal
-
-from pydantic import BaseModel, ConfigDict
 
 from dev_workflow_standards_tools.infrastructure.openai_client import (
     MODEL_NAME,
     OpenAIWorkflowError,
     parse_response,
 )
-
+from pydantic import BaseModel, ConfigDict
 
 OFFICIAL_API_KEY_ENV = "OPENAI_API_KEY_OFFICAL"
 OFFICIAL_BASE_URL_ENV = "OPENAI_BASE_URL_OFFICAL"
@@ -65,6 +64,22 @@ def _failure(error_code: str, status_code: int | None = None) -> dict[str, Any]:
     return result
 
 
+def _official_response_error(response: Any) -> str | None:
+    """官方连通性结果必须同时满足完成状态、唯一模型和严格布尔输出。"""
+    if getattr(response, "status", None) != "completed":
+        return "response_not_completed"
+    if _has_refusal(response):
+        return "response_refused"
+    if getattr(response, "model", None) != MODEL_NAME:
+        return "unexpected_model"
+    parsed = getattr(response, "output_parsed", None)
+    if not isinstance(parsed, SmokeOutput) or parsed.model_dump(mode="json") != {
+        "ok": True
+    }:
+        return "invalid_output"
+    return None
+
+
 async def _call_live() -> dict[str, Any]:
     """在独立测试入口临时映射官方配置，等待请求后恢复原环境。"""
     api_key = os.environ.get(OFFICIAL_API_KEY_ENV, "").strip()
@@ -80,8 +95,8 @@ async def _call_live() -> dict[str, Any]:
     os.environ["OPENAI_BASE_URL"] = base_url
     try:
         response = await parse_response(
-            instructions="Return the required JSON object with ok set to true.",
-            input="This is a connectivity smoke check. Return only the requested boolean field.",
+            instructions="返回所要求的 JSON 对象，将 ok 设置为 true。",
+            input="这是连通性冒烟检查。只返回请求指定的布尔字段。",
             text_format=SmokeOutput,
             reasoning_effort="medium",
             max_output_tokens=512,
@@ -89,6 +104,7 @@ async def _call_live() -> dict[str, Any]:
     except OpenAIWorkflowError as error:
         return _failure(error.error_code, error.status_code)
     except Exception:
+        logging.getLogger(__name__).exception("api_request_failed", exc_info=False)
         return _failure("api_request_failed")
     finally:
         if previous_key is None:
@@ -100,15 +116,9 @@ async def _call_live() -> dict[str, Any]:
         else:
             os.environ["OPENAI_BASE_URL"] = previous_url
 
-    if getattr(response, "status", None) != "completed":
-        return _failure("response_not_completed")
-    if _has_refusal(response):
-        return _failure("response_refused")
-    if getattr(response, "model", None) != MODEL_NAME:
-        return _failure("unexpected_model")
-    parsed = getattr(response, "output_parsed", None)
-    if not isinstance(parsed, SmokeOutput) or parsed.model_dump(mode="json") != {"ok": True}:
-        return _failure("invalid_output")
+    response_error = _official_response_error(response)
+    if response_error:
+        return _failure(response_error)
     return {"status": "success", "model": MODEL_NAME, "usage": _usage_counts(response)}
 
 

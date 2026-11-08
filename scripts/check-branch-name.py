@@ -23,7 +23,6 @@ import re
 import subprocess
 import sys
 
-
 # 该列表是有意集中维护的；新增产品名时只需补充此处，正则会自动更新。
 FORBIDDEN_AGENT_NAMES = (
     "codex",
@@ -67,7 +66,10 @@ WORK_BRANCH_PATTERN = re.compile(
 
 def find_forbidden_names(branch_name: str) -> tuple[str, ...]:
     """返回分支名中命中的禁止名称，大小写不敏感且去重。"""
-    matches = (match.group(0).lower() for match in FORBIDDEN_AGENT_NAME_PATTERN.finditer(branch_name))
+    matches = (
+        match.group(0).lower()
+        for match in FORBIDDEN_AGENT_NAME_PATTERN.finditer(branch_name)
+    )
     return tuple(dict.fromkeys(matches))
 
 
@@ -75,7 +77,9 @@ def find_branch_policy_errors(branch_name: str) -> tuple[str, ...]:
     """返回分支名称违反的策略项。"""
     errors: list[str] = []
 
-    if branch_name not in ROOT_BRANCH_NAMES and not WORK_BRANCH_PATTERN.fullmatch(branch_name):
+    if branch_name not in ROOT_BRANCH_NAMES and not WORK_BRANCH_PATTERN.fullmatch(
+        branch_name
+    ):
         errors.append("必须是 main/master，或使用允许的类别前缀和小写连字符格式")
 
     matches = find_forbidden_names(branch_name)
@@ -147,7 +151,9 @@ def main(argv: list[str] | None = None) -> int:
     if not branch_names:
         branch = current_branch()
         if not branch:
-            print("错误: 无法确定当前 Git 分支（可能处于 detached HEAD）", file=sys.stderr)
+            print(
+                "错误: 无法确定当前 Git 分支（可能处于 detached HEAD）", file=sys.stderr
+            )
             return 2
         branch_names = [branch]
 

@@ -13,11 +13,10 @@ from unittest.mock import AsyncMock, patch
 
 import anyio
 import httpx2
-from mcp.client import Client
-
 from dev_workflow_standards_tools.infrastructure import openai_client
 from dev_workflow_standards_tools.server import mcp
 from dev_workflow_standards_tools.services import ai_workflow
+from mcp.client import Client
 
 ENVIRONMENT = {
     "OPENAI_API_KEY": "sk-test-async-original-key",

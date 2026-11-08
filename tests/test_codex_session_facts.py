@@ -1,52 +1,19 @@
 from __future__ import annotations
 
 import json
-import asyncio
 import re
-import inspect
-import subprocess
-import sys
-import tempfile
 import unittest
-from unittest import IsolatedAsyncioTestCase
 from importlib.resources import files
-from pathlib import Path
-from typing import get_type_hints
 from unittest.mock import patch
-from pydantic import create_model
-from mcp import Client, StdioServerParameters
 
-from dev_workflow_standards_tools.services import codex_session_facts as service, validation, workflows
+from codex_session_fixtures import DOC, source
+from dev_workflow_standards_tools.services import codex_session_facts as service
 from dev_workflow_standards_tools.services.codex_session_facts import (
     CodexSessionSource,
     get_codex_session_summary_guidance,
     order_codex_session_sources,
     prepare_codex_session_memory,
 )
-from dev_workflow_standards_tools.server import mcp as complete_server
-
-
-ROOT = Path(__file__).parents[1]
-DOC = ROOT / "skills" / "dev-workflow-standards" / "references" / "codex-session-facts.md"
-
-
-def tool_json(result) -> dict:
-    return json.loads(result.content[0].text)
-
-
-def source(
-    thread_id: str,
-    *,
-    created_at: str | None = "2026-01-01T00:00:00Z",
-    ended_at: str | None = None,
-    title: str | None = "示例 会话",
-) -> CodexSessionSource:
-    return CodexSessionSource(
-        source_link=f"codex://threads/{thread_id}",
-        created_at=created_at,
-        ended_at=ended_at,
-        title=title,
-    )
 
 
 class GuidanceTests(unittest.TestCase):
@@ -57,10 +24,12 @@ class GuidanceTests(unittest.TestCase):
             .read_text(encoding="utf-8")
         )
         document = DOC.read_text(encoding="utf-8")
-        section = document.split("## 默认阅读问题\n", 1)[1].split("\n## Serena Memory", 1)[0]
+        section = document.split("## 默认阅读问题\n", 1)[1].split(
+            "\n## Serena Memory", 1
+        )[0]
         questions = []
         for line in section.splitlines():
-            if not line.startswith("|") or line.startswith("| 摘要主题") or line.startswith("|---"):
+            if not line.startswith("|") or line.startswith(("| 摘要主题", "|---")):
                 continue
             _, topic, question, _ = line.split("|", 3)
             questions.append(f"{topic.strip()}：{question.strip()}")
@@ -94,9 +63,11 @@ class GuidanceTests(unittest.TestCase):
             get_codex_session_summary_guidance(custom_template="")
 
     def test_resource_failure_does_not_fabricate_defaults(self) -> None:
-        with patch.object(service, "files", side_effect=FileNotFoundError("missing")):
-            with self.assertRaisesRegex(RuntimeError, "包内"):
-                get_codex_session_summary_guidance()
+        with (
+            patch.object(service, "files", side_effect=FileNotFoundError("missing")),
+            self.assertRaisesRegex(RuntimeError, "包内"),
+        ):
+            get_codex_session_summary_guidance()
 
     def test_fully_custom_guidance_does_not_need_default_resource(self) -> None:
         with patch.object(service, "files", side_effect=FileNotFoundError("missing")):
@@ -128,7 +99,9 @@ class SessionSourceTests(unittest.TestCase):
             with self.subTest(link=link), self.assertRaises(ValueError):
                 CodexSessionSource(source_link=link)
         with self.assertRaisesRegex(ValueError, "不一致"):
-            CodexSessionSource(source_link=f"codex://threads/{self.A}", thread_id=self.B)
+            CodexSessionSource(
+                source_link=f"codex://threads/{self.A}", thread_id=self.B
+            )
         with self.assertRaisesRegex(ValueError, "标准 UUID"):
             CodexSessionSource(source_link=f"codex://threads/{self.A}", thread_id="bad")
 
@@ -148,14 +121,22 @@ class SessionSourceTests(unittest.TestCase):
                 ended_at="2026-01-01T23:59:59Z",
             )
 
-    def test_duplicate_id_merges_missing_metadata_and_timezone_equivalence(self) -> None:
+    def test_duplicate_id_merges_missing_metadata_and_timezone_equivalence(
+        self,
+    ) -> None:
         a_missing = source(self.A, created_at=None, title=None)
-        a_complete = source(self.A, created_at="2025-12-31T16:00:00-08:00", title="同一会话")
+        a_complete = source(
+            self.A, created_at="2025-12-31T16:00:00-08:00", title="同一会话"
+        )
         b = source(self.B, created_at="2026-01-01T00:00:00Z")
         result = order_codex_session_sources([a_missing, a_complete, b])
         self.assertEqual(result["deduplicated_count"], 2)
-        self.assertEqual(result["priority_groups"][0]["created_at"], "2026-01-01T00:00:00Z")
-        self.assertEqual(result["priority_groups"][0]["sources"][0]["thread_id"], self.A)
+        self.assertEqual(
+            result["priority_groups"][0]["created_at"], "2026-01-01T00:00:00Z"
+        )
+        self.assertEqual(
+            result["priority_groups"][0]["sources"][0]["thread_id"], self.A
+        )
         self.assertFalse(result["ready"])
         self.assertTrue(result["priority_groups"][0]["same_creation_time"])
 
@@ -163,7 +144,9 @@ class SessionSourceTests(unittest.TestCase):
         older = source(self.A, created_at="2026-01-01T00:00:00Z")
         newer = source(self.B, created_at="2026-01-02T00:00:00Z")
         result = order_codex_session_sources([older, newer])
-        self.assertEqual(result["priority_groups"][0]["sources"][0]["thread_id"], self.B)
+        self.assertEqual(
+            result["priority_groups"][0]["sources"][0]["thread_id"], self.B
+        )
         self.assertEqual(result["ordering_basis"].count("updatedAt"), 1)
         with self.assertRaises(ValueError):
             CodexSessionSource(
@@ -220,7 +203,9 @@ class MemoryPreparationTests(unittest.TestCase):
         self.root = "/tmp/example-repo"
 
     def test_prepares_safe_payload_unknown_end_and_preserves_summary(self) -> None:
-        with patch.object(service, "_validated_repo_path", return_value=(self.root, None)):
+        with patch.object(
+            service, "_validated_repo_path", return_value=(self.root, None)
+        ):
             result = prepare_codex_session_memory(
                 self.root,
                 self.source,
@@ -232,12 +217,16 @@ class MemoryPreparationTests(unittest.TestCase):
         self.assertEqual(result["metadata"]["memory_project_root"], self.root)
         self.assertNotIn("project_scope", result["metadata"])
         self.assertEqual(result["metadata"]["ended_at"], "unknown")
-        self.assertTrue(result["memory_name"].startswith("codex-sessions/20260101T190405Z-unknown-"))
+        self.assertTrue(
+            result["memory_name"].startswith("codex-sessions/20260101T190405Z-unknown-")
+        )
         self.assertTrue(result["memory_name"].endswith(f"-{self.THREAD}"))
         self.assertNotIn("/Safe:", result["memory_name"])
         self.assertTrue(result["payload"]["content"].endswith(self.SUMMARY))
         self.assertEqual(result["payload"]["content"], self.SUMMARY)
-        self.assertEqual(result["metadata"]["source_link"], f"codex://threads/{self.THREAD}")
+        self.assertEqual(
+            result["metadata"]["source_link"], f"codex://threads/{self.THREAD}"
+        )
         self.assertTrue(result["requires_source_review"])
         self.assertFalse(result["metadata"]["metadata_verified"])
 
@@ -265,15 +254,33 @@ class MemoryPreparationTests(unittest.TestCase):
             prepare_codex_session_memory(self.root, self.source, self.SUMMARY, [" "])
 
     def test_topic_rejects_absolute_traversal_and_global(self) -> None:
-        for topic in ("/tmp", "../escape", "foo/../bar", "global", "global/topic", "foo\\bar", "a//b"):
-            with self.subTest(topic=topic), patch.object(
-                service, "_validated_repo_path", return_value=(self.root, None)
-            ), self.assertRaises(ValueError):
-                prepare_codex_session_memory(self.root, self.source, self.SUMMARY, ["turn:3"], topic=topic)
+        for topic in (
+            "/tmp",
+            "../escape",
+            "foo/../bar",
+            "global",
+            "global/topic",
+            "foo\\bar",
+            "a//b",
+        ):
+            with (
+                self.subTest(topic=topic),
+                patch.object(
+                    service, "_validated_repo_path", return_value=(self.root, None)
+                ),
+                self.assertRaises(ValueError),
+            ):
+                prepare_codex_session_memory(
+                    self.root, self.source, self.SUMMARY, ["turn:3"], topic=topic
+                )
 
     def test_existing_memory_name_is_stable_for_same_thread(self) -> None:
-        existing_name = f"codex-sessions/20251231T190405Z-unknown-old-title-{self.THREAD}"
-        with patch.object(service, "_validated_repo_path", return_value=(self.root, None)):
+        existing_name = (
+            f"codex-sessions/20251231T190405Z-unknown-old-title-{self.THREAD}"
+        )
+        with patch.object(
+            service, "_validated_repo_path", return_value=(self.root, None)
+        ):
             result = prepare_codex_session_memory(
                 self.root,
                 self.source,
@@ -292,8 +299,12 @@ class MemoryPreparationTests(unittest.TestCase):
             )
 
     def test_repo_root_failure_returns_no_payload(self) -> None:
-        with patch.object(service, "_validated_repo_path", return_value=(None, "not a root")):
-            result = prepare_codex_session_memory(self.root, self.source, self.SUMMARY, ["turn:3"])
+        with patch.object(
+            service, "_validated_repo_path", return_value=(None, "not a root")
+        ):
+            result = prepare_codex_session_memory(
+                self.root, self.source, self.SUMMARY, ["turn:3"]
+            )
         self.assertFalse(result["ok"])
         self.assertIsNone(result["payload"])
         self.assertEqual(result["error"], "not a root")
@@ -304,9 +315,13 @@ class MemoryPreparationTests(unittest.TestCase):
             f"codex-sessions/../entry-{self.THREAD}",
             f"codex-sessions/nested/entry-{self.THREAD}",
         ):
-            with self.subTest(name=name), patch.object(
-                service, "_validated_repo_path", return_value=(self.root, None)
-            ), self.assertRaises(ValueError):
+            with (
+                self.subTest(name=name),
+                patch.object(
+                    service, "_validated_repo_path", return_value=(self.root, None)
+                ),
+                self.assertRaises(ValueError),
+            ):
                 prepare_codex_session_memory(
                     self.root,
                     self.source,
@@ -320,7 +335,9 @@ class MemoryPreparationTests(unittest.TestCase):
             self.THREAD,
             title="\U00020000" * 100,
         )
-        with patch.object(service, "_validated_repo_path", return_value=(self.root, None)):
+        with patch.object(
+            service, "_validated_repo_path", return_value=(self.root, None)
+        ):
             result = prepare_codex_session_memory(
                 self.root,
                 long_unicode_source,
@@ -355,7 +372,9 @@ class MemoryPreparationTests(unittest.TestCase):
         suffix = f"-{self.THREAD}"
         accepted_name = f"codex-sessions/{'a' * (252 - len(suffix))}{suffix}"
         rejected_name = f"codex-sessions/{'a' * (253 - len(suffix))}{suffix}"
-        with patch.object(service, "_validated_repo_path", return_value=(self.root, None)):
+        with patch.object(
+            service, "_validated_repo_path", return_value=(self.root, None)
+        ):
             accepted = prepare_codex_session_memory(
                 self.root,
                 self.source,
@@ -372,247 +391,6 @@ class MemoryPreparationTests(unittest.TestCase):
                 ["turn:3"],
                 existing_memory_name=rejected_name,
             )
-
-
-class MCPRegistrationTests(IsolatedAsyncioTestCase):
-    A = "00000000-0000-4000-8000-000000000005"
-
-    async def test_issue_pr_metadata_over_stdio_initialize_and_tools_list(self) -> None:
-        from dev_workflow_standards_tools.services.ai_workflow import ContentGenerationRequest
-        from dev_workflow_standards_tools.tools._descriptions import CLI_FALLBACK_DESCRIPTION
-
-        params = StdioServerParameters(
-            command=sys.executable,
-            args=["-m", "dev_workflow_standards_tools.server"],
-            cwd=ROOT / "mcp-server",
-            env={},
-        )
-        async with asyncio.timeout(20), Client(params) as client:
-            self.assertEqual(client.server_info.name, "dev-workflow-standards-tools")
-            self.assertIn(CLI_FALLBACK_DESCRIPTION, client.instructions)
-            for phrase in ("Issue", "PR", "最小充分", "默认中文", "language_override", "needs_revision", "两次"):
-                self.assertIn(phrase, client.instructions)
-            for phrase in ("httpx2.AsyncClient(trust_env=True)", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "重新加载"):
-                self.assertIn(phrase, client.instructions)
-            for phrase in ("OPENAI_TIMEOUT_SECONDS=180", "OPENAI_TIMEOUT_MAX_RETRIES", "最多6次", "api_timeout"):
-                self.assertIn(phrase, client.instructions)
-            tools = {tool.name: tool for tool in (await client.list_tools()).tools}
-        for name in (
-            "check_branch_names", "check_commit_message", "audit_issue_pr_policy",
-            "decide_codex_session_action", "generate_skill_content",
-        ):
-            for phrase in ("httpx2.AsyncClient(trust_env=True)", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"):
-                self.assertIn(phrase, tools[name].description, name)
-            self.assertNotIn("proxy", tools[name].input_schema.get("properties", {}))
-            for phrase in ("OPENAI_TIMEOUT_MAX_RETRIES", "180", "invalid_timeout_max_retries", "SDK内部重试关闭"):
-                self.assertIn(phrase, tools[name].description, name)
-        tool = tools["generate_skill_content"]
-        for phrase in ("前后行为", "复现", "实际验证", "user_provided", "默认中文", "adoptable", "quality_review", "不会读写", "OPENAI_BASE_URL"):
-            self.assertIn(phrase, tool.description)
-        schema_text = json.dumps(tool.input_schema, ensure_ascii=False)
-        for phrase in ("language_override", "instruction_ref", "language", "user_provided", "实际/期望/影响", "已完成diff", "默认中文"):
-            self.assertIn(phrase, schema_text)
-        for marker, kind in (("Issue示例：", "issue"), ("PR示例：", "pr")):
-            example, _ = json.JSONDecoder().raw_decode(tool.description.split(marker, 1)[1])
-            self.assertEqual(ContentGenerationRequest.model_validate(example["request"]).kind, kind)
-        self.assertTrue(tool.annotations.read_only_hint)
-        self.assertTrue(tool.annotations.open_world_hint)
-        self.assertFalse(tool.annotations.idempotent_hint)
-
-    async def test_all_39_tools_registered_with_described_schemas(self) -> None:
-        self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
-        tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 39)
-        by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 39)
-        self.assertNotIn("decide_skill_workflow", by_name)
-        for tool in tools:
-            self.assertTrue(tool.description, tool.name)
-
-            def assert_described_properties(schema: dict) -> None:
-                for property_schema in schema.get("properties", {}).values():
-                    self.assertTrue(property_schema.get("description"), (tool.name, property_schema))
-                for value in schema.values():
-                    if isinstance(value, dict):
-                        assert_described_properties(value)
-                    elif isinstance(value, list):
-                        for item in value:
-                            if isinstance(item, dict):
-                                assert_described_properties(item)
-
-            assert_described_properties(tool.input_schema)
-        deterministic_names = {
-            "get_codex_session_summary_guidance",
-            "order_codex_session_sources",
-            "prepare_codex_session_memory",
-        }
-        ai_names = {
-            "decide_codex_session_action",
-            "generate_skill_content",
-            "check_api_input",
-        }
-        names = deterministic_names | ai_names
-        self.assertTrue(names.issubset(by_name))
-        for name in deterministic_names:
-            tool = by_name[name]
-            self.assertTrue(tool.annotations.read_only_hint)
-            self.assertFalse(tool.annotations.destructive_hint)
-            self.assertTrue(tool.annotations.idempotent_hint)
-            self.assertFalse(tool.annotations.open_world_hint)
-            self.assertEqual(tool.input_schema["type"], "object")
-        self.assertIn("custom_questions", by_name["get_codex_session_summary_guidance"].input_schema["properties"])
-        self.assertIn("sources", by_name["order_codex_session_sources"].input_schema["properties"])
-        self.assertIn("source", by_name["prepare_codex_session_memory"].input_schema["properties"])
-        for name in ai_names:
-            tool = by_name[name]
-            self.assertTrue(tool.annotations.read_only_hint)
-            self.assertFalse(tool.annotations.destructive_hint)
-            self.assertFalse(tool.annotations.idempotent_hint)
-            self.assertTrue(tool.annotations.open_world_hint)
-
-    async def test_network_git_annotations_and_discovery_examples_are_explicit(self) -> None:
-        tools = {tool.name: tool for tool in await complete_server.list_tools()}
-        for name in ("pull_origin_branch_fast_forward", "fetch_upstream_branch"):
-            self.assertTrue(tools[name].annotations.open_world_hint)
-
-        self.assertTrue(tools["audit_worktree_base_sync"].annotations.read_only_hint)
-        self.assertTrue(tools["audit_worktree_base_sync"].annotations.open_world_hint)
-        for name in ("fetch_repository_branch", "merge_repository_branch", "rebase_repository_branch"):
-            self.assertFalse(tools[name].annotations.read_only_hint)
-            self.assertTrue(tools[name].annotations.open_world_hint)
-
-        audit_schema = tools["audit_worktree_base_sync"].input_schema
-        self.assertEqual(set(audit_schema["properties"]), {"repo_path", "base_ref", "remote"})
-        self.assertIn("null", str(audit_schema["properties"]["remote"]))
-        fetch_schema = tools["fetch_repository_branch"].input_schema
-        self.assertEqual(set(fetch_schema["properties"]), {"repo_path", "remote", "branch_name"})
-        merge_schema = tools["merge_repository_branch"].input_schema
-        self.assertTrue({"expected_head_oid", "expected_base_oid"}.issubset(merge_schema["required"]))
-        rebase_schema = tools["rebase_repository_branch"].input_schema
-        self.assertTrue({"expected_head_oid", "expected_base_oid", "old_base_oid", "remote"}.issubset(rebase_schema["properties"]))
-        for name, phrases in {
-            "audit_worktree_base_sync": ("publication_status=unknown", "不会 fetch", "ahead_by/behind_by"),
-            "fetch_repository_branch": ("FETCH_HEAD", "compare-and-swap", "不调用 OpenAI"),
-            "merge_repository_branch": ("expected_head_oid", "--no-overwrite-ignore", "普通 merge commit"),
-            "rebase_repository_branch": ("live 查询", "禁止 rebase", "old_base_oid"),
-        }.items():
-            for phrase in phrases:
-                self.assertIn(phrase, tools[name].description, (name, phrase))
-
-        branch_tool = tools["create_repository_branch"]
-        self.assertFalse(branch_tool.annotations.read_only_hint)
-        self.assertFalse(branch_tool.annotations.destructive_hint)
-        self.assertFalse(branch_tool.annotations.idempotent_hint)
-        self.assertFalse(branch_tool.annotations.open_world_hint)
-        self.assertIn("expected_head_oid", branch_tool.input_schema["properties"])
-        self.assertIn("null", str(branch_tool.input_schema["properties"]["expected_head_oid"]))
-        self.assertTrue(branch_tool.input_schema["properties"]["expected_head_oid"].get("description"))
-        self.assertIn("OID是唯一并发条件", branch_tool.description)
-
-        descriptions = {
-            "copy_untracked_files_to_worktree": ("结构示例：",),
-            "create_github_issue": ("示例：",),
-            "cleanup_merged_pr_local_branch": ("示例：",),
-            "prepare_codex_session_memory": ("示例：",),
-        }
-        for name, markers in descriptions.items():
-            description = tools[name].description
-            marker = next(marker for marker in markers if marker in description)
-            example_text = description.split(marker, 1)[1]
-            example, _ = json.JSONDecoder().raw_decode(example_text.lstrip())
-            self.assertIsInstance(example, dict)
-
-        copy_example, _ = json.JSONDecoder().raw_decode(
-            tools["copy_untracked_files_to_worktree"].description.split("结构示例：", 1)[1].lstrip()
-        )
-        self.assertEqual(len(copy_example["manifest"][0]["sha256"]), 64)
-        self.assertEqual(set(copy_example["manifest"][0]), {"path", "sha256", "size"})
-        issue_example, _ = json.JSONDecoder().raw_decode(
-            tools["create_github_issue"].description.split("示例：", 1)[1].lstrip()
-        )
-        self.assertEqual(set(issue_example), {"repo_path", "repo", "title", "body", "labels"})
-        prepare_example, _ = json.JSONDecoder().raw_decode(
-            tools["prepare_codex_session_memory"].description.split("示例：", 1)[1].lstrip()
-        )
-        CodexSessionSource.model_validate(prepare_example["source"])
-        self.assertEqual(
-            set(prepare_example), {"repo_path", "source", "summary", "evidence_refs"}
-        )
-
-        example_services = {
-            "copy_untracked_files_to_worktree": workflows.copy_untracked_files_to_worktree,
-            "create_github_issue": workflows.create_github_issue,
-            "cleanup_merged_pr_local_branch": validation.cleanup_merged_pr_local_branch,
-            "prepare_codex_session_memory": service.prepare_codex_session_memory,
-        }
-        for name, target in example_services.items():
-            marker = "结构示例：" if name == "copy_untracked_files_to_worktree" else "示例："
-            text = tools[name].description.split(marker, 1)[1].lstrip()
-            example, _ = json.JSONDecoder().raw_decode(text)
-            signature = inspect.signature(target)
-            hints = get_type_hints(target)
-            fields = {
-                param_name: (
-                    hints[param_name],
-                    ... if parameter.default is inspect.Parameter.empty else parameter.default,
-                )
-                for param_name, parameter in signature.parameters.items()
-            }
-            input_model = create_model(f"{target.__name__}Input", **fields)
-            input_model.model_validate(example)
-
-    async def test_create_repository_branch_via_mcp_call_tool(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="mcp branch tool 日本語 ") as temp:
-            repo = Path(temp) / "repo with spaces"
-            repo.mkdir()
-            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-            subprocess.run(["git", "config", "user.name", "Synthetic"], cwd=repo, check=True)
-            subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=repo, check=True)
-            (repo / "tracked").write_bytes(b"baseline\n")
-            subprocess.run(["git", "add", "tracked"], cwd=repo, check=True)
-            subprocess.run(["git", "commit", "-qm", "baseline"], cwd=repo, check=True)
-            head_oid = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
-            raw = await complete_server.call_tool(
-                "create_repository_branch",
-                {"repo_path": str(repo), "branch_name": "feat/mcp-call", "expected_head_oid": head_oid},
-            )
-            self.assertFalse(raw.is_error)
-            data = raw.structured_content or json.loads(raw.content[0].text)
-            self.assertTrue(data["ok"], data)
-            self.assertTrue(data["created"])
-            self.assertEqual(data["start_head_oid"], head_oid)
-
-    async def test_real_tool_calls_return_expected_guidance_order_and_memory_payload(self) -> None:
-        guidance_result = await complete_server.call_tool("get_codex_session_summary_guidance", {})
-        guidance = tool_json(guidance_result)
-        self.assertEqual(guidance["ok"], True)
-        self.assertEqual(len(guidance["questions"]), 7)
-
-        source_input = {
-            "source_link": f"codex://threads/{self.A}",
-            "created_at": "2026-01-01T00:00:00Z",
-            "title": "测试会话",
-        }
-        order_result = await complete_server.call_tool(
-            "order_codex_session_sources", {"sources": [source_input]}
-        )
-        ordered = tool_json(order_result)
-        self.assertEqual(ordered["deduplicated_count"], 1)
-        self.assertTrue(ordered["ready"])
-
-        with patch.object(service, "_validated_repo_path", return_value=("/tmp/fixture", None)):
-            prepare_result = await complete_server.call_tool(
-                "prepare_codex_session_memory",
-                {
-                    "repo_path": "/tmp/fixture",
-                    "source": source_input,
-                    "summary": "## User format\nRaw summary.",
-                    "evidence_refs": ["turn:2"],
-                },
-            )
-        prepared = tool_json(prepare_result)
-        self.assertEqual(prepared["status"], "prepared")
-        self.assertTrue(prepared["payload"]["content"].endswith("## User format\nRaw summary."))
 
 
 if __name__ == "__main__":

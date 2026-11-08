@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 import sys
 
-
 SUBJECTS = {
     "添加基础校验脚本": "feat: 添加基础校验脚本",
     "修复文件路径解析": "fix: 修复文件路径解析",

@@ -26,10 +26,17 @@ from tomlkit.exceptions import ParseError
 
 DEFAULT_SERVER = "dev-workflow-standards-tools"
 DEFAULT_ENV_NAMES = (
-    "OPENAI_API_KEY", "OPENAI_BASE_URL",
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
     "OPENAI_TIMEOUT_MAX_RETRIES",
-    "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
-    "http_proxy", "https_proxy", "all_proxy", "no_proxy",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "no_proxy",
 )
 HTTP_POLICY_FIELDS = (
     "default_tools_approval_mode",
@@ -65,6 +72,20 @@ def target_config(explicit: Path | None = None) -> Path:
     return home / "config.toml"
 
 
+def _open_target(path: Path) -> int:
+    """以不跟随链接且不阻塞的方式打开配置；错误只携带安全分类。"""
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        if exc.errno == errno.ELOOP:
+            raise SetupError(
+                "Codex config target must be a regular, non-symlink file"
+            ) from None
+        raise SetupError("Codex config file could not be inspected") from None
+    return fd
+
+
 def _read_target(
     path: Path, *, allow_missing: bool
 ) -> tuple[bytes, os.stat_result] | None:
@@ -78,15 +99,7 @@ def _read_target(
         raise SetupError("Codex config file could not be inspected") from None
     if stat.S_ISLNK(path_info.st_mode) or not stat.S_ISREG(path_info.st_mode):
         raise SetupError("Codex config target must be a regular, non-symlink file")
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
-    try:
-        fd = os.open(path, flags)
-    except OSError as exc:
-        if exc.errno == errno.ELOOP:
-            raise SetupError(
-                "Codex config target must be a regular, non-symlink file"
-            ) from None
-        raise SetupError("Codex config file could not be inspected") from None
+    fd = _open_target(path)
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or (info.st_dev, info.st_ino) != (
@@ -210,6 +223,69 @@ def _snapshot_replacement(path: Path, name: str, *, replacing: bool) -> dict[str
     }
 
 
+def _assert_config_unchanged(path: Path, original: bytes, info: os.stat_result) -> None:
+    """在每次发布边界核对文件身份、权限和原始字节。"""
+    current = _read_target(path, allow_missing=False)
+    assert current is not None
+    current_bytes, current_info = current
+    if (
+        (current_info.st_dev, current_info.st_ino) != (info.st_dev, info.st_ino)
+        or stat.S_IMODE(current_info.st_mode) != stat.S_IMODE(info.st_mode)
+        or current_bytes != original
+    ):
+        raise SetupError("Codex config changed during update; retry after reviewing it")
+
+
+def _verify_forwarding_config(rendered: bytes, name: str, expected: Any) -> None:
+    """复核必需转发变量，并确保其他服务与策略没有变化。"""
+    verified = _parse(rendered)
+    verified_server = _stdio_table(verified, name, required=True)
+    assert verified_server is not None
+    _check_sources(verified_server, name, DEFAULT_ENV_NAMES)
+    forwarded = {
+        item if isinstance(item, str) else str(item["name"])
+        for item in verified_server.get("env_vars", [])
+    }
+    if not set(DEFAULT_ENV_NAMES).issubset(forwarded):
+        raise SetupError(
+            "Codex config validation failed; required env_vars are missing"
+        )
+    check = deepcopy(verified)
+    check["mcp_servers"][name].pop("env_vars", None)
+    expected["mcp_servers"][name].pop("env_vars", None)
+    if check != expected:
+        raise SetupError("Codex config validation failed; no changes were written")
+
+
+def _write_config_atomically(
+    path: Path, rendered: bytes, original: bytes, info: os.stat_result
+) -> None:
+    """写入同目录临时文件，再以原文件状态为前提原子替换。"""
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent, prefix=f".{path.name}.", delete=False
+        ) as f:
+            temp_path = Path(f.name)
+            f.write(rendered)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(temp_path, stat.S_IMODE(info.st_mode))
+        _assert_config_unchanged(path, original, info)
+        os.replace(temp_path, path)
+        temp_path = None
+    except SetupError:
+        raise
+    except OSError:
+        raise SetupError("Codex config could not be updated") from None
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+
+
 def _merge_config(
     path: Path,
     name: str,
@@ -251,67 +327,11 @@ def _merge_config(
             "Codex config uses a TOML layout that cannot be safely rewritten without reformatting"
         )
     rendered = tomlkit.dumps(document).encode("utf-8")
-    verified = _parse(rendered)
-    verified_server = _stdio_table(verified, name, required=True)
-    assert verified_server is not None
-    _check_sources(verified_server, name, DEFAULT_ENV_NAMES)
-    forwarded = {
-        item if isinstance(item, str) else str(item["name"])
-        for item in verified_server.get("env_vars", [])
-    }
-    if not set(DEFAULT_ENV_NAMES).issubset(forwarded):
-        raise SetupError(
-            "Codex config validation failed; required env_vars are missing"
-        )
-    check = deepcopy(verified)
-    check["mcp_servers"][name].pop("env_vars", None)
-    expected["mcp_servers"][name].pop("env_vars", None)
-    if check != expected:
-        raise SetupError("Codex config validation failed; no changes were written")
+    _verify_forwarding_config(rendered, name, expected)
     if dry_run:
         return True
-    current = _read_target(path, allow_missing=False)
-    assert current is not None
-    current_bytes, current_info = current
-    if (
-        (current_info.st_dev, current_info.st_ino) != (info.st_dev, info.st_ino)
-        or stat.S_IMODE(current_info.st_mode) != stat.S_IMODE(info.st_mode)
-        or current_bytes != original
-    ):
-        raise SetupError("Codex config changed during update; retry after reviewing it")
-    temp_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            dir=path.parent, prefix=f".{path.name}.", delete=False
-        ) as f:
-            temp_path = Path(f.name)
-            f.write(rendered)
-            f.flush()
-            os.fsync(f.fileno())
-        os.chmod(temp_path, stat.S_IMODE(info.st_mode))
-        current = _read_target(path, allow_missing=False)
-        assert current is not None
-        current_bytes, current_info = current
-        if (
-            (current_info.st_dev, current_info.st_ino) != (info.st_dev, info.st_ino)
-            or stat.S_IMODE(current_info.st_mode) != stat.S_IMODE(info.st_mode)
-            or current_bytes != original
-        ):
-            raise SetupError(
-                "Codex config changed during update; retry after reviewing it"
-            )
-        os.replace(temp_path, path)
-        temp_path = None
-    except SetupError:
-        raise
-    except OSError:
-        raise SetupError("Codex config could not be updated") from None
-    finally:
-        if temp_path is not None:
-            try:
-                temp_path.unlink()
-            except OSError:
-                pass
+    _assert_config_unchanged(path, original, info)
+    _write_config_atomically(path, rendered, original, info)
     return True
 
 
@@ -456,13 +476,36 @@ def _env_only(args: argparse.Namespace, path: Path) -> int:
     return 0
 
 
+def _preview_setup(args: argparse.Namespace) -> None:
+    """仅输出安装、注册及变量转发计划，不读取配置或运行外部命令。"""
+    if args.install:
+        source = Path(__file__).resolve().parents[1] / "mcp-server"
+        print(f"Would install MCP tool from {source}")
+    print(f"Would register or reuse Codex server {args.server}")
+    print(f"Would merge env_vars {list(DEFAULT_ENV_NAMES)!r}")
+
+
+def _install_mcp_tool(force: bool) -> None:
+    """显式安装源码对应的 uv tool，并安全报告安装未完成的状态。"""
+    uv = shutil.which("uv")
+    if uv is None:
+        raise SetupError("uv was not found on PATH")
+    install_argv = [str(Path(uv).resolve()), "tool", "install", "--managed-python"]
+    if force:
+        install_argv.append("--force")
+    install_argv.append(str(Path(__file__).resolve().parents[1] / "mcp-server"))
+    try:
+        _run(install_argv, stage="uv tool install", timeout=INSTALL_TIMEOUT)
+    except SetupError as exc:
+        raise SetupError(
+            f"uv tool installation did not complete; inspect installed tool state before "
+            f"retrying: {exc}"
+        ) from exc
+
+
 def _setup(args: argparse.Namespace, path: Path) -> int:
     if args.dry_run:
-        if args.install:
-            source = Path(__file__).resolve().parents[1] / "mcp-server"
-            print(f"Would install MCP tool from {source}")
-        print(f"Would register or reuse Codex server {args.server}")
-        print(f"Would merge env_vars {list(DEFAULT_ENV_NAMES)!r}")
+        _preview_setup(args)
         return 0
     codex = shutil.which("codex")
     if codex is None:
@@ -502,20 +545,7 @@ def _setup(args: argparse.Namespace, path: Path) -> int:
 
     installed = False
     if args.install:
-        uv = shutil.which("uv")
-        if uv is None:
-            raise SetupError("uv was not found on PATH")
-        install_argv = [str(Path(uv).resolve()), "tool", "install", "--managed-python"]
-        if args.force:
-            install_argv.append("--force")
-        install_argv.append(str(Path(__file__).resolve().parents[1] / "mcp-server"))
-        try:
-            _run(install_argv, stage="uv tool install", timeout=INSTALL_TIMEOUT)
-        except SetupError as exc:
-            raise SetupError(
-                f"uv tool installation did not complete; inspect installed tool state before "
-                f"retrying: {exc}"
-            ) from exc
+        _install_mcp_tool(args.force)
         installed = True
         try:
             executable = _executable(args, after_install=True)

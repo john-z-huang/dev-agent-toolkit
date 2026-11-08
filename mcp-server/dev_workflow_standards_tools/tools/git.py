@@ -15,8 +15,18 @@ def register_git_tools(server: MCPServer) -> None:
         idempotent_hint=False,
         open_world_hint=True,
     )
-    local_write = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False)
-    destructive_write = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False)
+    local_write = ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=False,
+        idempotent_hint=False,
+        open_world_hint=False,
+    )
+    destructive_write = ToolAnnotations(
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=False,
+    )
     tools = (
         (ai_workflow.check_branch_names, ai_read_only),
         (ai_workflow.check_commit_message, ai_read_only),

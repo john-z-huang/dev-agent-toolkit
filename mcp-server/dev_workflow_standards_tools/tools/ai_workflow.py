@@ -37,5 +37,9 @@ def register_ai_workflow_tools(server: MCPServer) -> None:
         idempotent_hint=False,
         open_world_hint=True,
     )
-    for service in (decide_codex_session_action, generate_skill_content, check_api_input):
+    for service in (
+        decide_codex_session_action,
+        generate_skill_content,
+        check_api_input,
+    ):
         _register_adapter(server, service, annotations)

@@ -7,7 +7,6 @@ import importlib.util
 import unittest
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).parents[1] / "scripts" / "check-pr-policy.py"
 SPEC = importlib.util.spec_from_file_location("check_pr_policy", SCRIPT)
 assert SPEC and SPEC.loader
@@ -41,9 +40,7 @@ class CheckPrPolicyTests(unittest.TestCase):
             ),
             (),
         )
-        self.assertTrue(
-            MODULE.validate_pr(pr, issue_number=7, expected_base="release")
-        )
+        self.assertTrue(MODULE.validate_pr(pr, issue_number=7, expected_base="release"))
 
 
 if __name__ == "__main__":

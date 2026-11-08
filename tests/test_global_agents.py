@@ -4,11 +4,12 @@ import hashlib
 import io
 import json
 import os
-from pathlib import Path
 import stat
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
+
 
 class GlobalAgentsTests(unittest.TestCase):
     def setUp(self):
@@ -38,14 +39,30 @@ class GlobalAgentsTests(unittest.TestCase):
             ("token skill", ".agents/skills/token-io-decoupling-skill/SKILL.md"),
             ("runtime", ".agents/skills/token-io-decoupling-skill/runtime.md"),
             ("dev skill", ".agents/skills/dev-workflow-standards-skill/SKILL.md"),
-            ("hook index", ".agents/skills/dev-workflow-standards-skill/hooks/index.md"),
-            ("mcp tools", ".agents/skills/dev-workflow-standards-skill/references/mcp-tools.md"),
-            ("recovery", ".agents/skills/dev-workflow-standards-skill/hooks/recovery.md"),
-            ("code understanding", ".agents/skills/dev-workflow-standards-skill/references/code-understanding.md"),
+            (
+                "hook index",
+                ".agents/skills/dev-workflow-standards-skill/hooks/index.md",
+            ),
+            (
+                "mcp tools",
+                ".agents/skills/dev-workflow-standards-skill/references/mcp-tools.md",
+            ),
+            (
+                "recovery",
+                ".agents/skills/dev-workflow-standards-skill/hooks/recovery.md",
+            ),
+            (
+                "code understanding",
+                ".agents/skills/dev-workflow-standards-skill/references/code-understanding.md",
+            ),
         )
-        return "# Global instructions\n\n" + body + "\n\n" + "\n".join(
-            f"[{label}]({{{{HOME}}}}/{path})" for label, path in links
-        ) + "\n"
+        return (
+            "# Global instructions\n\n"
+            + body
+            + "\n\n"
+            + "\n".join(f"[{label}]({{{{HOME}}}}/{path})" for label, path in links)
+            + "\n"
+        )
 
     def _install_dependencies(self):
         for relative in (
@@ -62,7 +79,9 @@ class GlobalAgentsTests(unittest.TestCase):
             path.write_text("local test dependency\n", encoding="utf-8")
 
     def _manage(self, action="update", **options):
-        return self.global_agents.manage_global_agents(action, str(self.source), **options)
+        return self.global_agents.manage_global_agents(
+            action, str(self.source), **options
+        )
 
     def _set_candidate(self, body):
         self.template = self._template(body)
@@ -99,7 +118,10 @@ class GlobalAgentsTests(unittest.TestCase):
         self.target.write_text("private unknown text\n", encoding="utf-8")
         result = self._manage("show")
         self.assertEqual(result["status"], "unmanaged")
-        self.assertEqual(result["current_sha256"], hashlib.sha256(b"private unknown text\n").hexdigest())
+        self.assertEqual(
+            result["current_sha256"],
+            hashlib.sha256(b"private unknown text\n").hexdigest(),
+        )
         self.assertNotIn("private unknown text", json.dumps(result))
 
     def test_unmanaged_target_requires_adopt_and_exact_adopt_only_writes_metadata(self):
@@ -122,7 +144,9 @@ class GlobalAgentsTests(unittest.TestCase):
         self.target.write_bytes(original)
         with patch.object(self.global_agents, "_backup_timestamp", return_value=12345):
             preview = self._manage(dry_run=True)
-            self.assertEqual(preview["conflict"], {"kind": "adopt", "requires": "--adopt"})
+            self.assertEqual(
+                preview["conflict"], {"kind": "adopt", "requires": "--adopt"}
+            )
             self.assertIn("unknown user instructions", preview["diff"])
             self.assertEqual(preview["backup_name"], "AGENTS_BAK_12345.md")
             collision = self.target.parent / "AGENTS_BAK_12345.md"
@@ -131,7 +155,9 @@ class GlobalAgentsTests(unittest.TestCase):
             self.assertTrue(collision_preview["backup_collision"])
             self.assertEqual(collision.read_bytes(), b"preserved collision")
             collision.unlink()
-            with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "--adopt"):
+            with self.assertRaisesRegex(
+                self.global_agents.GlobalAgentsError, "--adopt"
+            ):
                 self._manage()
             adopted = self._manage(adopt=True)
         backup = Path(adopted["backup"])
@@ -147,8 +173,13 @@ class GlobalAgentsTests(unittest.TestCase):
         self.target.write_bytes(modified)
         preview = self._manage(dry_run=True)
         self.assertEqual(preview["status"], "preview")
-        self.assertEqual(preview["conflict"], {"kind": "replace_local", "requires": "--replace-local"})
-        with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "--replace-local"):
+        self.assertEqual(
+            preview["conflict"],
+            {"kind": "replace_local", "requires": "--replace-local"},
+        )
+        with self.assertRaisesRegex(
+            self.global_agents.GlobalAgentsError, "--replace-local"
+        ):
             self._manage(adopt=True)
         with patch.object(self.global_agents, "_backup_timestamp", return_value=987):
             result = self._manage(replace_local=True)
@@ -165,7 +196,10 @@ class GlobalAgentsTests(unittest.TestCase):
             self._manage(dry_run=True)
 
     def test_missing_link_dependency_fails_before_any_target_write(self):
-        dependency = self.home / ".agents/skills/dev-workflow-standards-skill/references/mcp-tools.md"
+        dependency = (
+            self.home
+            / ".agents/skills/dev-workflow-standards-skill/references/mcp-tools.md"
+        )
         dependency.unlink()
         with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "缺失"):
             self._manage()
@@ -186,14 +220,24 @@ class GlobalAgentsTests(unittest.TestCase):
         self._set_candidate("candidate v2")
         collision = self.target.parent / "AGENTS_BAK_234.md"
         collision.write_bytes(b"existing backup")
-        with patch.object(self.global_agents, "_backup_timestamp", return_value=234):
-            with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "拒绝覆盖"):
-                self._manage(adopt=True)
+        with (
+            patch.object(self.global_agents, "_backup_timestamp", return_value=234),
+            self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "拒绝覆盖"),
+        ):
+            self._manage(adopt=True)
         self.assertEqual(self.target.read_bytes(), original)
         self.assertEqual(collision.read_bytes(), b"existing backup")
-        with patch.object(self.global_agents, "_backup", side_effect=self.global_agents.GlobalAgentsError("backup failure")):
-            with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "backup failure"):
-                self._manage(adopt=True)
+        with (
+            patch.object(
+                self.global_agents,
+                "_backup",
+                side_effect=self.global_agents.GlobalAgentsError("backup failure"),
+            ),
+            self.assertRaisesRegex(
+                self.global_agents.GlobalAgentsError, "backup failure"
+            ),
+        ):
+            self._manage(adopt=True)
         self.assertEqual(self.target.read_bytes(), original)
 
     def test_atomic_target_publish_failure_keeps_original_and_backup(self):
@@ -208,12 +252,18 @@ class GlobalAgentsTests(unittest.TestCase):
                 raise self.global_agents.GlobalAgentsError("injected publish failure")
             return real_publish(parent, path, data, mode, replace=replace)
 
-        with patch.object(self.global_agents, "_publish_file", side_effect=fail_target), \
-             patch.object(self.global_agents, "_backup_timestamp", return_value=456):
-            with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "injected publish"):
-                self._manage(adopt=True)
+        with (
+            patch.object(self.global_agents, "_publish_file", side_effect=fail_target),
+            patch.object(self.global_agents, "_backup_timestamp", return_value=456),
+            self.assertRaisesRegex(
+                self.global_agents.GlobalAgentsError, "injected publish"
+            ),
+        ):
+            self._manage(adopt=True)
         self.assertEqual(self.target.read_bytes(), original)
-        self.assertEqual((self.target.parent / "AGENTS_BAK_456.md").read_bytes(), original)
+        self.assertEqual(
+            (self.target.parent / "AGENTS_BAK_456.md").read_bytes(), original
+        )
 
     def test_metadata_publish_failure_reports_uncertain_state_and_retains_backup(self):
         self.target.parent.mkdir()
@@ -227,12 +277,20 @@ class GlobalAgentsTests(unittest.TestCase):
                 raise self.global_agents.GlobalAgentsError("injected metadata failure")
             return real_publish(parent, path, data, mode, replace=replace)
 
-        with patch.object(self.global_agents, "_publish_file", side_effect=fail_metadata), \
-             patch.object(self.global_agents, "_backup_timestamp", return_value=654):
-            with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "元数据更新失败.*状态不确定"):
-                self._manage(adopt=True)
+        with (
+            patch.object(
+                self.global_agents, "_publish_file", side_effect=fail_metadata
+            ),
+            patch.object(self.global_agents, "_backup_timestamp", return_value=654),
+            self.assertRaisesRegex(
+                self.global_agents.GlobalAgentsError, "元数据更新失败.*状态不确定"
+            ),
+        ):
+            self._manage(adopt=True)
         self.assertEqual(self.target.read_bytes(), self._rendered())
-        self.assertEqual((self.target.parent / "AGENTS_BAK_654.md").read_bytes(), original)
+        self.assertEqual(
+            (self.target.parent / "AGENTS_BAK_654.md").read_bytes(), original
+        )
         self.assertFalse(self.metadata.exists())
 
     def test_post_publish_external_edit_is_not_reported_as_success(self):
@@ -249,12 +307,22 @@ class GlobalAgentsTests(unittest.TestCase):
                 self.target.write_bytes(external)
             return result
 
-        with patch.object(self.global_agents, "_publish_file", side_effect=publish_then_external_edit), \
-             patch.object(self.global_agents, "_backup_timestamp", return_value=655):
-            with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "发布后目标或元数据发生变化"):
-                self._manage(adopt=True)
+        with (
+            patch.object(
+                self.global_agents,
+                "_publish_file",
+                side_effect=publish_then_external_edit,
+            ),
+            patch.object(self.global_agents, "_backup_timestamp", return_value=655),
+            self.assertRaisesRegex(
+                self.global_agents.GlobalAgentsError, "发布后目标或元数据发生变化"
+            ),
+        ):
+            self._manage(adopt=True)
         self.assertEqual(self.target.read_bytes(), external)
-        self.assertEqual((self.target.parent / "AGENTS_BAK_655.md").read_bytes(), original)
+        self.assertEqual(
+            (self.target.parent / "AGENTS_BAK_655.md").read_bytes(), original
+        )
 
     def test_external_change_after_backup_is_detected_and_backup_retained(self):
         self.target.parent.mkdir()
@@ -269,24 +337,42 @@ class GlobalAgentsTests(unittest.TestCase):
             self.target.write_bytes(external)
             return result
 
-        with patch.object(self.global_agents, "_backup", side_effect=backup_then_external_edit), \
-             patch.object(self.global_agents, "_backup_timestamp", return_value=789):
-            with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "发生变化"):
-                self._manage(adopt=True)
+        with (
+            patch.object(
+                self.global_agents, "_backup", side_effect=backup_then_external_edit
+            ),
+            patch.object(self.global_agents, "_backup_timestamp", return_value=789),
+            self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "发生变化"),
+        ):
+            self._manage(adopt=True)
         self.assertEqual(self.target.read_bytes(), external)
-        self.assertEqual((self.target.parent / "AGENTS_BAK_789.md").read_bytes(), original)
+        self.assertEqual(
+            (self.target.parent / "AGENTS_BAK_789.md").read_bytes(), original
+        )
 
     def test_cooperating_lock_rejects_second_writer(self):
         self.target.parent.mkdir()
-        with self.global_agents._lock(self.lock):
-            with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "另一个全局 AGENTS 更新"):
-                self._manage()
+        with (
+            self.global_agents._lock(self.lock),
+            self.assertRaisesRegex(
+                self.global_agents.GlobalAgentsError, "另一个全局 AGENTS 更新"
+            ),
+        ):
+            self._manage()
         self.assertFalse(self.target.exists())
 
     def test_read_and_directory_creation_oserrors_are_sanitized(self):
-        with patch.object(self.global_agents.os, "fstat", side_effect=OSError("sensitive low-level detail")):
-            with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "无法安全读取") as raised:
-                self._manage("show")
+        with (
+            patch.object(
+                self.global_agents.os,
+                "fstat",
+                side_effect=OSError("sensitive low-level detail"),
+            ),
+            self.assertRaisesRegex(
+                self.global_agents.GlobalAgentsError, "无法安全读取"
+            ) as raised,
+        ):
+            self._manage("show")
         self.assertNotIn("sensitive low-level detail", str(raised.exception))
         real_mkdir = Path.mkdir
 
@@ -295,16 +381,24 @@ class GlobalAgentsTests(unittest.TestCase):
                 raise OSError("sensitive mkdir detail")
             return real_mkdir(path, *args, **kwargs)
 
-        with patch.object(Path, "mkdir", fail_target_mkdir):
-            with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "无法创建 ~/.codex") as raised:
-                self._manage()
+        with (
+            patch.object(Path, "mkdir", fail_target_mkdir),
+            self.assertRaisesRegex(
+                self.global_agents.GlobalAgentsError, "无法创建 ~/.codex"
+            ) as raised,
+        ):
+            self._manage()
         self.assertNotIn("sensitive mkdir detail", str(raised.exception))
         self.assertFalse(self.target.parent.exists())
 
     def test_unsupported_platform_stops_before_creating_target_or_lock(self):
-        with patch.object(self.global_agents.sys, "platform", "win32"):
-            with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "仅支持 macOS/Linux"):
-                self._manage()
+        with (
+            patch.object(self.global_agents.sys, "platform", "win32"),
+            self.assertRaisesRegex(
+                self.global_agents.GlobalAgentsError, "仅支持 macOS/Linux"
+            ),
+        ):
+            self._manage()
         self.assertFalse(self.target.parent.exists())
         self.assertFalse(self.lock.exists())
 
@@ -317,7 +411,9 @@ class GlobalAgentsTests(unittest.TestCase):
             self._manage(dry_run=True)
         self.target.unlink()
         os.link(external, self.target)
-        with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "硬链接|独立普通"):
+        with self.assertRaisesRegex(
+            self.global_agents.GlobalAgentsError, "硬链接|独立普通"
+        ):
             self._manage(dry_run=True)
         self.target.unlink()
         os.mkfifo(self.target)
@@ -329,13 +425,24 @@ class GlobalAgentsTests(unittest.TestCase):
 
         stdout, stderr = io.StringIO(), io.StringIO()
         with patch("sys.stdout", stdout), patch("sys.stderr", stderr):
-            status = main(["agents", "update", "--source", str(self.source), "--dry-run"])
+            status = main(
+                ["agents", "update", "--source", str(self.source), "--dry-run"]
+            )
         self.assertEqual(status, 0)
         self.assertEqual(json.loads(stdout.getvalue())["status"], "preview")
         stdout.seek(0)
         stdout.truncate(0)
         with patch("sys.stdout", stdout), patch("sys.stderr", stderr):
-            status = main(["agents", "update", "--source", str(self.source), "--adopt", "--replace-local"])
+            status = main(
+                [
+                    "agents",
+                    "update",
+                    "--source",
+                    str(self.source),
+                    "--adopt",
+                    "--replace-local",
+                ]
+            )
         self.assertEqual(status, 1)
         self.assertFalse(json.loads(stderr.getvalue())["ok"])
 
