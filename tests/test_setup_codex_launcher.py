@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-LAUNCHER = Path(__file__).resolve().parents[1] / "scripts" / "setup-codex-mcp.sh"
+LAUNCHER = Path(__file__).resolve().parents[1] / "setup"
 
 
 @unittest.skipUnless(Path("/bin/bash").is_file(), "requires Bash")
@@ -22,7 +22,7 @@ class SetupLauncherTests(unittest.TestCase):
             cli.write_text("#!/bin/bash\nexit 99\n", encoding="utf-8")
             cli.chmod(0o755)
             result = subprocess.run(
-                ["/bin/bash", str(LAUNCHER), "--skills-update"],
+                [str(LAUNCHER), "--skills-update"],
                 env={**os.environ, "PATH": f"{root}:/usr/bin:/bin"},
                 capture_output=True,
                 check=False,
@@ -52,7 +52,7 @@ class SetupLauncherTests(unittest.TestCase):
             for operation, expected in operations.items():
                 with self.subTest(operation=operation):
                     result = subprocess.run(
-                        ["/bin/bash", str(LAUNCHER), operation, "--dry-run"],
+                        [str(LAUNCHER), operation, "--dry-run"],
                         env={**os.environ, "PATH": f"{root}:/usr/bin:/bin"},
                         capture_output=True,
                         check=False,
@@ -75,7 +75,8 @@ class SetupLauncherTests(unittest.TestCase):
             ):
                 with self.subTest(operation=operation):
                     result = subprocess.run(
-                        ["/bin/bash", str(LAUNCHER), operation, "--dry-run"],
+                        [str(LAUNCHER), operation, "--dry-run"],
+                        cwd=LAUNCHER.parent,
                         env={**os.environ, "PATH": f"{root}:/usr/bin:/bin"},
                         capture_output=True,
                         check=False,
@@ -87,7 +88,7 @@ class SetupLauncherTests(unittest.TestCase):
                             "run",
                             "--managed-python",
                             "--",
-                            str(LAUNCHER.with_suffix(".py")),
+                            str(LAUNCHER.parent / "scripts" / "setup-codex-mcp.py"),
                             *flags,
                             "--dry-run",
                         ],
@@ -98,9 +99,9 @@ class SetupLauncherTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            scripts = root / "checkout with spaces" / "scripts"
-            scripts.mkdir(parents=True)
-            launcher = scripts / LAUNCHER.name
+            checkout = root / "checkout with spaces"
+            checkout.mkdir()
+            launcher = checkout / LAUNCHER.name
             shutil.copy2(LAUNCHER, launcher)
             uv = root / "uv"
             uv.write_text(
@@ -109,7 +110,7 @@ class SetupLauncherTests(unittest.TestCase):
             uv.chmod(0o755)
             arguments = ["--install", "--force", "--config", "a b/*;$(echo x)", ""]
             result = subprocess.run(
-                ["/bin/bash", str(launcher), *arguments],
+                [str(launcher), *arguments],
                 cwd=root,
                 env={**os.environ, "PATH": f"{root}:/usr/bin:/bin"},
                 capture_output=True,
@@ -122,7 +123,7 @@ class SetupLauncherTests(unittest.TestCase):
                     "run",
                     "--managed-python",
                     "--",
-                    str(scripts.resolve() / "setup-codex-mcp.py"),
+                    str(checkout.resolve() / "scripts" / "setup-codex-mcp.py"),
                     *arguments,
                 ],
             )
@@ -134,7 +135,7 @@ class SetupLauncherTests(unittest.TestCase):
             (root / "dirname").symlink_to(shutil.which("dirname"))
             config = root / "config.toml"
             result = subprocess.run(
-                ["/bin/bash", str(LAUNCHER), "--install", "--config", str(config)],
+                [str(LAUNCHER), "--install", "--config", str(config)],
                 env={**os.environ, "PATH": str(root)},
                 capture_output=True,
                 check=False,

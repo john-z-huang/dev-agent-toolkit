@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["tomlkit>=0.15,<1"]
 # ///
-"""Install or register this repository's MCP server and forward required env names."""
+"""安装或注册本仓库的 MCP 服务，并配置所需环境变量名称的转发。"""
 
 from __future__ import annotations
 
@@ -584,28 +584,35 @@ def _setup(args: argparse.Namespace, path: Path) -> int:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--server", default=DEFAULT_SERVER, help="Codex MCP server name"
+    parser = argparse.ArgumentParser(
+        description=f"用法：%(prog)s [选项]\n\n{__doc__}",
+        add_help=False,
+        usage=argparse.SUPPRESS,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--config", type=Path, help="Codex config.toml path")
+    parser._optionals.title = "选项"
+    parser.add_argument("-h", "--help", action="help", help="显示帮助信息并退出")
     parser.add_argument(
-        "--env-only", action="store_true", help="repair forwarding only"
+        "--server", default=DEFAULT_SERVER, help="Codex MCP 服务名称"
     )
+    parser.add_argument("--config", type=Path, help="Codex config.toml 配置文件路径")
     parser.add_argument(
-        "--install", action="store_true", help="install the local MCP tool first"
-    )
-    parser.add_argument(
-        "--force", action="store_true", help="force install; requires --install"
-    )
-    parser.add_argument(
-        "--executable", type=Path, help="absolute installed MCP executable path"
+        "--env-only", action="store_true", help="仅修复已注册服务的环境变量转发声明"
     )
     parser.add_argument(
-        "--replace", action="store_true", help="replace a conflicting registration"
+        "--install", action="store_true", help="先安装本仓库的 MCP 服务工具"
     )
     parser.add_argument(
-        "--dry-run", action="store_true", help="show a safe action plan"
+        "--force", action="store_true", help="强制重新安装；须与 --install 一起使用"
+    )
+    parser.add_argument(
+        "--executable", type=Path, help="已安装 MCP 可执行文件的绝对路径"
+    )
+    parser.add_argument(
+        "--replace", action="store_true", help="替换存在冲突的 MCP 注册项"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="仅预览操作计划，不执行安装或配置写入"
     )
     return parser
 
