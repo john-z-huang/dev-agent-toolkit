@@ -27,7 +27,7 @@ case "${1:-}" in
         ;;
     --help|-h|"")
         cat <<'HELP'
-用法：./setup 操作参数 [对应操作的选项]
+用法：./dws 操作参数 [对应操作的选项]
   --mcp-install     安装 MCP 服务，并在 Codex 中注册和配置
   --mcp-update      更新 MCP 服务，并在 Codex 中注册和配置
   --skills-install  从已安装的完整发行包安装技能（Skill）

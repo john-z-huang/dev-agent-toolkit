@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-LAUNCHER = Path(__file__).resolve().parents[1] / "setup"
+LAUNCHER = Path(__file__).resolve().parents[1] / "dws"
 
 
 @unittest.skipUnless(Path("/bin/bash").is_file(), "requires Bash")
