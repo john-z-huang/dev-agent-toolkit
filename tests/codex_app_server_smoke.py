@@ -1,4 +1,4 @@
-"""测试专用 Codex SDK 驱动；默认仅协议检查，--live 显式启用一次模型测试。"""
+"""测试专用 Codex App Server 驱动；默认仅协议检查，--live 显式启用一次模型测试。"""
 
 from __future__ import annotations
 
@@ -10,20 +10,19 @@ import re
 import subprocess
 import sys
 import tempfile
-import threading
 import tomllib
 from pathlib import Path
-from typing import Any
-from unittest.mock import patch
 from urllib.parse import urlsplit
+
+from codex_app_server_client import AppServerClient, SmokeFailure
 
 MODEL = "gpt-6-luna"
 EFFORT = "medium"
 SERVER = "dev-workflow-standards-tools"
 TOOL = "get_codex_session_summary_guidance"
 ARGUMENTS = {
-    "custom_questions": ["SDK 冒烟测试问题"],
-    "custom_template": "SDK_SMOKE_TEMPLATE",
+    "custom_questions": ["App Server 冒烟测试问题"],
+    "custom_template": "APP_SERVER_SMOKE_TEMPLATE",
 }
 CHECK_API_TOOL = "check_api_input"
 CHECK_API_ARGUMENTS = {
@@ -50,10 +49,6 @@ NETWORK_ENV_VARS = (
     "no_proxy",
     "SSL_CERT_FILE",
 )
-
-
-class SmokeFailure(Exception):
-    """仅包含安全错误分类，不转发 SDK/HTTP/子进程原始异常。"""
 
 
 def credentials() -> dict[str, str]:
@@ -87,7 +82,7 @@ def settings(
     server_executable: Path | None = None,
     live_review: bool = False,
 ) -> tuple[dict, dict[str, str]]:
-    """SDK provider 使用显式配置；仅 live 测试向 MCP 转发 API 变量名称。"""
+    """App Server provider 使用显式配置；仅 live 测试向 MCP 转发 API 变量名称。"""
     launcher = (
         "import sys;sys.path.insert(0," + repr(str(site)) + ");"
         "import dev_workflow_standards_tools as package;"
@@ -103,10 +98,16 @@ def settings(
     config = {
         "model": MODEL,
         "model_reasoning_effort": EFFORT,
-        "model_provider": "sdk_test",
+        "model_provider": "app_server_test",
+        "features": {
+            "apps": False,
+            "plugins": False,
+            "api_key_model_discovery": False,
+            "multi_agent": False,
+        },
         "model_providers": {
-            "sdk_test": {
-                "name": "SDK test provider",
+            "app_server_test": {
+                "name": "App Server test provider",
                 "base_url": configuration["OPENAI_BASE_URL"],
                 "env_key": "OPENAI_API_KEY",
                 "wire_api": "responses",
@@ -144,7 +145,7 @@ def settings(
 
 
 def overrides(config: dict, prefix: str = "") -> tuple[str, ...]:
-    """将受控结构变为 SDK 支持的 TOML 叶值覆盖，不向磁盘保存配置。"""
+    """将受控结构变为 App Server 支持的 TOML 叶值覆盖，不向磁盘保存配置。"""
     result = []
     for key, value in config.items():
         name = prefix + key
@@ -345,28 +346,110 @@ def check_turn(turn: dict) -> int:
     return len(calls)
 
 
-def _read_live_turn(client: Any, thread_id: str, prompt: str) -> int:
-    """只消费这一轮通知；无论成功或失败都注销订阅，不继续委派任务。"""
-    turn = client.turn_start(
-        thread_id, prompt, params={"model": MODEL, "effort": EFFORT}
+def _read_live_turn(client: AppServerClient, thread_id: str, prompt: str) -> int:
+    """保留响应前到达的通知，并且仅核对当前 thread/turn 的真实完成事件。"""
+    started = client.request(
+        "turn/start",
+        {
+            "threadId": thread_id,
+            "input": [{"type": "text", "text": prompt}],
+            "model": MODEL,
+            "effort": EFFORT,
+        },
     )
-    client.register_turn_notifications(turn.turn.id)
+    turn_id = started["turn"]["id"]
     items = []
-    try:
-        while True:
-            notification = client.next_turn_notification(turn.turn.id)
-            value = notification.payload.model_dump(mode="json", by_alias=True)
-            if notification.method == "item/completed":
-                items.append(value["item"])
-            if notification.method == "turn/completed":
-                calls = check_turn({**value["turn"], "items": items})
-                break
-    finally:
-        client.unregister_turn_notifications(turn.turn.id)
-    return calls
+    while True:
+        notification = client.next_turn_notification(thread_id, turn_id)
+        value = notification["params"]
+        if notification["method"] == "item/completed":
+            items.append(value["item"])
+        if notification["method"] == "turn/completed":
+            return check_turn({**value["turn"], "items": items})
 
 
-def execute_sdk(
+def _start_thread(client: AppServerClient, workspace: Path) -> str:
+    started = client.request(
+        "thread/start",
+        {
+            "model": MODEL,
+            "modelProvider": "app_server_test",
+            "config": {"model_reasoning_effort": EFFORT},
+            "cwd": str(workspace),
+            "sandbox": "read-only",
+            "approvalPolicy": "never",
+            "ephemeral": True,
+            "baseInstructions": "你正在接受测试。仅可使用指定的只读 MCP 工具，并严格使用给定的合成参数。不得查看文件、使用 Shell、写入或委派任务。",
+        },
+    )
+    if (
+        started.get("model") != MODEL
+        or started.get("reasoningEffort") != EFFORT
+        or started.get("modelProvider") != "app_server_test"
+    ):
+        raise SmokeFailure("model_or_effort_mismatch")
+    return started["thread"]["id"]
+
+
+def _discover_tools(client: AppServerClient, thread_id: str):
+    status = client.request(
+        "mcpServerStatus/list",
+        {
+            "threadId": thread_id,
+            "serverName": SERVER,
+            "detail": "toolsAndAuthOnly",
+        },
+    )
+    servers = [entry for entry in status.get("data", []) if entry.get("name") == SERVER]
+    if len(servers) != 1:
+        raise SmokeFailure("mcp_discovery_failed")
+    server = servers[0]
+    tools = server.get("tools")
+    if (
+        server.get("toolsError")
+        or not isinstance(tools, dict)
+        or TOOL not in tools
+        or CHECK_API_TOOL not in tools
+        or server.get("serverCapabilities") is None
+    ):
+        raise SmokeFailure("mcp_discovery_failed")
+    check_api_input_schema(tools[CHECK_API_TOOL])
+
+
+def _call(client: AppServerClient, thread_id: str, tool: str, arguments: dict) -> dict:
+    return client.request(
+        "mcpServer/tool/call",
+        {
+            "threadId": thread_id,
+            "server": SERVER,
+            "tool": tool,
+            "arguments": arguments,
+        },
+    )
+
+
+def _exercise_tools(client: AppServerClient, thread_id: str, live: bool) -> int:
+    _discover_tools(client, thread_id)
+    guidance_result(_call(client, thread_id, TOOL, ARGUMENTS))
+    check_api_input_result(
+        _call(client, thread_id, CHECK_API_TOOL, CHECK_API_ARGUMENTS)
+    )
+    if not live:
+        return 0
+    check_api_input_external_result(
+        _call(client, thread_id, CHECK_API_TOOL, LIVE_REVIEW_ARGUMENTS)
+    )
+    prompt = (
+        "严格调用 "
+        + TOOL
+        + " 一次，参数如下："
+        + json.dumps(ARGUMENTS)
+        + "。随后回复 OK。不得在未调用该工具时直接回答。"
+    )
+    return _read_live_turn(client, thread_id, prompt)
+
+
+def execute_app_server(
     root: Path,
     site: Path,
     configuration: dict[str, str],
@@ -374,17 +457,6 @@ def execute_sdk(
     live: bool = False,
     installed_info: dict[str, str] | None = None,
 ) -> dict:
-    # 延迟导入：普通离线测试及运行时包均不要求安装 SDK。
-    try:
-        from openai_codex import CodexConfig
-        from openai_codex.client import CodexClient
-        from openai_codex.generated.v2_all import (
-            ListMcpServerStatusResponse,
-            McpServerToolCallResponse,
-        )
-    except ImportError:
-        raise SmokeFailure("sdk_dependency_missing") from None
-
     config, environment = settings(
         root,
         site,
@@ -395,145 +467,44 @@ def execute_sdk(
     (root / "codex-state").mkdir()
     workspace = root / "workspace"
     workspace.mkdir()
-    timed_out = threading.Event()
-    # SDK 启动时自身会合并环境；清空继承防止其他凭据、配置路径或 provider 覆盖混入。
-    with patch.dict(os.environ, environment, clear=True):
-        client = CodexClient(
-            CodexConfig(
-                cwd=str(workspace),
-                env=environment,
-                config_overrides=overrides(config),
-            )
+    try:
+        with AppServerClient(
+            cwd=str(workspace), env=environment, config_overrides=overrides(config)
+        ) as client:
+            client.initialize()
+            thread_id = _start_thread(client, workspace)
+            calls = _exercise_tools(client, thread_id, live)
+    except SmokeFailure:
+        raise
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "unexpected_boundary_failure", exc_info=False
         )
-
-        def expire():
-            timed_out.set()
-            client.close()
-
-        timer = threading.Timer(120, expire)
-        timer.daemon = True
-        timer.start()
-        try:
-            with client:
-                client.initialize()
-                started = client.thread_start(
-                    {
-                        "model": MODEL,
-                        "modelProvider": "sdk_test",
-                        "config": {"model_reasoning_effort": EFFORT},
-                        "cwd": str(workspace),
-                        "sandbox": "read-only",
-                        "approvalPolicy": "never",
-                        "ephemeral": True,
-                        "baseInstructions": "你正在接受测试。仅可使用指定的只读 MCP 工具，并严格使用给定的合成参数。不得查看文件、使用 Shell、写入或委派任务。",
-                    }
-                )
-                if (
-                    started.model != MODEL
-                    or started.reasoning_effort is None
-                    or started.reasoning_effort.value != EFFORT
-                    or started.model_provider != "sdk_test"
-                ):
-                    raise SmokeFailure("model_or_effort_mismatch")
-                thread_id = started.thread.id
-                status = client.request(
-                    "mcpServerStatus/list",
-                    {
-                        "threadId": thread_id,
-                        "serverName": SERVER,
-                        "detail": "toolsAndAuthOnly",
-                    },
-                    response_model=ListMcpServerStatusResponse,
-                )
-                servers = [entry for entry in status.data if entry.name == SERVER]
-                if (
-                    len(servers) != 1
-                    or servers[0].tools_error
-                    or not isinstance(servers[0].tools, dict)
-                    or TOOL not in servers[0].tools
-                    or CHECK_API_TOOL not in servers[0].tools
-                    or servers[0].server_capabilities is None
-                ):
-                    raise SmokeFailure("mcp_discovery_failed")
-                check_api_input_schema(servers[0].tools[CHECK_API_TOOL])
-                direct = client.request(
-                    "mcpServer/tool/call",
-                    {
-                        "threadId": thread_id,
-                        "server": SERVER,
-                        "tool": TOOL,
-                        "arguments": ARGUMENTS,
-                    },
-                    response_model=McpServerToolCallResponse,
-                )
-                guidance_result(_mapping(direct) or {})
-                api_input_call = client.request(
-                    "mcpServer/tool/call",
-                    {
-                        "threadId": thread_id,
-                        "server": SERVER,
-                        "tool": CHECK_API_TOOL,
-                        "arguments": CHECK_API_ARGUMENTS,
-                    },
-                    response_model=McpServerToolCallResponse,
-                )
-                check_api_input_result(_mapping(api_input_call) or {})
-                calls = 0
-                if live:
-                    reviewed = client.request(
-                        "mcpServer/tool/call",
-                        {
-                            "threadId": thread_id,
-                            "server": SERVER,
-                            "tool": CHECK_API_TOOL,
-                            "arguments": LIVE_REVIEW_ARGUMENTS,
-                        },
-                        response_model=McpServerToolCallResponse,
-                    )
-                    check_api_input_external_result(reviewed)
-                    prompt = (
-                        "严格调用 "
-                        + TOOL
-                        + " 一次，参数如下："
-                        + json.dumps(ARGUMENTS)
-                        + "。随后回复 OK。不得在未调用该工具时直接回答。"
-                    )
-                    calls = _read_live_turn(client, thread_id, prompt)
-                result = {
-                    "ok": True,
-                    "model": MODEL,
-                    "effort": EFFORT,
-                    "mcp_discovery": "passed",
-                    "direct_tool_call": "passed",
-                    "check_api_input_schema": "passed",
-                    "check_api_input_local_call": "passed",
-                    "check_api_input_external_review": "passed" if live else "not_run",
-                    "model_test": "passed" if live else "not_run",
-                    "actual_model_tool_calls": calls,
-                }
-                if installed_info is not None:
-                    result.update(
-                        {
-                            "install_source": "uv_tool",
-                            "installed_executable": installed_info["path"],
-                            "installed_version": installed_info["version"],
-                        }
-                    )
-                else:
-                    result["install_source"] = "wheel"
-                return result
-        except SmokeFailure:
-            raise
-        except Exception:
-            logging.getLogger(__name__).exception(
-                "unexpected_boundary_failure", exc_info=False
-            )
-            raise SmokeFailure(
-                "sdk_timeout" if timed_out.is_set() else "sdk_request_failed"
-            ) from None
-        finally:
-            timer.cancel()
-            client.close()
+        raise SmokeFailure("app_server_request_failed") from None
+    result = {
+        "ok": True,
+        "model": MODEL,
+        "effort": EFFORT,
+        "mcp_discovery": "passed",
+        "direct_tool_call": "passed",
+        "check_api_input_schema": "passed",
+        "check_api_input_local_call": "passed",
+        "check_api_input_external_review": "passed" if live else "not_run",
+        "model_test": "passed" if live else "not_run",
+        "actual_model_tool_calls": calls,
+        "app_server_cli": client.cli_info,
+    }
+    if installed_info is not None:
+        result.update(
+            {
+                "install_source": "uv_tool",
+                "installed_executable": installed_info["path"],
+                "installed_version": installed_info["version"],
+            }
+        )
+    else:
+        result["install_source"] = "wheel"
+    return result
 
 
 def _project_version() -> str:
@@ -647,11 +618,11 @@ def run(
 ) -> dict:
     if (wheel is None) == (installed_executable is None):
         raise SmokeFailure("one_install_source_required")
-    configuration = credentials()  # 缺配置时在 SDK 启动或 wheel 安装前停止。
+    configuration = credentials()  # 缺配置时在 App Server 启动或 wheel 安装前停止。
     if wheel is not None:
         if not wheel.is_file() or wheel.suffix != ".whl":
             raise SmokeFailure("wheel_required")
-        with tempfile.TemporaryDirectory(prefix="codex-sdk-test-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="codex-app-server-test-") as temporary:
             root = Path(temporary).resolve()
             site = root / "installed"
             result = subprocess.run(
@@ -672,13 +643,13 @@ def run(
             )
             if result.returncode:
                 raise SmokeFailure("wheel_install_failed")
-            return execute_sdk(root, site, configuration, live=live)
+            return execute_app_server(root, site, configuration, live=live)
 
     installed_info = inspect_installed_executable(installed_executable)
-    with tempfile.TemporaryDirectory(prefix="codex-sdk-test-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="codex-app-server-test-") as temporary:
         root = Path(temporary).resolve()
         installed_site = Path(installed_info["module"]).parent.parent
-        return execute_sdk(
+        return execute_app_server(
             root,
             installed_site,
             configuration,
@@ -689,7 +660,7 @@ def run(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="测试专用 Codex SDK：固定 gpt-6-luna/medium，无配置或模型回退"
+        description="测试专用 Codex App Server：固定 gpt-6-luna/medium，无配置或模型回退"
     )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--wheel", type=Path, help="待测完整 wheel")
@@ -701,7 +672,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--live",
         action="store_true",
-        help="显式发起一次真实模型测试；默认只检查 SDK/MCP 协议",
+        help="显式发起一次真实模型测试；默认只检查 App Server/MCP 协议",
     )
     args = parser.parse_args(argv)
     try:

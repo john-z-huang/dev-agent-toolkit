@@ -6,9 +6,6 @@ requires-python = ">=3.11"
 dependencies = ["mcp>=2,<3", "pydantic>=2,<3", "openai>=3.37,<4", "httpx2>=2.16,<3", "anyio>=4,<5"]
 
 [dependency-groups]
-codex-test = [
-    "openai-codex>=0.163.0",
-]
 dev = ["hatchling>=1.27,<2", "pyyaml>=6,<7"]
 
 [project.scripts]

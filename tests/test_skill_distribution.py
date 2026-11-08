@@ -190,7 +190,7 @@ class SkillDistributionTests(unittest.TestCase):
                     )
                     self.assertFalse(
                         any(
-                            "codex_sdk" in name or name.startswith("tests/")
+                            "codex_app_server" in name or name.startswith("tests/")
                             for name in archive.namelist()
                         )
                     )

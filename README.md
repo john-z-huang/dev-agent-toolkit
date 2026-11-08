@@ -130,6 +130,8 @@ uv tool uninstall dev-workflow-standards-mcp
 
 ## 使用
 
+可选的 [原生 Codex Hooks](codex-hooks/README.md) 将部分指令合同转换为实际宿主回调：会话与交付提示、MCP 目标仓库路径硬校验，以及结构化失败后的恢复提示。使用 `scripts/setup-codex-hooks.py` 预览或显式安装到目标项目；独立于 Skill/MCP 安装，不覆盖已有 hooks，不自动授予信任或后续操作权限。
+
 使用 [`SKILL.md`](skills/dev-workflow-standards/SKILL.md) 时按 [`Hook 索引`](skills/dev-workflow-standards/hooks/index.md) 读取当前动作适用的合同，由 Agent 判断操作组合；按 [`references/mcp-tools.md`](skills/dev-workflow-standards/references/mcp-tools.md) 调用对应工具。所有仓库操作都要传入本次目标项目的绝对 `repo_path`；服务器不会把启动时的目录当作目标仓库。
 
 Python 执行和依赖环境任务按需读取 [`references/python-environment.md`](skills/dev-workflow-standards/references/python-environment.md)，Shell 脚本开发和验证按需读取 [`references/shell-environment.md`](skills/dev-workflow-standards/references/shell-environment.md)。独立脚本无需先进入 Git 工作流；非开发任务不增加环境规则加载步骤。
@@ -213,29 +215,34 @@ bash -c 'uv run --frozen -- python ../tests/openai_official_smoke.py --live'
 
 输出仅含安全 JSON 状态、固定请求模型、成功时的 token 计数或失败分类，不输出真实配置、响应正文或原始异常。请求仅在超时时按统一配置重试，不切换模型；只有完整、未拒绝、模型匹配且结构正确的响应才返回 `success` 和退出码 0，失败退出码为 1。
 
-### Codex SDK 集成测试
+### Codex App Server 集成测试
 
-联网审核模式将宿主已有的标准代理变量（含大小写）及 `SSL_CERT_FILE` 一并按名称转发给 MCP 子进程，使审核请求与 SDK 使用相同的网络环境；不会把实际代理值写入配置覆盖参数。失败诊断只保留已知安全的配置、连接、超时或审核状态分类，不输出原始异常、输入或配置值。
+测试驱动位于 `tests/codex_app_server_smoke.py`，通过 `tests/codex_app_server_client.py` 的标准库 JSON-RPC 客户端启动 `codex app-server --stdio`，完成 `initialize` / `initialized` 握手、`thread/start`、工具发现与调用；协议依据 [Codex App Server 官方文档](https://learn.chatgpt.com/docs/app-server)。项目已移除 Codex Python SDK、其捆绑 CLI 和 `codex-test` 依赖组，运行时、发布包和 Skill 均不包含该测试驱动。
 
-Codex Python SDK 仅在 `codex-test` 测试依赖组中声明，测试驱动位于 `tests/codex_sdk_smoke.py`；运行时不导入 SDK，发布包不依赖 SDK，也不包含测试驱动。SDK 及匹配的 CLI 版本由 `mcp-server/uv.lock` 锁定。普通离线测试不安装该依赖组、不启动 Codex 或发起模型请求。
+需预先独立安装支持上述接口的 Codex CLI，确保 `codex` 在 PATH 中；客户端按实际绝对路径启动，不下载、不安装或自动切换 CLI。普通离线测试使用合成子进程核验通信协议，不启动真实 Codex 或发起模型请求。测试期间不读取原用户的 Codex 配置、登录文件，不修改现有 Skill 安装。
 
-先按上面的命令构建 wheel，再从 `mcp-server/` 执行：
+先构建 wheel，再从 `mcp-server/` 执行：
 
-```text
-uv run --locked --group codex-test -- python ../tests/codex_sdk_smoke.py --wheel ../dist/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
+```bash
+uv run --locked -- python ../tests/codex_app_server_smoke.py --wheel ../dist/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
 ```
 
-默认只执行 SDK/CLI 初始化、临时 MCP 注册、工具发现和直接工具调用，不发起模型请求。测试将 wheel 安装到临时目录，核对加载的确是该安装，再使用临时 Codex 配置和只读测试工作区；不读取原用户的 Codex 配置、登录文件或修改现有 Skill 安装。仅暴露不联网、不读历史、不写 Memory 的 `get_codex_session_summary_guidance` 工具，输入为合成问题和模板。
+默认仅做 App Server 初始化、临时 MCP 注册、工具发现和直接只读工具调用，不发起模型请求。wheel 被安装到临时目录，并核对加载来源。临时 Codex 状态目录和只读测试工作区与用户配置隔离。只暴露 `get_codex_session_summary_guidance` 和 `check_api_input`；前者使用合成问题/模板，后者验证合成敏感输入在本地被拒绝，普通模式不向 MCP 转发 API 配置。
 
-需要真实模型端到端检查时显式添加 `--live`：
+核验已更新的 `uv tool` 时，先通过其他所有适用测试，在既有授权内更新安装，再核对其实际可执行路径和版本：
 
-```text
-uv run --locked --group codex-test -- python ../tests/codex_sdk_smoke.py --wheel ../dist/dev_workflow_standards_tools-0.2.0-py3-none-any.whl --live
+```bash
+uv run --locked -- python ../tests/codex_app_server_smoke.py \
+  --installed-executable /absolute/path/to/dev-workflow-standards-tools
 ```
 
-所有 SDK 测试固定模型 `gpt-6-luna`、推理强度 `medium`，不接受命令行或环境变量覆盖，也不自动切换模型。两种模式都要求当前进程提供非空的 `OPENAI_API_KEY` 与 `OPENAI_BASE_URL`；每次读取并显式配置测试 provider，不使用默认地址或其他登录凭据。真实值不写入仓库或配置文件，不输出原始 SDK/HTTP 错误。
+该模式直接运行指定安装入口，检查入口所属 Python 环境、包版本和模块位置，不再次安装 wheel，也不以源码启动替代安装验证。wheel 模式与此模式互斥。测试另记录 App Server 的实际 CLI 路径和版本；旧进程不能替代新进程验证。
 
-`--live` 会发起真实模型请求，并向 MCP 子进程转发两项 API 环境变量名称，以最小合成项目事实直接调用一次 `check_api_input` 的语义审核，产生相应用量；不向配置覆盖参数写入真实凭据。普通模式仍不向 MCP 转发 API 配置，并验证敏感合成输入被本地拦截。测试检查 Codex 回读的模型/推理强度、MCP 发现结果、直接调用结果、语义审核实际执行标记与当前策略版本，以及模型实际发出的 `item/completed` 工具调用事件；模型仅回复“测试通过”不会被采纳。测试不模拟桌面宿主对真实私有项目数据的全部审批规则。失败不重试或回退；总时限为 120 秒。输出仅含安全状态、固定模型/强度和实际工具调用计数。普通离线测试另覆盖配置缺失时零启动、环境读取、模型限制、错误脱敏及发布包依赖隔离。
+需要真实模型端到端检查时显式添加 `--live`。所有模型测试固定 `gpt-6-luna` / `medium`，不接受其他模型或推理强度覆盖，不重试或回退。两种模式都在启动前读取当前进程非空的 `OPENAI_API_KEY`、`OPENAI_BASE_URL`，显式配置测试 provider；不使用默认地址或其他登录凭据。真实值不写入仓库或配置文件，不输出原始进程、RPC 或 HTTP 错误。
+
+`--live` 向 MCP 子进程按名称转发两项 API 环境变量、标准代理变量（含大小写）及 `SSL_CERT_FILE`，对最小合成开发事实执行 `check_api_input` 语义审核，再通过 `turn/start` 检查模型实际调用指定的只读工具，产生相应用量。检查绑定当前 thread/turn，保留早于响应到达的通知，核对实际 `item/completed`、工具参数/返回值与 `turn/completed` 状态；文字声称通过不被采纳，失败/中断、连接退出、无效消息或审批请求均不会默认为通过，也不会自动批准权限。
+
+总时限为 120 秒，结束或失败后有界关闭进程。输出仅含安全状态、固定模型/强度、实际 CLI 和 MCP 安装来源，以及实际工具调用计数；不输出凭据、端点或原始异常。该测试不模拟桌面宿主对真实私有项目数据的全部审批规则，也不授予全局配置、Memory 或 Git/GitHub 写入权限。
 
 ## 异步与指令迁移（#95 / #96）
 
