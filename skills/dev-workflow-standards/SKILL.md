@@ -1,7 +1,7 @@
 ---
 name: dev-workflow-standards
 description: >-
-  开发操作的声明式指令 Hooks：适用于代码理解、项目修改、Python/Shell 执行及 Git/GitHub 工作。
+  开发操作的声明式指令 Hooks：适用于代码理解、项目修改、Python/Shell 执行、需代理的本地 Modal 依赖管理及 Git/GitHub 工作。
   按当前动作和资源状态提供进入、执行、离开与重新核验条件，由 Agent 自行规划顺序和选择工具。
 ---
 

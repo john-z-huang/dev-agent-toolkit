@@ -1,6 +1,6 @@
 # Python 环境与执行
 
-适用于 Python 解释器和依赖环境选择，以及脚本、模块、一次性命令的执行。仅在相关开发任务中读取；Shell 脚本规则见 [`shell-environment.md`](shell-environment.md)。
+适用于 Python 解释器和依赖环境选择、依赖安装与调整，以及脚本、模块、一次性命令的执行。仅在相关开发任务中读取；Shell 脚本规则见 [`shell-environment.md`](shell-environment.md)。
 
 ## 先确认显式要求
 
@@ -46,6 +46,49 @@ uv run --package member-name -- python -c 'import sys; print(sys.executable)'
 `uv venv` 只负责创建环境，不代表依赖已经安装。依赖按项目配置通过 `uv sync` 或 `uv run` 同步；项目已有锁文件及锁定策略时遵循该策略。
 
 用户或项目显式指定已有虚拟环境、自定义环境路径（例如通过 `UV_PROJECT_ENVIRONMENT`）或其他管理方式时，保持原有优先级。若当前激活环境或继承的环境变量指向其他项目，先核实其归属，不直接将其作为本项目环境；不通过 `--active`、`--no-project` 或 `--isolated` 意外绕过根环境。用户明确要求独立运行的 PEP 723 脚本仍按元数据隔离，不强制并入项目共享环境。
+
+## Modal 代理依赖
+
+安装、添加、升级或修复 Modal 依赖，且本地环境需要通过网络代理访问 Modal 平台时，必须使用带有 `api-proxy-support` extra 的 `modal` 包。本规则不适用于无关 Python 包或仅远端运行的环境；环境归属与项目根仍按前文确认。
+
+### 安装与依赖声明
+
+使用 uv 管理项目时，在已确认的项目或 workspace 根目录按目标包添加依赖：
+
+```bash
+uv add 'modal[api-proxy-support]'
+```
+
+只有当前环境明确使用 pip 管理依赖时，才在该环境中执行：
+
+```bash
+pip install 'modal[api-proxy-support]'
+```
+
+- Shell 命令中的包名保留引号，避免方括号被当作通配符处理。
+- 在本规则适用的环境中，禁止使用不带 extra 的 `uv add modal` 或 `pip install modal`，以免遗漏本地代理支持。
+- 已有不带 extra 的 `modal` 声明时，将其调整为 `modal[api-proxy-support]`，保留兼容的版本约束，不同时保留两个 Modal 依赖声明，并同步项目锁文件。
+- pip 示例不授予向全局解释器安装依赖的权限，也不改变项目既有依赖管理方式。
+
+### 升级与验证
+
+升级时继续保留 extra：
+
+```bash
+uv add --upgrade 'modal[api-proxy-support]'
+# 仅在已确认的 pip 环境中：
+pip install --upgrade 'modal[api-proxy-support]'
+```
+
+安装后核对依赖声明及锁文件仍保留该 extra，并在实际使用的环境中确认 Modal 可导入：
+
+```bash
+uv run python -c "import modal; print(modal.__version__)"
+# 仅在已确认的 pip 环境中：
+python -c "import modal; print(modal.__version__)"
+```
+
+导入成功仅证明包可加载，不代表代理连通性已经验证。导入失败时，先检查安装命令、当前 Python 环境和代理相关环境配置；不要因为网络错误改回标准 `modal` 包，也不要擅自更改用户已有的代理配置。
 
 ## 无项目时的默认环境
 
