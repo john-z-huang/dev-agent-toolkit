@@ -106,6 +106,8 @@ Code Agent 必须从真实读取结果填写这些条件。工具只判断提供
 调用前收集相关的最小充分材料，无需先写整篇正文，不传整个仓库、完整会话或敏感配置。通用事实包括目标、受众、背景、组件、路径/符号指针、范围与非目标、约束及关联项；标注来源，区分已核实事实、未验证反馈、推测和建议，缺失或矛盾如实说明。
 
 - Issue：区分缺陷与功能/变更请求。缺陷提供实际行为、期望行为和影响，环境/复现只填已有证据；需求提供目标能力和有依据的动机。建议的验收条件要标为建议。
+Issue/PR 若用于交付已有 Git 改动，必须参考所有待交付的 git commit patch，而不仅是最后一个 commit patch。调用方先核实目标 base/head、比较基点（通常为 merge-base）及完整提交列表，逐个读取该范围内的 patch（含已推送但尚未进入目标 base 的提交，不以未推送范围替代 PR 范围），再提供覆盖每个提交的有界事实摘要和可追溯 SHA/路径；结合整个范围的最终净 diff 归纳重要变更，后续修正或回退不得描述为仍生效。不得仅用 git show HEAD、最后一次提交或工作区 diff 代表全部改动；无需向模型发送所有原始 patch，可分批收集但不得静默截断或遗漏提交。范围未知、patch 未读全或摘要仅覆盖部分提交时，在 missing_facts 标明缺口，不得声称完整。纯需求/缺陷 Issue 尚无对应提交时此规则不适用，不得编造提交或强制索要 patch。
+
 - PR：提供具体前后行为、已完成改动与原因、真实 diff 摘要或文件证据、实际验证命令及结果、未运行项、已知兼容风险和关联 Issue。计划不能当成完成，验证未知不能当成通过。
 
 Issue/PR 标题和自然语言正文默认中文。英文材料、模板和 Agent 自拟英文请求不构成语言授权；技术标识、路径、代码、命令、错误原文与必要引用保留。真实用户要求其他语言时，将原文放入 `user_provided` 证据并设置覆盖，例如：
@@ -117,7 +119,7 @@ Issue/PR 标题和自然语言正文默认中文。英文材料、模板和 Agen
 PR 最小合成示例（路径、编号和验证须替换为真实事实）：
 
 ```json
-{"request":{"kind":"pr","user_request":"为评审者起草中文说明","evidence":[{"reference_id":"D1","origin":"current_observation","content":"src/report.py 的 diff 将空输入从抛错改为返回空列表，避免空报表失败；范围仅此函数。执行 python -m unittest tests.test_report：通过。未运行集成测试；关联 #12；暂无已知兼容风险。"}]}}
+{"request":{"kind":"pr","user_request":"为评审者起草中文说明","evidence":[{"reference_id":"D1","origin":"current_observation","content":"已核实 base=main@1111111、head=2222222、merge-base=1111111；完整提交列表仅2222222，已读其patch，最终净diff一致。src/report.py 的 diff 将空输入从抛错改为返回空列表，避免空报表失败；范围仅此函数。执行 python -m unittest tests.test_report：通过。未运行集成测试；关联 #12；暂无已知兼容风险。"}]}}
 ```
 
 ## Instruction Prompt 与返回内容
