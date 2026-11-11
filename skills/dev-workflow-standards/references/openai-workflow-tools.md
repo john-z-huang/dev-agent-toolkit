@@ -123,6 +123,20 @@ PR 最小合成示例（路径、编号和验证须替换为真实事实）：
 ```
 
 
+## Git commit 信息生成
+
+提交前需要起草时使用 `generate_git_commit_message`，由工具复用既有 `generate_skill_content(kind="commit_message")` 的 Responses.parse、指令、输出Schema、出站审核及本地格式/署名校验。推理强度沿用 `low`；不添加模型参数或新客户端。用户已指定完整 message 时保留原文，只执行检查。
+
+Agent 准备本次选定提交全部 patch/hunk 的有界摘要、准确路径、前后行为、原因、实际验证和来源，不先生成整篇 message。已暂存时核对实际 cached diff；未暂存明确拟提交范围；分多个提交时分别提供各自范围，不能只给最后一次历史 commit 或整个 PR 改动。
+
+```json
+{"request":{"user_request":"概述本次空输入修复","evidence":[{"reference_id":"D1","origin":"current_observation","content":"拟提交范围仅src/report.py空输入分支：原抛错，现返回空列表；测试未运行。"}]}}
+```
+
+以上路径和事实为合成示例。输入不含kind/source/language_override；focus_questions/output_format可选，重点/结构优先默认但不覆盖固定规则。返回candidate、used_evidence_refs、missing_facts、review_notes及完整message；正文为空时message只有标题，否则标题后空行加正文。ok=true与validation_scope=local_format_and_attribution只说明本地引用/格式/署名通过，不代表语义或Git范围已校验。adoptable=false或缺口存在不可直接采用；Agent审阅后调用check_commit_message检查最终完整文本，暂存范围变更需重新核对生成依据。生成失败不默认为通过，不自动转手写绕过。
+
+工具联网但不读Git/文件、写Memory、提交或发布；一次性无会话，仅commit_message，不运行Issue/PR质量审查；固定gpt-6-luna、显式OPENAI_API_KEY/OPENAI_BASE_URL、store=False、统一错误脱敏保持不变。生成成功不授权stage/commit，提交仍需用户授权及分支、暂存等适用检查。
+
 ## Issue/PR 多轮修订草稿
 
 一次性生成继续使用 `generate_skill_content`；需要连续反馈时使用以下四工具，仍是 Responses API，不引入 Agents SDK 或远端会话。

@@ -587,5 +587,30 @@ for _name, _detail in {
     else:
         PARAMETER_DESCRIPTIONS[_name] = {"draft_session_id": "start返回的当前进程草稿ID；非空且最多120字符，未知或过期失败；不是用户身份。"}
 SERVER_INSTRUCTIONS += "\\nIssue/PR多轮草稿组：" + _DRAFT_CONTRACT
-assert len(TOOL_DESCRIPTIONS) == 43
+_COMMIT_GENERATION_CONTRACT = (
+    "需要起草Git提交信息时，先准备本次选定提交的全部patch/hunk、准确路径、前后行为、原因及实际验证事实，"
+    "调用generate_git_commit_message复用generate_skill_content(kind=commit_message)，无需Agent先写整篇message。"
+    "已暂存时核对真实cached diff；未暂存时明确拟提交范围。分多个commit时分别按各自范围生成，"
+    "不能用整个PR、未选中改动或最后一次历史commit代替。用户已给完整message时保留原文并check_commit_message，不强制重写。"
+    "返回candidate.title/content及拼接好的message（标题加空行加非空正文，正文可空），used_evidence_refs、missing_facts、review_notes便于核对。"
+    "ok=true表示生成与本地引用/格式/署名校验成功，validation_scope=local_format_and_attribution不是语义通过；"
+    "adoptable=false或缺口存在不得直接采用，补证后重新生成。通过仍须Agent按实际暂存diff审阅，并用check_commit_message检查最终完整message；"
+    "提交还需分支/暂存检查及独立用户授权，修改message或暂存范围后重查受影响条件，不自动提交。"
+)
+TOOL_DESCRIPTIONS["generate_git_commit_message"] = (
+    "起草单个Git commit的中文标题和可选正文，区别于check_commit_message只检查文本、commit_repository_changes执行提交，"
+    "以及Issue/PR多轮工具：本工具是一次性无会话生成，仅固定commit_message，不接受kind/source/language_override或模型配置。"
+    + _COMMIT_GENERATION_CONTRACT
+    + "通过统一客户端联网调用OpenAI Responses.parse，复用现有生成指令、输出Schema、本地引用与提交规则校验，不另建调用路径。"
+    "固定gpt-6-luna，沿用现有commit_message推理强度low；每次读取非空OPENAI_API_KEY和OPENAI_BASE_URL并显式传SDK，缺失停止；store=False。"
+    "无Issue/PR二次质量审查，无会话存储；不读写文件/仓库、不执行Git/GitHub、不读宿主会话或写Serena Memory，失败看error_code不可绕过。"
+    "Pi无需Codex专属审批，生成不授权后续写入。"
+    + OPENAI_NETWORK_DESCRIPTION
+    + '合成示例：{"request":{"user_request":"概述本次空输入修复","evidence":[{"reference_id":"D1","origin":"current_observation","content":"拟提交范围仅src/report.py空输入分支：原抛错，现返回空列表；测试未运行。"}]}}。'
+)
+PARAMETER_DESCRIPTIONS["generate_git_commit_message"] = {
+    "request": "严格提交信息生成请求；user_request定目标，evidence为本次选定提交全部改动的事实和来源，focus_questions/output_format可选且优先默认；字段大小和来源约束见嵌套Schema。不是提交授权，不接受kind或模型覆盖。"
+}
+SERVER_INSTRUCTIONS += "\n提交信息生成：" + _COMMIT_GENERATION_CONTRACT
+assert len(TOOL_DESCRIPTIONS) == 44
 assert set(TOOL_DESCRIPTIONS) == set(PARAMETER_DESCRIPTIONS)

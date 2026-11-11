@@ -128,6 +128,14 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             self.assertIn("process_memory", tools[name].description)
             self.assertIn("1800", tools[name].description)
             self.assert_described_properties(tools[name].input_schema, name)
+        commit_tool = tools["generate_git_commit_message"]
+        self.assertIn("本次选定提交", commit_tool.description)
+        self.assertIn("check_commit_message", commit_tool.description)
+        self.assertIn("OPENAI_BASE_URL", commit_tool.description)
+        self.assertIn("cached diff", commit_tool.description)
+        self.assertTrue(commit_tool.annotations.read_only_hint)
+        self.assertTrue(commit_tool.annotations.open_world_hint)
+        self.assert_described_properties(commit_tool.input_schema, commit_tool.name)
         tool = tools["generate_skill_content"]
         for phrase in (
             "前后行为",
@@ -182,12 +190,12 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                     if isinstance(item, dict):
                         self.assert_described_properties(item, tool_name)
 
-    async def test_all_43_tools_registered_with_described_schemas(self) -> None:
+    async def test_all_44_tools_registered_with_described_schemas(self) -> None:
         self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
         tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 43)
+        self.assertEqual(len(tools), 44)
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 43)
+        self.assertEqual(len(by_name), 44)
         self.assertNotIn("decide_skill_workflow", by_name)
         for tool in tools:
             self.assertTrue(tool.description, tool.name)

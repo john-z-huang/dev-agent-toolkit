@@ -11,6 +11,8 @@ from ..services.ai_workflow import (
     SessionDecisionRequest,
 )
 from ..services.api_input_review import ApiInputReviewRequest
+from ..services.commit_content import CommitMessageRequest
+from ..services import commit_content
 from ._registration import _register_adapter
 from ..services.draft_sessions import (
     start_issue_pr_draft,
@@ -30,6 +32,11 @@ async def generate_skill_content(request: ContentGenerationRequest) -> dict:
     return await ai_workflow.generate_skill_content(request)
 
 
+async def generate_git_commit_message(request: CommitMessageRequest) -> dict:
+    """通过既有内容生成链路起草完整提交信息，不执行Git。"""
+    return await commit_content.generate_git_commit_message(request)
+
+
 async def check_api_input(request: ApiInputReviewRequest) -> dict:
     """审核完整 purpose 与 content；不代发业务请求或授予其他操作权限。"""
     return await api_input_review.check_api_input(request)
@@ -46,6 +53,7 @@ def register_ai_workflow_tools(server: MCPServer) -> None:
     for service in (
         decide_codex_session_action,
         generate_skill_content,
+        generate_git_commit_message,
         check_api_input,
     ):
         _register_adapter(server, service, annotations)

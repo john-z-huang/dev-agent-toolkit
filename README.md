@@ -320,6 +320,10 @@ uv run --locked -- python ../tests/codex_app_server_smoke.py \
 
 总时限为 120 秒，结束或失败后有界关闭进程。输出仅含安全状态、固定模型/强度、实际 CLI 和 MCP 安装来源，以及实际工具调用计数；不输出凭据、端点或原始异常。该测试不模拟桌面宿主对真实私有项目数据的全部审批规则，也不授予全局配置、Memory 或 Git/GitHub 写入权限。
 
+## Git commit 信息生成
+
+需要起草提交信息时调用 `generate_git_commit_message`，提交本次选定 patch/hunk 的事实与来源，复用现有内容生成链路返回完整 `message`。经审阅并用 `check_commit_message` 检查后，才在独立授权及其他检查满足时提交。工具不读取 Git、不执行提交；用户已有完整提交信息时保留原文。详见 [提交信息生成与检查](skills/dev-workflow-standards/references/check-commit-message.md)。
+
 ## Issue/PR 多轮修订
 
 新增 `start_issue_pr_draft`、`revise_issue_pr_draft`、`get_issue_pr_draft`、`close_issue_pr_draft`：由外层 Agent 每轮反馈，MCP 保存受限进程内上下文，仍使用 Responses API 和独立质量审查，不引入 Agents SDK。重启或 `/reload` 会丢失草稿；不写文件或 Memory，不自动发布。协议、容量、错误和最小示例见 [多轮草稿](skills/dev-workflow-standards/references/openai-workflow-tools.md#issuepr-多轮修订草稿)。
