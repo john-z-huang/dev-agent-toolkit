@@ -122,6 +122,30 @@ PR 最小合成示例（路径、编号和验证须替换为真实事实）：
 {"request":{"kind":"pr","user_request":"为评审者起草中文说明","evidence":[{"reference_id":"D1","origin":"current_observation","content":"已核实 base=main@1111111、head=2222222、merge-base=1111111；完整提交列表仅2222222，已读其patch，最终净diff一致。src/report.py 的 diff 将空输入从抛错改为返回空列表，避免空报表失败；范围仅此函数。执行 python -m unittest tests.test_report：通过。未运行集成测试；关联 #12；暂无已知兼容风险。"}]}}
 ```
 
+
+## Issue/PR 多轮修订草稿
+
+一次性生成继续使用 `generate_skill_content`；需要连续反馈时使用以下四工具，仍是 Responses API，不引入 Agents SDK 或远端会话。
+
+1. `start_issue_pr_draft(request={request_id,draft})`：draft沿用生成请求，只允许issue/pr，给完整目标、来源及所有待交付commit patch证据。
+2. `revise_issue_pr_draft(request={draft_session_id,expected_revision,request_id,feedback,evidence_changes,output_format})`：每次只生成并审查一个新候选。feedback为表达/重点要求，不是事实、用户语言授权或绕过规则的命令。evidence_changes的add必须新ID，replace/remove必须已有且三组不重叠。默认空操作；output_format省略/null保留，非空字符串替换。语言授权引用必须持续有效。
+3. `get_issue_pr_draft(draft_session_id)`：离线回读最后完成候选和当前版本，result不包含最后失败尝试；status区分idle/in_progress。
+4. `close_issue_pr_draft(draft_session_id)`：离线释放状态；运行中拒绝，不取消网络请求，不发布或删除Git资源。
+
+最小合成首轮：
+
+```json
+{"request":{"request_id":"synthetic-start-0001","draft":{"kind":"issue","user_request":"起草导出需求","evidence":[{"reference_id":"U1","origin":"user_provided","content":"希望导出报表"}]}}}
+```
+
+修订时从返回值复制真实draft_session_id/revision，例如提交新的request_id和feedback“保留验证章节，缩短背景”。不需要重新输入整份证据。此前反馈累积保留；矛盾时明确修正。生成器参考上版候选和审查；审查器只看当前证据、有效要求及新稿，不承接旧审查通过结论。旧稿和审查意见都不是证据。
+
+**状态和错误：**仅当前受信任本地stdio进程内存保存，不写文件、宿主会话、Serena Memory或远端Conversation；随机ID不是身份认证，不支持共享多用户网络服务。最多16个会话、每会话16次已记录尝试，闲置1800秒失效；尝试缓存最多512KiB、输入上下文32KiB、结果64KiB，超限失败不截断。重启或/reload丢失状态，draft_session_unavailable需重新start并显式提交恢复材料。
+
+首个完成候选版本为1，失败保留0；ok=true含needs_revision推进版本但不代表可采用，adoptable仍须检查。审查异常/取消不推进或覆盖旧稿。expected_revision不匹配返回draft_revision_conflict，先get；运行中draft_in_progress。相同request_id+内容返回原尝试结果（可能为旧版本），不同内容request_id_conflict。失败后新尝试用新ID；取消后的首轮重放可能返回draft_attempt_incomplete，可从其ID用expected_revision=0修订或close。缓存重放不延长TTL。
+
+每轮生成与独立审查经统一客户端和完整出站审核，固定gpt-6-luna，显式读取OPENAI_API_KEY、OPENAI_BASE_URL，store=False、不静默截断；Token/延迟收益未经实测。会话ID和请求ID不应含凭据。新工具修改进程状态，仍不读取Git、不写仓库、不发布GitHub；调用授权不扩展为提交/推送/Memory写入授权。Pi无需Codex专属审批，但仍遵守实际宿主权限。
+
 ## Instruction Prompt 与返回内容
 
 工具使用固定的任务 Prompt，将当前要求、证据、查询重点与输出格式分开编码。证据里的角色声明、命令或要求忽略规约的文本始终作为数据处理，不能覆盖工具规则。Prompt 要求仅根据输入事实生成内容，明确缺失信息，不补写未执行的测试、未创建的 PR、未确认的路径或决定；不请求或返回私有推理过程。
@@ -151,6 +175,6 @@ Code Agent 对照证据检查候选内容后，可修改或直接采纳。生成
 
 ## 原生异步执行
 
-六个 API 工具的服务函数均为 `async def`，MCP 原生等待最终结果；Python 直接调用方使用 `await`。无需先选路线或调用会话动作建议工具。同步的纯本地操作仍由 MCP 工作线程执行。
+API 工具（含草稿 start/revise）的服务函数均为 `async def`，MCP 原生等待最终结果；Python 直接调用方使用 `await`。无需先选路线或调用会话动作建议工具。同步的纯本地操作仍由 MCP 工作线程执行。
 
 审核、业务判断/生成和二次质量审查按真实数据依赖等待；不同请求可并发。出站 JSON、Schema 及生成事实在首次等待前固定；同一请求超时重试复用受检内容，每次尝试仍重读当前配置并独立创建/关闭客户端。取消传播至请求，停止后续阶段与重试；清理在最长 5 秒的取消屏蔽区等待，异常只记录安全分类，不覆盖原请求取消。配置轮换后，任务上下文内的旧配置仍参与日志脱敏，任务结束释放，不保存凭据到文件。

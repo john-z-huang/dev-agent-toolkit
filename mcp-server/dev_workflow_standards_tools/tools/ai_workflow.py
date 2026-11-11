@@ -12,6 +12,12 @@ from ..services.ai_workflow import (
 )
 from ..services.api_input_review import ApiInputReviewRequest
 from ._registration import _register_adapter
+from ..services.draft_sessions import (
+    start_issue_pr_draft,
+    revise_issue_pr_draft,
+    get_issue_pr_draft,
+    close_issue_pr_draft,
+)
 
 
 async def decide_codex_session_action(request: SessionDecisionRequest) -> dict:
@@ -43,3 +49,20 @@ def register_ai_workflow_tools(server: MCPServer) -> None:
         check_api_input,
     ):
         _register_adapter(server, service, annotations)
+    for service in (
+        start_issue_pr_draft,
+        revise_issue_pr_draft,
+        get_issue_pr_draft,
+        close_issue_pr_draft,
+    ):
+        _register_adapter(
+            server,
+            service,
+            ToolAnnotations(
+                read_only_hint=service is get_issue_pr_draft,
+                destructive_hint=service is close_issue_pr_draft,
+                idempotent_hint=False,
+                open_world_hint=service
+                in (start_issue_pr_draft, revise_issue_pr_draft),
+            ),
+        )

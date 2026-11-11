@@ -43,7 +43,14 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
         async with asyncio.timeout(20), Client(params) as client:
             self.assertEqual(client.server_info.name, "dev-workflow-standards-tools")
             self.assertIn(CLI_FALLBACK_DESCRIPTION, client.instructions)
-            for phrase in ("Pi Code Agent", "searchTools", "describeNamespace", "不要求调用", "不提供 read_thread", "timeout"):
+            for phrase in (
+                "Pi Code Agent",
+                "searchTools",
+                "describeNamespace",
+                "不要求调用",
+                "不提供 read_thread",
+                "timeout",
+            ):
                 self.assertIn(phrase, client.instructions)
             for phrase in (
                 "Issue",
@@ -102,9 +109,25 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             self.assertNotIn("需要用户授权与 Codex writes approval", description)
             if not tool_metadata.annotations.read_only_hint:
                 self.assertIn("Pi", description, name)
-        for name in ("order_codex_session_sources", "prepare_codex_session_memory", "generate_skill_content"):
+        for name in (
+            "order_codex_session_sources",
+            "prepare_codex_session_memory",
+            "generate_skill_content",
+        ):
             self.assertIn("不接受或伪造 Pi", tools[name].description)
-            self.assertIn("不接受 Pi 原生会话", json.dumps(tools[name].input_schema, ensure_ascii=False))
+            self.assertIn(
+                "不接受 Pi 原生会话",
+                json.dumps(tools[name].input_schema, ensure_ascii=False),
+            )
+        for name in (
+            "start_issue_pr_draft",
+            "revise_issue_pr_draft",
+            "get_issue_pr_draft",
+            "close_issue_pr_draft",
+        ):
+            self.assertIn("process_memory", tools[name].description)
+            self.assertIn("1800", tools[name].description)
+            self.assert_described_properties(tools[name].input_schema, name)
         tool = tools["generate_skill_content"]
         for phrase in (
             "前后行为",
@@ -159,12 +182,12 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                     if isinstance(item, dict):
                         self.assert_described_properties(item, tool_name)
 
-    async def test_all_39_tools_registered_with_described_schemas(self) -> None:
+    async def test_all_43_tools_registered_with_described_schemas(self) -> None:
         self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
         tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 39)
+        self.assertEqual(len(tools), 43)
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 39)
+        self.assertEqual(len(by_name), 43)
         self.assertNotIn("decide_skill_workflow", by_name)
         for tool in tools:
             self.assertTrue(tool.description, tool.name)

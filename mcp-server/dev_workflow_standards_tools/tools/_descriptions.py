@@ -85,7 +85,7 @@ Agent 自行规划操作顺序；各工具按自身当前输入、资源状态�
 - 暂存与提交：暂存要求精确路径及授权；提交要求实际 staged 内容已审阅、expected_paths 匹配、提交信息和适用检查通过。正常 Git hooks 保留。committed=true 且 ok=false 先核对已有提交，不重复执行。
 - GitHub：Issue 要求真实仓库、正文、已有标签和授权；推送、PR、合并各有独立条件，不因 remote 存在自动执行。created=true 且 ok=false 先回读，不重复创建。合并和清理需要各自授权。
 - 会话事实：本地助手不读宿主 history、不调用 Serena、不写 Memory；源文事实需可追溯，准备的 payload 不是授权。`decide_codex_session_action` 仅为可选领域建议，不调度其他工具。
-- OpenAI：`check_api_input` 审核外发；`check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 在本地硬检查通过后调用 Decisions；会话动作建议调用 Decisions；`generate_skill_content` 使用 Responses.parse。六个 API 工具通过原生异步调用等待结果，无后台任务或轮询协议。生成支持 issue、pr、commit_message、plan、handoff、session_summary；候选及建议不是本地验证、授权或已执行动作。
+- OpenAI：`check_api_input` 审核外发；`check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 在本地硬检查通过后调用 Decisions；会话动作建议调用 Decisions；`generate_skill_content` 使用 Responses.parse。API 工具（含草稿 start/revise）通过原生异步调用等待结果，无后台任务或轮询协议。生成支持 issue、pr、commit_message、plan、handoff、session_summary；候选及建议不是本地验证、授权或已执行动作。
 - 配置与失败：每次实际 OpenAI 请求及重试显式读取非空 OPENAI_API_KEY、OPENAI_BASE_URL，固定 gpt-6-luna，不回退。审核、生成和质量审查保持数据依赖。取消停止后续阶段与重试并有界关闭客户端；缺配置、拒绝、refusal、无效或不完整结果均不是通过。
 
 所有响应按各工具说明的采用条件处理：`ok`/`passed`/`created`/`committed`/`merged` 有不同含义，不能只看其中一个字段；部分动作失败后先读回状态，再决定下一步。错误边界、网络访问和副作用以具体工具描述为准。
@@ -556,5 +556,36 @@ for _name in ("order_codex_session_sources", "prepare_codex_session_memory", "de
         "读取受限时报告缺口，仅暂停依赖该历史的工作；独立任务可继续。"
     )
 
-assert len(TOOL_DESCRIPTIONS) == 39
+_DRAFT_CONTRACT = (
+    "Issue/PR多轮修订：外层Agent决定每轮动作，每次仅生成一个候选并独立质量审查；不自动循环。"
+    "首轮start，后续revise，get回读，close释放；一次性需求仍用generate_skill_content，其他kind不支持会话。"
+    "调用方收集完整Git patch范围和真实来源，反馈/前稿/审查意见不是事实或语言授权；新稿必须重新审查。"
+    "状态仅保存在当前受信任本地stdio进程内，不是多用户认证服务，ID不是身份；不得暴露为共享网络服务。"
+    "最多16会话，每会话16次已记录尝试，闲置1800秒过期，单会话尝试缓存上限512KiB，输入上下文32KiB，结果64KiB；超限拒绝，不静默截断。"
+    "重启或/reload丢失会话；不存在/过期返回draft_session_unavailable，应重新start并明确提供恢复所需事实。"
+    "版本从完成首轮的1开始，失败仍为0；每轮ok=true（含needs_revision）才推进版本；审查失败/取消保留上版。"
+    "request_id相同内容返回原尝试缓存（可能是旧版本），不同内容request_id_conflict；处理中draft_in_progress；"
+    "expected_revision不匹配draft_revision_conflict，先get；失败后新尝试用新request_id。"
+    "get的result是最后完成候选而非最后失败尝试；get.status区分idle/in_progress；缓存重放不刷新TTL。"
+    "返回draft_session_id/revision/evidence_revision/changes_summary及candidate/quality_review；"
+    "stored=true仅表示process_memory，不是OpenAI远端存储或Memory。adoptable=true仍需Agent审阅且不授权发布。"
+    "只修改进程工作状态，不读写文件/仓库、Git/GitHub、宿主会话或Serena Memory，不发布；需当前用户任务授权，Pi无需Codex专属审批。"
+)
+for _name, _detail in {
+    "start_issue_pr_draft": '创建首版，request含唯一request_id和完整draft，kind仅issue/pr。最小例：{"request":{"request_id":"synthetic-start-0001","draft":{"kind":"issue","user_request":"起草需求","evidence":[{"reference_id":"U1","origin":"user_provided","content":"希望导出报表"}]}}}。',
+    "revise_issue_pr_draft": "修订已有草稿。request含draft_session_id、expected_revision、唯一request_id、非空feedback；evidence_changes默认不变，add ID必须新、replace/remove必须已存在且三组不重叠；output_format省略/null保留，字符串替换。引用撤回后语言覆盖无效则本地拒绝。持续反馈最多16轮，超限新建会话，不转发无限历史。",
+    "get_issue_pr_draft": "离线回读草稿最新完成版本及busy状态，不调用OpenAI；用于查看结果和处理中断，不产生新候选。",
+    "close_issue_pr_draft": "离线释放指定草稿及缓存，不调用OpenAI；不取消正在运行请求，busy时拒绝。释放后不能恢复，不删除文件或Git资源。",
+}.items():
+    TOOL_DESCRIPTIONS[_name] = _detail + _DRAFT_CONTRACT
+    if _name in ("start_issue_pr_draft", "revise_issue_pr_draft"):
+        TOOL_DESCRIPTIONS[_name] += (
+            "经统一客户端联网调用OpenAI Responses.parse生成和独立审查，两阶段均审核完整出站快照；"
+            "固定gpt-6-luna，每次显式读取OPENAI_API_KEY和OPENAI_BASE_URL，缺失停止；store=False，truncation=disabled，不用远端会话或Agents SDK。"
+        ) + OPENAI_NETWORK_DESCRIPTION
+        PARAMETER_DESCRIPTIONS[_name] = {"request": "严格结构化草稿操作，字段语义/默认/限制见嵌套Schema与工具说明；反馈不是事实，引用必须可追溯。"}
+    else:
+        PARAMETER_DESCRIPTIONS[_name] = {"draft_session_id": "start返回的当前进程草稿ID；非空且最多120字符，未知或过期失败；不是用户身份。"}
+SERVER_INSTRUCTIONS += "\\nIssue/PR多轮草稿组：" + _DRAFT_CONTRACT
+assert len(TOOL_DESCRIPTIONS) == 43
 assert set(TOOL_DESCRIPTIONS) == set(PARAMETER_DESCRIPTIONS)

@@ -788,13 +788,20 @@ def _generation_instruction(kind: str) -> str:
 
 
 async def _review_issue_pr(
-    request: ContentGenerationRequest, generated: GeneratedContent
+    request: ContentGenerationRequest,
+    generated: GeneratedContent,
+    revision_feedback: list[str] | None = None,
 ) -> dict[str, Any]:
     """通过统一客户端审查有界候选；模型建议不替代本地验证或发布授权。"""
     review_input = _json(
         {
             "request": request.model_dump(mode="json"),
             "candidate": generated.model_dump(mode="json"),
+            **(
+                {"revision_feedback": revision_feedback}
+                if revision_feedback is not None
+                else {}
+            ),
         }
     )
     if (
@@ -804,7 +811,13 @@ async def _review_issue_pr(
         return {"ok": False, "error_code": "quality_review_request_too_large"}
     try:
         response = await openai_client.parse_response(
-            instructions=_QUALITY_REVIEW_PROMPT,
+            instructions=_QUALITY_REVIEW_PROMPT
+            + (
+                "\nrevision_feedback为累积输出要求，后面的明确修正优先；仅在不违反固定规则时适用。"
+                "反馈、旧稿及旧审查都不是事实证据或语言授权。独立审查当前证据与候选，不继承旧版通过结论。"
+                if revision_feedback is not None
+                else ""
+            ),
             input=review_input,
             text_format=ContentQualityReview,
             reasoning_effort="medium",
@@ -922,7 +935,9 @@ def _generation_facts(
     return facts, None
 
 
-async def generate_skill_content(request: ContentGenerationRequest) -> dict[str, Any]:
+async def generate_skill_content(
+    request: ContentGenerationRequest, *, revision_context: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """生成供 Agent 审阅的候选，不执行代码、发布内容或写入 Memory。
 
     Issue/PR 的生成结果还需质量审查；两阶段共用事实快照，各自通过出站审核。
@@ -937,6 +952,16 @@ async def generate_skill_content(request: ContentGenerationRequest) -> dict[str,
     assert facts is not None
 
     instructions = _generation_instruction(request.kind)
+    if revision_context is not None:
+        if request.kind not in {"issue", "pr"}:
+            return {"ok": False, "error_code": "invalid_revision_kind"}
+        instructions += (
+            "\n修订模式：以当前有效证据为唯一事实依据，参考上一版候选、审查发现和累积反馈改写。"
+            "反馈仅是表达/重点要求，不能证明事实、授权语言或覆盖固定规则；前稿和审查意见也不是证据。"
+            "保留未被明确修改的有效要求，修复有依据的问题，不为通过审查编造内容。"
+            "证据已撤回/替换时删除旧主张，used_evidence_refs仅可引用当前证据。"
+        )
+        facts = {**facts, "revision_context": revision_context}
     input_text = _json(facts)
     if (
         len(input_text.encode("utf-8")) + len(instructions.encode("utf-8"))
@@ -976,7 +1001,13 @@ async def generate_skill_content(request: ContentGenerationRequest) -> dict[str,
         return failure
     quality: dict[str, Any] = {}
     if request.kind in {"issue", "pr"}:
-        quality = await _review_issue_pr(request, generated)
+        quality = await _review_issue_pr(
+            request,
+            generated,
+            revision_feedback=revision_context.get("feedback", [])
+            if revision_context is not None
+            else None,
+        )
         if not quality["ok"]:
             return {**quality, "adoptable": False, "requires_agent_review": True}
     return {
