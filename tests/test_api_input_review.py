@@ -671,7 +671,7 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("\n\n", audited_generation["instructions"])
 
-        # 沿用原 Issue 的指纹格式；中文指令改变外发字节，因此使用对应的新快照。
+        # 沿用原 Issue 的指纹格式；完整提交 patch 覆盖规则改变外发指令字节，同步快照。
         compatibility_hash_input = json.dumps(
             {"policy_version": "2026-11-05.1", **first_audit},
             ensure_ascii=False,
@@ -680,7 +680,7 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             hashlib.sha256(compatibility_hash_input.encode("utf-8")).hexdigest(),
-            "4a561aa4098e5357a745294f1caeeb1eae0b348b559eb4dbaccb0d0640daf8bf",
+            "bb68976b160ec82481a215ba2554f9be4308be7b5bb42f4e1f11de827361dbac",
         )
         current_hash = api_input_review._input_hash(
             first_audit["purpose"], first_audit["content"]
