@@ -156,6 +156,20 @@ class SkillDistributionTests(unittest.TestCase):
                     self.assertIn("hooks/index.md", shipped)
                     self.assertIn("hooks/recovery.md", shipped)
                     self.assertIn("references/git-hooks.md", shipped)
+                    # 宿主兼容规则必须随 Skill 发布，不依赖仓库根 AGENTS.md。
+                    skill_text = shipped["SKILL.md"].decode()
+                    self.assertIn("## 宿主审批兼容", skill_text)
+                    self.assertIn("Pi Code Agent", skill_text)
+                    self.assertIn("## Pi 工具发现与能力边界", skill_text)
+                    self.assertIn("describeNamespace", skill_text)
+                    self.assertIn("### Pi stdio 环境传递与工具时限", shipped["references/openai-workflow-tools.md"].decode())
+                    self.assertIn("## 宿主适用范围", shipped["references/codex-session-facts.md"].decode())
+                    self.assertIn("Codex writes approval", skill_text)
+                    self.assertNotIn("AGENTS.md", shipped)
+                    self.assertIn(
+                        "../SKILL.md#宿主审批兼容",
+                        shipped["references/mcp-tools.md"].decode(),
+                    )
                     self.assertFalse(
                         any(name.startswith("workflows/") for name in shipped)
                     )

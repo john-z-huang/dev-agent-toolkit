@@ -163,6 +163,8 @@ default_tools_approval_mode = "writes"
 
 ### 给 pi code agent 注册 MCP
 
+Skill 与 MCP 元数据均区分宿主能力：Pi 不要求不存在的 Codex writes approval，仍须用户授权及实际权限检查；codemode 模式先发现工具和读取完整服务指令。环境继承与 `timeout`（秒）按 Pi 配置，不能照搬 Codex 字段。Codex Hooks、全局指令更新器和会话来源协议仍为专属能力；不伪造 Pi 会话为 Codex 来源。详见 [Skill 兼容规则](skills/dev-workflow-standards/SKILL.md#宿主审批兼容) 和 [Pi 环境与时限](skills/dev-workflow-standards/references/openai-workflow-tools.md#pi-stdio-环境传递与工具时限)。
+
 使用支持原生 `pi mcp add` 的 pi（本机参考版本 1.5.0），通过独立脚本注册 `uv tool` 安装的 stdio 服务：
 
 ```bash

@@ -144,7 +144,7 @@ def list_repository_worktrees(repo_path: str) -> dict[str, Any]:
 
 
 def switch_repository_branch(repo_path: str, branch_name: str) -> dict[str, Any]:
-    """在授权后切换指定仓库的本地分支。副作用：改变该 worktree 当前检出的分支；拒绝不安全或不存在的目标。需要 Codex writes approval。"""
+    """在授权后切换指定仓库的本地分支。副作用：改变该 worktree 当前检出的分支；拒绝不安全或不存在的目标。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "error": error}
@@ -178,7 +178,7 @@ def switch_repository_branch(repo_path: str, branch_name: str) -> dict[str, Any]
 
 
 def pull_origin_branch_fast_forward(repo_path: str, branch_name: str) -> dict[str, Any]:
-    """在授权后将当前同名本地分支以 `git pull --ff-only origin <branch>` 快进同步。要求跟踪更改干净且当前分支匹配。需要 Codex writes approval。"""
+    """在授权后将当前同名本地分支以 `git pull --ff-only origin <branch>` 快进同步。要求跟踪更改干净且当前分支匹配。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "error": error}
@@ -205,7 +205,7 @@ def pull_origin_branch_fast_forward(repo_path: str, branch_name: str) -> dict[st
 
 
 def fetch_upstream_branch(repo_path: str, branch_name: str) -> dict[str, Any]:
-    """在授权后执行固定的 `git fetch upstream <branch>` 更新 remote-tracking 信息。需要 Codex writes approval；不合并、不推送。"""
+    """在授权后执行固定的 `git fetch upstream <branch>` 更新 remote-tracking 信息。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）；不合并、不推送。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "error": error}
@@ -227,7 +227,7 @@ def fetch_upstream_branch(repo_path: str, branch_name: str) -> dict[str, Any]:
 def merge_upstream_branch_fast_forward(
     repo_path: str, branch_name: str
 ) -> dict[str, Any]:
-    """在授权后将 upstream/<branch> 以 `git merge --ff-only` 合入当前同名本地分支。副作用：更新本地分支和工作区；不创建 merge commit。需要 Codex writes approval。"""
+    """在授权后将 upstream/<branch> 以 `git merge --ff-only` 合入当前同名本地分支。副作用：更新本地分支和工作区；不创建 merge commit。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "error": error}
@@ -286,7 +286,7 @@ def rebase_repository_branch(
 def remove_repository_worktree(
     repo_path: str, target_worktree_path: str, branch_name: str
 ) -> dict[str, Any]:
-    """仅在用户明确要求移除指定本地 worktree 并授权后执行 `git worktree remove <path>`。要求路径属于同仓库、检出 branch_name、工作区干净；副作用：删除该 worktree 目录。不会删除本地分支或远端分支，也不使用 --force。需要 Codex writes approval。"""
+    """仅在用户明确要求移除指定本地 worktree 并授权后执行 `git worktree remove <path>`。要求路径属于同仓库、检出 branch_name、工作区干净；副作用：删除该 worktree 目录。不会删除本地分支或远端分支，也不使用 --force。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "error": error}
@@ -347,7 +347,7 @@ def _new_worktree_branch_error(
 def create_repository_worktree(
     repo_path: str, target_worktree_path: str, branch_name: str, base_branch: str
 ) -> dict[str, Any]:
-    """在授权后执行 `git worktree add <target> -b <branch> <base>`。会新增本地分支和目录；不执行同步、复制未跟踪文件或需求编辑。需要 Codex writes approval。"""
+    """在授权后执行 `git worktree add <target> -b <branch> <base>`。会新增本地分支和目录；不执行同步、复制未跟踪文件或需求编辑。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "error": error}
@@ -510,7 +510,7 @@ def _copy_manifest_entry(
 def copy_untracked_files_to_worktree(
     repo_path: str, target_worktree_path: str, manifest: list[ManifestEntry]
 ) -> dict[str, Any]:
-    """在授权后按先前清单复制未跟踪文件到同仓库 worktree。只复制 SHA-256/size 完全匹配的普通文件；拒绝覆盖、路径穿越、symlink 及目标不是同一仓库 worktree。需要 Codex writes approval。"""
+    """在授权后按先前清单复制未跟踪文件到同仓库 worktree。只复制 SHA-256/size 完全匹配的普通文件；拒绝覆盖、路径穿越、symlink 及目标不是同一仓库 worktree。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     source, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "copied": [], "error": error}
@@ -553,7 +553,7 @@ def copy_untracked_files_to_worktree(
 
 
 def configure_project_hooks_path(repo_path: str) -> dict[str, Any]:
-    """在授权后固定设置 `git config --local core.hooksPath .githooks`。要求 `.githooks/pre-commit` 和 `commit-msg` 已存在；不复制脚本、不安装远端 Hook。会修改仓库本地 Git 配置。需要 Codex writes approval。"""
+    """在授权后固定设置 `git config --local core.hooksPath .githooks`。要求 `.githooks/pre-commit` 和 `commit-msg` 已存在；不复制脚本、不安装远端 Hook。会修改仓库本地 Git 配置。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "error": error}
@@ -582,7 +582,7 @@ def configure_project_hooks_path(repo_path: str) -> dict[str, Any]:
 
 
 def stage_repository_paths(repo_path: str, paths: list[str]) -> dict[str, Any]:
-    """在明确用户授权且 Codex writes approval 后，只将显式列出的普通仓库相对文件路径加入 Git index。允许精确的 tracked deletion；拒绝绝对路径、穿越、symlink、目录、重复路径及已有 staged changes。写入后核验 staged path 集合与请求完全相同；不 stage 清单外内容。"""
+    """在明确用户授权且 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制） 后，只将显式列出的普通仓库相对文件路径加入 Git index。允许精确的 tracked deletion；拒绝绝对路径、穿越、symlink、目录、重复路径及已有 staged changes。写入后核验 staged path 集合与请求完全相同；不 stage 清单外内容。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "staged_paths": [], "error": error}
@@ -619,7 +619,7 @@ def stage_repository_paths(repo_path: str, paths: list[str]) -> dict[str, Any]:
 def commit_repository_changes(
     repo_path: str, message: str, expected_paths: list[str]
 ) -> dict[str, Any]:
-    """在明确用户授权且 Codex writes approval 后提交已暂存内容。要求 staged paths 与 expected_paths 完全相等、提交信息通过既有策略、`git diff --cached --check` 通过。运行固定 `git commit -m <message>`，不使用绕过 Hook 的参数；返回提交 OID、实际消息、提交路径及提交后的工作区状态。"""
+    """在明确用户授权且 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制） 后提交已暂存内容。要求 staged paths 与 expected_paths 完全相等、提交信息通过既有策略、`git diff --cached --check` 通过。运行固定 `git commit -m <message>`，不使用绕过 Hook 的参数；返回提交 OID、实际消息、提交路径及提交后的工作区状态。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "error": error}
@@ -767,7 +767,7 @@ def _issue_label_error(root: str, repo: str, labels: list[str]) -> str | None:
 def create_github_issue(
     repo_path: str, repo: str, title: str, body: str, labels: list[str]
 ) -> dict[str, Any]:
-    """在明确授权后于指定仓库创建并核验 Issue。要求 body 完整、至少一个已存在的工作类型 label；默认指派 `@me`。使用安全临时 body-file，不将 Markdown 正文放入命令参数。副作用：创建 GitHub Issue。需要 Codex writes approval。"""
+    """在明确授权后于指定仓库创建并核验 Issue。要求 body 完整、至少一个已存在的工作类型 label；默认指派 `@me`。使用安全临时 body-file，不将 Markdown 正文放入命令参数。副作用：创建 GitHub Issue。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "created": False, "error": error}
@@ -866,7 +866,7 @@ def create_github_issue(
 def push_issue_branch_to_origin(
     repo_path: str, repo: str, branch_name: str, issue_number: int
 ) -> dict[str, Any]:
-    """在明确推送授权后执行固定的 `git push origin <branch_name>`。要求当前本地分支匹配、工作区干净，且指定 GitHub Issue 开放、带 label 并指派给当前 gh 用户。副作用：向 origin 更新该分支；不强推。需要 Codex writes approval。"""
+    """在明确推送授权后执行固定的 `git push origin <branch_name>`。要求当前本地分支匹配、工作区干净，且指定 GitHub Issue 开放、带 label 并指派给当前 gh 用户。副作用：向 origin 更新该分支；不强推。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "error": error}
@@ -977,7 +977,7 @@ def create_github_pull_request(
     head_branch: str,
     issue_number: int,
 ) -> dict[str, Any]:
-    """在明确授权后创建并回读关联 PR。要求显式 repo/base/head/open Issue，body 含 Closes/Fixes/Resolves #N；PR 默认指派 `@me`。使用临时 body-file，不内联 Markdown。副作用：创建开放 PR。需要 Codex writes approval。"""
+    """在明确授权后创建并回读关联 PR。要求显式 repo/base/head/open Issue，body 含 Closes/Fixes/Resolves #N；PR 默认指派 `@me`。使用临时 body-file，不内联 Markdown。副作用：创建开放 PR。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "created": False, "error": error}
@@ -1113,7 +1113,7 @@ def merge_github_pull_request(
     pr_number: int,
     merge_method: Literal["squash", "merge", "rebase"],
 ) -> dict[str, Any]:
-    """在明确授权合并后运行固定 `gh pr merge <number> --<merge_method>`，先核验 PR OPEN/MERGEABLE 和 required checks 全部通过。base 为 main 时只允许 squash；不使用 --admin、--auto、--delete-branch。副作用：远端合并并关闭 PR。成功执行合并命令后返回合并前的 `pre_merge_head_oid`，供后续本地分支清理核验。需要 Codex writes approval。"""
+    """在明确授权合并后运行固定 `gh pr merge <number> --<merge_method>`，先核验 PR OPEN/MERGEABLE 和 required checks 全部通过。base 为 main 时只允许 squash；不使用 --admin、--auto、--delete-branch。副作用：远端合并并关闭 PR。成功执行合并命令后返回合并前的 `pre_merge_head_oid`，供后续本地分支清理核验。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "error": error}
@@ -1202,7 +1202,7 @@ def merge_github_pull_request(
 
 
 def push_fork_main_fast_forward(repo_path: str, repo: str) -> dict[str, Any]:
-    """在明确授权后仅将已确认 Fork 的本地 main 快进推送为 origin/main。要求 GitHub parent 非空、upstream/main 是本地 main 的祖先、当前检出 main 且工作区完全干净。副作用：更新个人 Fork 的 origin/main；不强推。需要 Codex writes approval。"""
+    """在明确授权后仅将已确认 Fork 的本地 main 快进推送为 origin/main。要求 GitHub parent 非空、upstream/main 是本地 main 的祖先、当前检出 main 且工作区完全干净。副作用：更新个人 Fork 的 origin/main；不强推。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "error": error}

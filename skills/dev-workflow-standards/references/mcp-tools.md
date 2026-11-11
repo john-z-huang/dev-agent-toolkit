@@ -1,8 +1,8 @@
 # MCP 工具目录
 
-本项目支持通过本机 Codex 配置使用 Python MCP 服务 `dev-workflow-standards-tools`。操作优先选择本表中覆盖需求的工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 自行用 CLI 补足查询或已授权写入，保留必要检查，不绕过实际失败。MCP 仍只接受领域参数，不传 shell、git、gh 或测试命令。所有 repo-bound 工具都要求本次目标仓库的绝对 `repo_path`，且只在该 Git 根目录/worktree 内操作；不要假设 MCP 进程启动目录就是目标项目。
+本项目支持在 Codex 或 Pi Code Agent 中注册并使用 Python MCP 服务 `dev-workflow-standards-tools`。操作优先选择本表中覆盖需求的工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 自行用 CLI 补足查询或已授权写入，保留必要检查，不绕过实际失败。MCP 仍只接受领域参数，不传 shell、git、gh 或测试命令。所有 repo-bound 工具都要求本次目标仓库的绝对 `repo_path`，且只在该 Git 根目录/worktree 内操作；不要假设 MCP 进程启动目录就是目标项目。
 
-只读工具带 `read_only_hint`；其他工具带写入/破坏性注解，Codex 服务配置为 `default_tools_approval_mode="writes"`。这些确认与注解不取代 Skill 中的用户授权前置条件。`gh` 工具使用本机已授权的 GitHub CLI，不接受或输出令牌。
+只读工具带 `read_only_hint`；其他工具带写入/破坏性注解，Codex 服务配置为 `default_tools_approval_mode="writes"`。`Codex writes approval` 仅指 Codex 宿主审批；Pi Code Agent 未提供该机制时，按 [Skill 宿主审批兼容](../SKILL.md#宿主审批兼容) 执行：不要求不存在的审批工具/Hook，仍须有对应用户明确授权，遵守实际宿主权限和本地校验，不得绕过实际拒绝或错误。这些确认与注解不取代 Skill 中的用户授权前置条件。`gh` 工具使用本机已授权的 GitHub CLI，不接受或输出令牌。
 
 ## OpenAI 判断与生成
 
@@ -20,7 +20,11 @@
 
 `check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 的公开参数保持不变：先执行原本地硬校验，通过后再调用 Decisions。API 结果不能放宽本地失败，API 不可用时不能默认为通过。其余精确计算、Git 写操作和 Hook 不迁移到模型。详细输入范式、Instruction Prompt、强度配置及错误边界见 [`openai-workflow-tools.md`](openai-workflow-tools.md)。
 
+Pi 工具默认可能间接暴露：先用 `searchTools` / `describeTool` 核对名称和 Schema，完整服务指令用 `describeNamespace` 获取；未直接声明不等于工具缺失，不绕过 hidden。环境与时限见 [Pi stdio](openai-workflow-tools.md#pi-stdio-环境传递与工具时限)。
+
 ## Codex 会话事实辅助工具
+
+这些工具可由 Pi 调用，但来源校验仍仅支持真实 Codex 链接，不接受 Pi 原生会话路径/ID。不要伪造 Codex 来源；本服务不提供 `read_thread` 或 Pi 历史读取器。缺少原文时只暂停依赖该历史的工作。问题/模板可跨宿主使用。
 
 这三个工具均为只读，不访问 Codex 原始会话、不发起网络请求、不调用 Serena，也不保存摘要。前两个是纯输入处理，不需要 `repo_path`；第三个必须显式传入目标仓库/worktree 的绝对根路径。默认问题与模板随 Python 包发布，不依赖服务启动目录。
 
@@ -127,7 +131,7 @@
 
 ### 原地创建工作分支
 
-先调用 `audit_repository_state` 核对准确 checkout、HEAD 状态和仓库范围；在用户已授权原地创建工作分支且 Codex writes approval 放行后调用 `create_repository_branch`。与切换已有分支、新建 worktree 分开选择，不把此工具当作同步默认分支或 Fork 初始化工具。
+先调用 `audit_repository_state` 核对准确 checkout、HEAD 状态和仓库范围；在用户已授权原地创建工作分支且适用的宿主写入审批放行后调用（Pi 见上文兼容边界） `create_repository_branch`。与切换已有分支、新建 worktree 分开选择，不把此工具当作同步默认分支或 Fork 初始化工具。
 
 - `repo_path`：当前 checkout 的绝对 Git 根路径，必填；不接受子目录或相邻 worktree 代替目标。
 - `branch_name`：必填的新本地工作分支名，须符合项目规则及 Git 引用语法，不得已存在，不新建 `main`/`master`。没有强制覆盖、任意 base 或其他 checkout 路径参数。

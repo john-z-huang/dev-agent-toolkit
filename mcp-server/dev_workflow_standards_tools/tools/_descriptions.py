@@ -33,17 +33,23 @@ OPENAI_NETWORK_DESCRIPTION = (
     "默认首次加5次重试，最多6次；超时后立即串行重试，每次新建客户端并重读当前凭据和端点，SDK内部重试关闭。"
     "重试仅重发同一受检 API 请求，不重复整条工作流；其他错误不重试，耗尽返回 api_timeout。"
     "工具返回超时失败时内部预算已耗尽，Agent不再叠加整工具自动重试。重试可能产生重复API用量；"
-    "MCP客户端需为多阶段审核/生成及其重试配置足够的tool_timeout_sec，180秒不代表整工具总时限。"
+    "MCP客户端需为多阶段审核/生成及其重试配置足够的调用时限（Codex tool_timeout_sec，Pi timeout，单位秒），180秒不代表整工具总时限。"
     "所有 OpenAI 请求经统一 httpx2.AsyncClient(trust_env=True)，每次创建客户端时读取进程环境的 "
     "HTTP_PROXY、HTTPS_PROXY、ALL_PROXY、NO_PROXY（含小写形式），不接受工具参数覆盖代理。"
     "NO_PROXY 匹配时绕过代理，未配置代理时按库默认直连；代理初始化或连接失败返回安全错误，不重试直连。"
-    "Codex stdio 启动前须转发所需代理变量名；配置变更后重新加载服务，不提交或回显真实代理值。"
+    "Codex stdio 启动前须转发所需代理变量名；Pi stdio 继承启动 Pi 的进程环境，不使用 Codex env_vars。MCP 外层时限按宿主配置（Codex tool_timeout_sec，Pi timeout，单位秒），须覆盖实际阶段及重试预算，不能把默认时限当作充分。配置变更后重新加载服务，不提交或回显真实代理值。"
 )
 
 
 SERVER_INSTRUCTIONS = (
     """
-本地开发工作流 MCP 工具按以下组选择，不是通用 shell、任意 Git 命令或授权来源。所有 `repo_path` 均须显式给出目标仓库的绝对根路径；不要把子目录、另一个 worktree 或相邻仓库混作目标。先用只读检查和状态审计确认范围，写操作只有在用户明确授权并由 Codex writes approval 放行后才能调用。
+本地开发工作流 MCP 工具按以下组选择，不是通用 shell、任意 Git 命令或授权来源。所有 `repo_path` 均须显式给出目标仓库的绝对根路径；不要把子目录、另一个 worktree 或相邻仓库混作目标。先用只读检查和状态审计确认范围，写操作只有在用户明确授权并由 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制） 放行后才能调用。
+
+**宿主兼容与工具发现**
+
+本服务可用于 Codex 和 Pi Code Agent。Codex writes approval 不是 MCP Tool；Pi 未提供该机制时不要求调用、安装或模拟它，也不因这一缺失单独阻塞已获授权的操作。写入仍需用户明确授权当前动作、目标和范围，遵守实际宿主权限及本地校验；未知审批状态、实际拒绝或错误均不能视为不适用，不得换入口绕过或虚称已获审批。Pi 的 codemode 暴露模式下先用 searchTools/describeTool 发现实际工具名与 Schema，完整服务指令可用 describeNamespace 读取；未直接声明不等于工具缺失，hidden 工具不得绕过。原生 Codex Hooks 仅为可选 Codex 组件，不要求在 Pi 安装。
+
+会话来源助手的 CodexSessionSource 只接受真实 codex://threads/<小写标准UUID>；不能将 Pi 会话路径或 ID 改造成 Codex 链接。Pi 可处理已获授权且可核验的 Codex 来源，但本服务不提供 read_thread 或 Pi 历史读取器；缺少读取能力时报告并暂停依赖历史的部分，独立工作可继续。get_codex_session_summary_guidance 的问题/模板及不要求 source 的 plan/handoff 等生成可跨宿主使用。
 
 **通用外发输入审核**
 
@@ -61,7 +67,7 @@ SERVER_INSTRUCTIONS = (
 
 **只读 CLI 的额外边界**
 
-只读必须按完整子命令、参数、配置和副作用判断，不得按 `git`/`gh` 前缀推定。`--no-pager` 是 Git 全局选项，须放在子命令前；`git status` 使用 `--no-optional-locks`；`diff`、`log`、`show` 子命令使用 `--no-ext-diff --no-textconv` 并限制输出范围/长度；branch、tag 仅用 `--list`，remote 用 `git remote` 列举。`git fetch` 会写本地 remote refs，不属于只读豁免。`gh issue/pr view` 与受支持的 issue/pr list 查询须显式指定 `--repo owner/repo`；`gh repo view` 使用位置参数 `owner/repo`，不可将 `--repo` 当作该命令的选项。`gh api` REST 不使用 `--repo` 选项；请求必须显式 `--method GET`，在已知查询 endpoint 中指定仓库（例如 `/repos/owner/repo/...`），并核实 endpoint 确为只读；`-f`/`-F` 等参数可能隐式选择 POST，不能将其视为 GET。GraphQL 仅限明确审阅过的 query；mutation 或动态/未知操作不在范围内。环境 helper、pager、alias 或 lazy fetch 可能产生副作用；无法确认完整行为时停止该查询。凭据读取、文件输出、下载、复合命令及其全部副作用需分别评估；本规则不授权这些操作，也不提供任意命令执行器。写入仍需用户对该写入的意图授权及适用的 Codex approval；既有授权仅在其范围内持续有效。
+只读必须按完整子命令、参数、配置和副作用判断，不得按 `git`/`gh` 前缀推定。`--no-pager` 是 Git 全局选项，须放在子命令前；`git status` 使用 `--no-optional-locks`；`diff`、`log`、`show` 子命令使用 `--no-ext-diff --no-textconv` 并限制输出范围/长度；branch、tag 仅用 `--list`，remote 用 `git remote` 列举。`git fetch` 会写本地 remote refs，不属于只读豁免。`gh issue/pr view` 与受支持的 issue/pr list 查询须显式指定 `--repo owner/repo`；`gh repo view` 使用位置参数 `owner/repo`，不可将 `--repo` 当作该命令的选项。`gh api` REST 不使用 `--repo` 选项；请求必须显式 `--method GET`，在已知查询 endpoint 中指定仓库（例如 `/repos/owner/repo/...`），并核实 endpoint 确为只读；`-f`/`-F` 等参数可能隐式选择 POST，不能将其视为 GET。GraphQL 仅限明确审阅过的 query；mutation 或动态/未知操作不在范围内。环境 helper、pager、alias 或 lazy fetch 可能产生副作用；无法确认完整行为时停止该查询。凭据读取、文件输出、下载、复合命令及其全部副作用需分别评估；本规则不授权这些操作，也不提供任意命令执行器。写入仍需用户对该写入的意图授权及适用的宿主审批；既有授权仅在其范围内持续有效。
 
 合成命令形状（执行前将仓库路径、文件范围及编号替换为目标值并核验）：
 - `git --no-pager --no-optional-locks -C /workspace/repo status --short`
@@ -109,12 +115,12 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "stage_repository_paths": (
         "仅将 paths 明列的普通仓库相对文件路径加入 Git index，适用于确认最终 diff 后的精确暂存。先检查 repo_path 与 paths，并确认用户授权；不会自动加入其他文件。"
         "paths 必须非空、唯一、无绝对路径或穿越路径；允许精确 tracked deletion。已有暂存内容会拒绝。仅当 ok=true 且 staged_paths 与请求完全一致时继续提交。"
-        '会修改本地 index，需要明确用户授权和 Codex writes approval；不联网。示例：{"repo_path":"/workspace/repo","paths":["src/example.py"]}。'
+        '会修改本地 index，需要明确用户授权和 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）；不联网。示例：{"repo_path":"/workspace/repo","paths":["src/example.py"]}。'
     ),
     "commit_repository_changes": (
         "提交已暂存的精确文件集合；仅适用于用户明确授权 commit 且 staged diff 已审查、检查通过之后。expected_paths 必须精确等于当前 staged paths；message 是完整提交信息，并须通过既有本地策略及 cached diff check。"
         "成功需看 ok=true、committed=true 及回读的 commit_oid/message/paths/status。若 committed=true 但 ok=false，提交已发生而后续回读不全，先查仓库，不要重试。"
-        '会运行 `git commit` 和正常 hooks（hooks 可能执行项目检查或其他副作用），可能创建提交；不绕过 hooks。固定 Git 操作本身不主动访问网络；仓库配置的 hooks 可能有额外效果。需用户授权与 Codex writes approval。示例：{"repo_path":"/workspace/repo","message":"docs: 更新合成说明","expected_paths":["README.md"]}。'
+        '会运行 `git commit` 和正常 hooks（hooks 可能执行项目检查或其他副作用），可能创建提交；不绕过 hooks。固定 Git 操作本身不主动访问网络；仓库配置的 hooks 可能有额外效果。需用户授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。示例：{"repo_path":"/workspace/repo","message":"docs: 更新合成说明","expected_paths":["README.md"]}。'
     ),
     "list_repository_worktrees": (
         "只读列出 repo_path 仓库的 worktree 路径、HEAD、分支以及 detached/locked 状态，适合创建/删除 worktree 前核对拓扑。repo_path 为绝对仓库根目录。"
@@ -123,21 +129,21 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "switch_repository_branch": (
         "在同一 worktree 切换到已存在的本地 branch_name；用于用户明确要求切换且目标状态已核实的场景，不会自动创建或跟踪 remote 分支。"
         "repo_path 为绝对仓库根目录；仅允许当前仓库策略认可的本地名字，且已跟踪暂存/未暂存更改会拒绝（未跟踪文件可以保留）。ok=true 表示切换成功。"
-        "会改变本地 worktree 检出分支，不联网；需用户明确授权和 Codex writes approval。"
+        "会改变本地 worktree 检出分支，不联网；需用户明确授权和 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"
     ),
     "create_repository_branch": (
         "在当前 worktree 的现有 HEAD 提交上原子创建本地工作分支并将 HEAD 指向它；适合用户明确要求新建当前点分支且保留当前工作区时。与 switch_repository_branch 不同，本工具不切换到既有分支；与 create_repository_worktree 不同，本工具不创建第二个目录，也不要求选择 base。"
         "repo_path 必须是绝对 Git 根目录；branch_name 必须通过项目分支策略和 git check-ref-format，不能为 main/master 或任何已存在/冲突的本地引用。expected_head_oid 省略/null 时由工具捕获当前 HEAD；提供非null值时须为40/64位 hex 且与当前HEAD解析出的commit OID一致，空字符串无效。OID是唯一并发条件：HEAD改指向同OID的另一符号目标仍可通过。要求HEAD是commit、worktree未锁定、index无冲突、无merge/rebase等操作；存在可执行reference-transaction hook或Git环境重定向时在写入前拒绝。Git须支持全局--no-lazy-fetch、update-ref stdin事务及option no-deref/symref-update旧OID条件；不支持时安全失败，不移除保护选项重试。缺失的promisor对象不会隐式取回。"
-        '允许暂存、未暂存、同文件混合修改和未跟踪文件。成功结果需 `ok=true`、`created=true`，并核对 `start_head_oid`；失败看 `error_code`/`error`。事务失败时 `created=null` 且 `needs_review=true` 表示先核对 refs 再决定重试；事务已成功但回读失败时 `created=true`、`ok=false`，不得盲目重试。只写本地 refs、HEAD及Git可能维护的reflog，不checkout、不改文件/index、不联网、不调用OpenAI。需要用户明确授权和 Codex writes approval。最小示例：{"repo_path":"/workspace/repo","branch_name":"feat/synthetic","expected_head_oid":null}。'
+        '允许暂存、未暂存、同文件混合修改和未跟踪文件。成功结果需 `ok=true`、`created=true`，并核对 `start_head_oid`；失败看 `error_code`/`error`。事务失败时 `created=null` 且 `needs_review=true` 表示先核对 refs 再决定重试；事务已成功但回读失败时 `created=true`、`ok=false`，不得盲目重试。只写本地 refs、HEAD及Git可能维护的reflog，不checkout、不改文件/index、不联网、不调用OpenAI。需要用户明确授权和 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。最小示例：{"repo_path":"/workspace/repo","branch_name":"feat/synthetic","expected_head_oid":null}。'
     ),
     "pull_origin_branch_fast_forward": (
         "将当前已检出的同名分支通过 `git pull --ff-only origin branch_name` 快进同步；适合明确要求从 origin 更新，不能用于非快进合并或其他分支。"
         "要求 repo_path 是绝对根路径、branch_name 有效且等于当前分支，跟踪文件无暂存/未暂存更改；未跟踪文件可保留。ok=true 才表示同步成功；失败不尝试非快进替代。"
-        "会访问 origin 网络并更新本地分支/文件，需要用户授权与 Codex writes approval。"
+        "会访问 origin 网络并更新本地分支/文件，需要用户授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"
     ),
     "fetch_upstream_branch": (
         "从已配置的 upstream 获取指定 branch_name，更新 remote-tracking 信息；适合随后检查或快进合并前，不会合并、推送或创建 remote。"
-        "repo_path 为绝对仓库根目录；upstream 必须已存在，branch_name 格式有效。ok=true 表示 fetch 成功。会联网，不改工作区文件但更新本地 Git remote refs；这是本地写入，不属于只读 CLI 覆盖，需对应用户授权和 Codex writes approval。"
+        "repo_path 为绝对仓库根目录；upstream 必须已存在，branch_name 格式有效。ok=true 表示 fetch 成功。会联网，不改工作区文件但更新本地 Git remote refs；这是本地写入，不属于只读 CLI 覆盖，需对应用户授权和 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"
     ),
     "audit_worktree_base_sync": (
         "只读审计准确 worktree 的 HEAD、branch、base commit、merge-base、ahead/behind、dirty、操作中、detached 与锁定状态；适用于开始同步前核对本地快照。"
@@ -147,32 +153,32 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "fetch_repository_branch": (
         "从已配置 remote 获取单个准确分支到 refs/remotes/<remote>/<branch>；用于基线核验前刷新远端分支。只接收 remote 名称和合法 branch_name，不接受 URL、任意 refspec 或 Git 参数。"
         "工具先将精确分支 fetch 到 FETCH_HEAD/对象库，再拒绝 remote-tracking ref 回退，只在目标不存在或新 tip 为旧 tip 后代时用 OID compare-and-swap 更新该单个 ref。使用空 refmap、关闭 tags/prune/prune-tags/子模块/自动维护，不 checkout、merge、push 或更新其他分支。失败可能已写 FETCH_HEAD 或对象；查看 fetch_head_written、tracking_ref_updated、needs_review 和 error_code 后先只读核验。"
-        "remote fetch 最多等待120秒，并使用 common-dir 协作锁（不阻止其他 Git、编辑器或文件修改）；会联网并写本地 Git FETCH_HEAD/对象库及成功时单一 remote-tracking ref。工具不调用 OpenAI、Session 或 Memory。需对应用户授权与 Codex writes approval。"
+        "remote fetch 最多等待120秒，并使用 common-dir 协作锁（不阻止其他 Git、编辑器或文件修改）；会联网并写本地 Git FETCH_HEAD/对象库及成功时单一 remote-tracking ref。工具不调用 OpenAI、Session 或 Memory。需对应用户授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"
     ),
     "merge_upstream_branch_fast_forward": (
         "把已 fetch 的 `upstream/branch_name` 快进合入当前同名本地分支；只有明确授权同步且确认基点适合时使用。不会自行 fetch 或创建 merge commit。"
         "要求 branch_name 与当前分支一致、工作区完全干净、upstream 已配置且对应 remote ref 已存在；先单独调用 fetch_upstream_branch。ok=true 才表示本地快进完成。"
-        "会改变本地分支和工作区；使用本地已取回 ref，不额外联网；需授权和 Codex writes approval。"
+        "会改变本地分支和工作区；使用本地已取回 ref，不额外联网；需授权和 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"
     ),
     "merge_repository_branch": (
         "将准确的当前需求分支与已核验 base 合并；用于已发布需求分支需要包含更新后的 base 时保留公开历史。不同于 merge_upstream_branch_fast_forward，本工具支持普通非快进 merge commit；不自动 fetch、push 或回退到 rebase。"
         "branch_name 必须等于当前分支；base_ref 仅为准确本地 branch/remote-tracking ref 或完整 commit OID；expected_head_oid 与 expected_base_oid 必须提供准确 40/64 位 OID。remote 默认为 origin，必须是 configured remote；live 同名远端需求 ref 若存在，其 commit 必须本地可读且为当前 head 祖先，否则拒绝。调用前仍需核实已知 PR、协作者及下游消费者。"
-        "拒绝非空 branch.<current>.mergeOptions 配置，避免它改变合并策略；显式关闭 autostash/squash 并显式提交，使用 `git merge --ff --no-edit --no-overwrite-ignore`，能快进时快进，分叉时创建普通 merge commit。只拒绝与目标变更路径重叠的 ignored 未跟踪文件，正常 hooks 仍运行。ok=true/merged=true 才表示操作与 HEAD、父提交、干净状态回读全部通过；冲突保留现场、不自动 abort/reset/回滚。remote 检查最多等待120秒；写操作持有 common-dir 协作锁，但不能阻止其他 Git、编辑器或文件修改。会联网核验 remote 并修改当前 worktree/ref，可能写 merge commit；不调用 OpenAI、Session 或 Memory。需要用户授权和 Codex writes approval。"
+        "拒绝非空 branch.<current>.mergeOptions 配置，避免它改变合并策略；显式关闭 autostash/squash 并显式提交，使用 `git merge --ff --no-edit --no-overwrite-ignore`，能快进时快进，分叉时创建普通 merge commit。只拒绝与目标变更路径重叠的 ignored 未跟踪文件，正常 hooks 仍运行。ok=true/merged=true 才表示操作与 HEAD、父提交、干净状态回读全部通过；冲突保留现场、不自动 abort/reset/回滚。remote 检查最多等待120秒；写操作持有 common-dir 协作锁，但不能阻止其他 Git、编辑器或文件修改。会联网核验 remote 并修改当前 worktree/ref，可能写 merge commit；不调用 OpenAI、Session 或 Memory。需要用户授权和 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"
     ),
     "rebase_repository_branch": (
         "将当前 branch_name rebase 到固定 base_branch；仅在指定 configured remote 的 live 查询确认该分支未发布、且用户明确授权改写私有历史时使用。已发布需求分支禁止 rebase；若远端分支存在、网络/认证结果未知或 remote 未配置则拒绝；不能把缺少 remote-tracking ref 当成未发布。"
         "保留前三个参数兼容旧调用；expected_head_oid/expected_base_oid 非空时与当前 OID 精确比较；旧 base_branch 仅接受本地分支名、refs/heads、refs/remotes 准确 ref 或完整 commit OID。old_base_oid 可选，必须是当前 head 的祖先 commit；仅当已核实堆叠分支旧边界时才使用，工具不猜边界。"
-        '运行时禁用 autostash/updateRefs，不绕过正常 hooks；仅拒绝与基线或待重放提交路径重叠的 ignored 未跟踪文件。ok=true/rebased=true 才表示目标祖先、当前分支与干净工作区回读成功；冲突留在现场，返回冲突路径与 needs_review，不自动 continue/abort/reset/回滚。remote 检查最多等待120秒；写操作持有 common-dir 协作锁，但不能阻止其他 Git、编辑器或文件修改。会联网做发布检查并改写当前本地分支历史；不推送、不调用 OpenAI、Session 或 Memory。需要明确授权及 Codex writes approval。示例：{"repo_path":"/workspace/repo","branch_name":"feat/synthetic","base_branch":"refs/remotes/origin/main","expected_head_oid":"0123456789012345678901234567890123456789","expected_base_oid":"abcdefabcdefabcdefabcdefabcdefabcdefabcd","old_base_oid":null,"remote":"origin"}。示例 OID 为合成格式值。'
+        '运行时禁用 autostash/updateRefs，不绕过正常 hooks；仅拒绝与基线或待重放提交路径重叠的 ignored 未跟踪文件。ok=true/rebased=true 才表示目标祖先、当前分支与干净工作区回读成功；冲突留在现场，返回冲突路径与 needs_review，不自动 continue/abort/reset/回滚。remote 检查最多等待120秒；写操作持有 common-dir 协作锁，但不能阻止其他 Git、编辑器或文件修改。会联网做发布检查并改写当前本地分支历史；不推送、不调用 OpenAI、Session 或 Memory。需要明确授权及 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。示例：{"repo_path":"/workspace/repo","branch_name":"feat/synthetic","base_branch":"refs/remotes/origin/main","expected_head_oid":"0123456789012345678901234567890123456789","expected_base_oid":"abcdefabcdefabcdefabcdefabcdefabcdefabcd","old_base_oid":null,"remote":"origin"}。示例 OID 为合成格式值。'
     ),
     "remove_repository_worktree": (
         "移除指定的同仓库本地 worktree 目录；仅适用于用户明确要求删除该 worktree 且确认其中无须保留内容。不会删除本地或远端分支，不使用 force。"
         "repo_path 是绝对仓库根目录；target_worktree_path 必须是绝对路径且属于同仓库，branch_name 必须匹配目标检出的分支，目标工作区须干净且不能是 repo_path 本身。ok=true 才表示目录移除。"
-        "删除本地 worktree 目录，需明确用户授权与 Codex writes approval；不联网。"
+        "删除本地 worktree 目录，需明确用户授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）；不联网。"
     ),
     "create_repository_worktree": (
         "从已存在的本地 base_branch 新建本地 branch_name 和 worktree 目录；仅适合用户明确要求使用或创建 worktree 时使用。不会同步 upstream、复制未跟踪文件或开始实现。"
         "repo_path 为绝对仓库根目录；target_worktree_path 必须是不存在、位于源仓库目录之外的绝对路径；目标分支须符合项目策略且不存在，不能已被其他 worktree 检出，base_branch 须存在。ok=true 才表示二者创建成功。"
-        '新增本地分支与目录，需要明确授权和 Codex writes approval；不联网。示例：{"repo_path":"/workspace/repo","target_worktree_path":"/workspace/repo-feature","branch_name":"feat/synthetic","base_branch":"main"}。'
+        '新增本地分支与目录，需要明确授权和 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）；不联网。示例：{"repo_path":"/workspace/repo","target_worktree_path":"/workspace/repo-feature","branch_name":"feat/synthetic","base_branch":"main"}。'
     ),
     "capture_untracked_file_manifest": (
         "为 repo_path 生成未忽略、未跟踪普通文件清单，包含仓库根相对 POSIX path、SHA-256 和字节数；供后续 copy 工具校验使用。不是备份，也不包含 ignored 文件。"
@@ -181,11 +187,11 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "copy_untracked_files_to_worktree": (
         "按先前 capture_untracked_file_manifest 返回值，将符合 SHA-256/size 的普通未跟踪文件复制到同仓库目标 worktree；用于明确希望把未跟踪输入带入新 worktree 的场景。"
         "manifest 每项含仓库相对 POSIX path、64位小写十六进制 sha256、非负字节 size；源文件仍须未跟踪、未忽略且指纹一致。target_worktree_path 须为已存在同仓库 worktree 的绝对路径。目标存在文件、symlink、路径穿越均拒绝，绝不覆盖。"
-        '仅 ok=true 且 copied 含所有期望路径才完整采用；ok=false 仍可能部分复制，copied仅列已复制项，无自动 rollback。失败先检查 target，再由用户决定是否补做，禁止盲目重跑。会写目标文件但不暂存、不联网；需授权与 Codex writes approval。结构示例：{"repo_path":"/workspace/repo","target_worktree_path":"/workspace/repo-feature","manifest":[{"path":"notes/input.md","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":123}]}；示例摘要和大小仅为占位，实际值必须原样取自 capture_untracked_file_manifest。'
+        '仅 ok=true 且 copied 含所有期望路径才完整采用；ok=false 仍可能部分复制，copied仅列已复制项，无自动 rollback。失败先检查 target，再由用户决定是否补做，禁止盲目重跑。会写目标文件但不暂存、不联网；需授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。结构示例：{"repo_path":"/workspace/repo","target_worktree_path":"/workspace/repo-feature","manifest":[{"path":"notes/input.md","sha256":"0000000000000000000000000000000000000000000000000000000000000000","size":123}]}；示例摘要和大小仅为占位，实际值必须原样取自 capture_untracked_file_manifest。'
     ),
     "configure_project_hooks_path": (
         "将目标仓库本地 `core.hooksPath` 固定设为 `.githooks`；仅当本仓库 `.githooks/pre-commit` 和 `commit-msg` wrappers 已存在且用户明确要求启用时使用。不会复制、安装或联网获取 hook。"
-        "repo_path 为绝对仓库根目录；若当前配置指向其他位置会拒绝覆盖。ok=true 表示仓库本地配置已设定。修改 `.git/config`，需明确授权与 Codex writes approval。"
+        "repo_path 为绝对仓库根目录；若当前配置指向其他位置会拒绝覆盖。ok=true 表示仓库本地配置已设定。修改 `.git/config`，需明确授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"
     ),
     "audit_issue_pr_policy": (
         "联网只读检查用户指定的 GitHub Issue/PR 状态及可选 PR base/head、Issue 关闭引用；适合创建 PR 前按请求范围核验。至少给 issue_number 或 pr_number；expected_base/head 仅可与 pr_number 一起使用。Issue-only 与 PR-only 均有效。"
@@ -195,7 +201,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "cleanup_merged_pr_local_branch": (
         "PR 已合并后，将本地仓库切到 PR base、快进同步 origin/base，再删除本地 PR head；只用于用户明确授权的合并后清理，不会合并 PR 或删除远端分支。"
         "联网读取 PR 并要求 MERGED、工作区干净；repo_path 为绝对仓库根路径。branch_name 可省略（使用 PR head），若给出必须匹配；merged_head_oid 应为合并前记录的 OID。先尝试安全 `-d`；仅普通删除失败且所给 OID 与当前本地分支 OID 完全相同才用 `-D`。"
-        'completed=true 表示清理完成；失败时查看 actions，因为可能已切换/拉取 base。操作会联网 pull 并改变本地分支/删除本地分支，需明确授权和 Codex writes approval。示例：{"repo_path":"/workspace/repo","pr_number":12,"repo":"owner/repo","branch_name":"feat/synthetic","merged_head_oid":"0000000000000000000000000000000000000000"}；SHA 仅为格式示例，实际值可取自已授权 merge 工具返回的 pre_merge_head_oid。'
+        'completed=true 表示清理完成；失败时查看 actions，因为可能已切换/拉取 base。操作会联网 pull 并改变本地分支/删除本地分支，需明确授权和 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。示例：{"repo_path":"/workspace/repo","pr_number":12,"repo":"owner/repo","branch_name":"feat/synthetic","merged_head_oid":"0000000000000000000000000000000000000000"}；SHA 仅为格式示例，实际值可取自已授权 merge 工具返回的 pre_merge_head_oid。'
     ),
     "audit_repository_state": (
         "审计指定仓库的本地根路径、当前分支、status 行和 remote 名称，并尝试读取 GitHub 仓库身份/Fork/default branch；适合需要确认当前动作目标时使用。repo_path 必须是绝对仓库根目录。"
@@ -208,27 +214,27 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "create_github_issue": (
         "在明确用户授权后联网创建 GitHub Issue；适用于内容、目标仓库和至少一个现存工作类型 label 均已确认时。body 是完整 Markdown 正文，工具用临时 body-file 传递并默认指派当前 gh 用户。"
         "repo_path 为绝对仓库根目录，repo 为 owner/repo；title/body 非空，labels 至少一项且须存在于最多读取的前100个 label 中。ok=true 表示创建后回读开放状态、labels、当前用户 assignee 均通过。created=true 且 ok=false 表示可能已创建但回读未确认，先回读，不可盲目重试。"
-        '会联网创建 Issue，属于外部写入；需明确用户授权和 Codex writes approval。示例：{"repo_path":"/workspace/repo","repo":"owner/repo","title":"docs: 合成示例","body":"合成说明","labels":["<先从 list_github_issue_labels 核对的精确名称>"]}；label 占位值须替换为查询结果中的真实名称。'
+        '会联网创建 Issue，属于外部写入；需明确用户授权和 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。示例：{"repo_path":"/workspace/repo","repo":"owner/repo","title":"docs: 合成示例","body":"合成说明","labels":["<先从 list_github_issue_labels 核对的精确名称>"]}；label 占位值须替换为查询结果中的真实名称。'
     ),
     "push_issue_branch_to_origin": (
         "验证指定 Issue 开放、有 label 且指派给当前 gh 用户后，将当前本地非主分支推到 origin；仅适用于用户明确授权推送并确认关联 Issue。不会 force push。"
         "repo_path 绝对仓库根目录；repo 为 owner/repo，issue_number 为正整数，branch_name 必须是当前检出的非 main/master 分支；工作区须完全干净。ok=true 表示 push 命令成功，不代表 PR 已创建。"
-        "会联网读取 GitHub Issue 并推送远端分支，需明确授权与 Codex writes approval。"
+        "会联网读取 GitHub Issue 并推送远端分支，需明确授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"
     ),
     "create_github_pull_request": (
         "为显式 head/base 创建并回读关联开放 PR；适合本地验证完成且分支已推送之后。body 是完整 Markdown，必须含指定 Issue 的 Closes/Fixes/Resolves #N 关联；默认指派当前 gh 用户。"
         "repo_path 绝对仓库根目录；repo 为 owner/repo；base/head 不同且有效，Issue 必须开放，本地 head 分支须存在。ok=true 表示回读的 OPEN/base/head/Issue关联/@me assignee 均核验成功。created=true 且 ok=false 表示已可能创建但回读未确认，先回读，不得盲重试。"
-        '会联网创建 PR，属于外部写入；需明确用户授权与 Codex writes approval。示例：{"repo_path":"/workspace/repo","repo":"owner/repo","base_branch":"main","head_branch":"feat/synthetic","issue_number":12,"title":"feat: 增加合成能力","body":"Closes #12\\n\\n变更说明。"}。'
+        '会联网创建 PR，属于外部写入；需明确用户授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。示例：{"repo_path":"/workspace/repo","repo":"owner/repo","base_branch":"main","head_branch":"feat/synthetic","issue_number":12,"title":"feat: 增加合成能力","body":"Closes #12\\n\\n变更说明。"}。'
     ),
     "merge_github_pull_request": (
         "在明确授权后合并 GitHub PR；仅用于已审查且允许合并的目标，不会使用 admin/auto 或删远端分支。先联网核验 PR OPEN/MERGEABLE、reviewDecision、required checks。base 为 main 时只允许 squash。"
         "repo_path 为绝对仓库根目录，repo 为 owner/repo，pr_number 正数；merge_method 只能 squash/merge/rebase。ok=true 且 merged=true 表示命令后回读 MERGED 和 base 成功；失败检查 error/checks。成功响应提供合并前 pre_merge_head_oid，供本地清理时精确比对。"
-        "会联网并改变远端 GitHub 状态、关闭 PR；需明确用户授权和 Codex writes approval。"
+        "会联网并改变远端 GitHub 状态、关闭 PR；需明确用户授权和 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"
     ),
     "push_fork_main_fast_forward": (
         "把已确认 GitHub Fork 的本地 main 快进推送到 origin/main；仅用于用户明确要求同步 Fork 镜像，不用于普通功能分支发布。"
         "repo_path 为绝对仓库根目录，repo 为 owner/repo；必须是 Fork、GitHub 默认分支为 main、当前检出 main、工作区完全干净，upstream/main 已是本地 main 祖先，且 origin/upstream remotes 预先存在。ok=true 表示 push 成功，不 force。"
-        "会联网读取 Fork 信息并更新远端 main，风险高，需明确授权与 Codex writes approval。"
+        "会联网读取 Fork 信息并更新远端 main，风险高，需明确授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"
     ),
     "get_codex_session_summary_guidance": (
         "返回包内 Codex 会话摘要默认问题/模板，或校验并返回用户自定义问题/模板；可在读取原会话前用于准备阅读清单或摘要结构。它不读会话、验证来源内容或写 Memory。"
@@ -488,7 +494,7 @@ for _kind in ("merge", "rebase"):
                 else "abort 丢弃恢复范围内解决工作；必填 strict boolean confirm_discard_resolution_work 必须为 true。"
             )
             + _network
-            + "执行本地 Git 写操作，需要用户授权与 Codex writes approval；保留正常 hooks，不自动 stage/edit/skip/reset/stash/push，不调用 OpenAI、Session 或 Memory。"
+            + "执行本地 Git 写操作，需要用户授权与适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）；保留正常 hooks，不自动 stage/edit/skip/reset/stash/push，不调用 OpenAI、Session 或 Memory。"
             "成功必须核实分支历史、操作结束及受保护内容并清理记录；needs_review=true 时检查现场，不循环重试。"
             "action_started=true 表示 Git 已启动，失败不能假定无副作用；记录清理失败或回读不确定会保留记录。"
         )
@@ -540,6 +546,13 @@ SERVER_INSTRUCTIONS += (
     "需要丢弃解决工作时调用对应 abort，并显式 confirm_discard_resolution_work=true。只有 rebase continue 联网核对记录remote的未发布状态，merge continue及两种abort离线。"
     "四工具只执行一次原生命令并核实回读，不接管无管理或复杂操作，不自动解决、暂存、skip、reset、stash、push；指纹和记录不是授权。"
 )
+
+for _name in ("order_codex_session_sources", "prepare_codex_session_memory", "decide_codex_session_action", "generate_skill_content"):
+    TOOL_DESCRIPTIONS[_name] += (
+        "宿主兼容：可由 Pi Code Agent 调用，但需要 source 的会话来源只接受真实 codex://threads/<小写标准UUID>，"
+        "不接受或伪造 Pi 原生会话来源；本服务不提供 read_thread 或 Pi 历史读取器。"
+        "读取受限时报告缺口，仅暂停依赖该历史的工作；独立任务可继续。"
+    )
 
 assert len(TOOL_DESCRIPTIONS) == 39
 assert set(TOOL_DESCRIPTIONS) == set(PARAMETER_DESCRIPTIONS)

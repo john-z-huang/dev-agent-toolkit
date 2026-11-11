@@ -43,6 +43,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
         async with asyncio.timeout(20), Client(params) as client:
             self.assertEqual(client.server_info.name, "dev-workflow-standards-tools")
             self.assertIn(CLI_FALLBACK_DESCRIPTION, client.instructions)
+            for phrase in ("Pi Code Agent", "searchTools", "describeNamespace", "不要求调用", "不提供 read_thread", "timeout"):
+                self.assertIn(phrase, client.instructions)
             for phrase in (
                 "Issue",
                 "PR",
@@ -92,6 +94,15 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                 "SDK内部重试关闭",
             ):
                 self.assertIn(phrase, tools[name].description, name)
+        for name, tool_metadata in tools.items():
+            description = tool_metadata.description
+            self.assertNotIn("需要明确用户授权和 Codex writes approval", description)
+            self.assertNotIn("需要用户授权与 Codex writes approval", description)
+            if not tool_metadata.annotations.read_only_hint:
+                self.assertIn("Pi", description, name)
+        for name in ("order_codex_session_sources", "prepare_codex_session_memory", "generate_skill_content"):
+            self.assertIn("不接受或伪造 Pi", tools[name].description)
+            self.assertIn("不接受 Pi 原生会话", json.dumps(tools[name].input_schema, ensure_ascii=False))
         tool = tools["generate_skill_content"]
         for phrase in (
             "前后行为",
