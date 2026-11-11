@@ -51,7 +51,7 @@ class CodexSessionSource(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source_link: str = Field(
-        description="原会话链接，格式为 codex://threads/<小写标准UUID>；格式校验不验证宿主来源真实性。"
+        description="原 Codex 会话链接，格式为 codex://threads/<小写标准UUID>；不接受 Pi 原生会话路径/ID，不得伪造 Codex 链接。Pi 调用也必须提供真实 Codex 来源；格式校验不验证宿主来源真实性。"
     )
     thread_id: str | None = Field(
         default=None,

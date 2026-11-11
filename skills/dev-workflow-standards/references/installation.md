@@ -106,6 +106,14 @@ uv tool dir --bin
 
 合作进程锁不能阻止外部编辑器或恶意进程写文件；更新期间应停止其他写入者。发布前核对快照，交换后检测到旧目录变化会撤回并保留现场。此机制不承诺断电持久化或对恶意并发写入者的沙箱隔离。
 
+## Pi Code Agent 使用范围
+
+默认 Skill 目录 `~/.agents/skills/dev-workflow-standards-skill` 可被 Pi 发现；更新已安装快照后用 `/reload` 重新加载。Skill 更新不等于 MCP 更新或重连。
+
+MCP 可通过源码的 `scripts/setup-pi-mcp.py` 注册已安装的 uv tool（可选 `--install` 安装）；此脚本不包含在 Skill Markdown 快照中。详见 [README 的 Pi 安装说明](https://github.com/john-z-huang/dev-workflow-standards#给-pi-code-agent-注册-mcp)。Pi 原生配置为用户级 `~/.pi/agent/mcp.json` 或已信任项目的 `.pi/mcp.json`；stdio 继承启动环境，调用时限字段为 `timeout`（秒），不照搬 Codex `env_vars` 或 `tool_timeout_sec`。注册会写配置，需要对应授权；替换同名服务前保留自定义设置。连接状态、实际工具发现及只读调用才是验证证据，注册成功不等于可用。
+
+`agents update` / `--agents-*` 仍只管理 Codex 全局 `~/.codex/AGENTS.md`，`--hooks-*` 仍只管理原生 Codex Hooks；它们不是 Pi 全局指令或扩展安装入口，也不是 Pi 使用 Skill/MCP 的前置条件。不自动迁移或修改 Pi 全局配置。审批与工具发现见 [Skill 入口](../SKILL.md#宿主审批兼容)。
+
 ## 全局 AGENTS.md 的独立更新
 
 仓库的 `instructions/codex-global.md` 维护全局指令源，根目录 `AGENTS.md` 继续维护本项目规则。全局源作为独立资源随完整 wheel 发布，不属于 Skill 快照；更新包和 Skill 都不会自动覆盖 `~/.codex/AGENTS.md`。

@@ -8,4 +8,4 @@
 
 工具返回的 `actions` 表示已经完成的步骤。若切换或同步 base 成功、随后删除失败，base 仍可能保持在已同步状态；检查返回结果后决定下一步。冲突、脏工作区、身份不一致或权限错误时，保留现场并报告。
 
-先查看 [`mcp-tools.md`](mcp-tools.md) 中授权、Codex writes approval 和该工具的完整边界。
+先查看 [`mcp-tools.md`](mcp-tools.md) 中授权、适用的宿主审批（含 Pi 兼容规则）和该工具的完整边界。

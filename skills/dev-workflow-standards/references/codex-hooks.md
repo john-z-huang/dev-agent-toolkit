@@ -1,5 +1,7 @@
 # 可选原生 Codex Hooks
 
+本适配仅面向 Codex，不是 Pi Code Agent 的扩展或审批机制。Pi 无须安装；不要把 Codex 事件名、hooks.json 或信任配置复制为 Pi 配置。Pi 中仍按当前动作遵循声明式 Hook 合同及实际权限机制。
+
 本 Skill 中的 `hooks/*.md` 是指令合同。源码仓库在 `codex-hooks/` 中独立发布 `dev-workflow-standards-hooks` 包，由 `scripts/setup-codex-hooks.py` 通过 uv tool 安装并注册，将其中一部分规则转换为 Codex 原生生命周期回调；完整映射、安装与验证说明位于源码仓库的 `codex-hooks/README.md`。这些可执行组件不包含在本 Skill 的 Markdown 安装快照中。
 
 - `SessionStart`：注入范围、授权、代码语义和历史事实边界。
