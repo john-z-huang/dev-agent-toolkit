@@ -161,6 +161,36 @@ default_tools_approval_mode = "writes"
 
 安装为普通本机 uv tool 后，工具从本机安装位置运行，不依赖仓库 worktree 路径。更新本地源码后，可运行 `./dws --mcp-update` 更新软件包和 MCP 注册，再按需要分别运行 `--skills-update`、`--agents-update` 更新已安装指令。单独运行 `uv tool install` 不会自动配置 Codex；需要安装并注册 MCP 时，使用上述脚本的 MCP 操作参数。
 
+### 给 pi code agent 注册 MCP
+
+使用支持原生 `pi mcp add` 的 pi（本机参考版本 1.5.0），通过独立脚本注册 `uv tool` 安装的 stdio 服务：
+
+```bash
+# 默认只注册已安装的本仓库服务
+uv run scripts/setup-pi-mcp.py
+
+# 从当前仓库安装并注册；更新时增加 --force
+uv run scripts/setup-pi-mcp.py --install
+uv run scripts/setup-pi-mcp.py --install --force
+
+# 无命令执行、无配置读写的预览
+uv run scripts/setup-pi-mcp.py --install --dry-run
+
+# 注册到调用时所在项目（而非脚本所在仓库）
+uv run scripts/setup-pi-mcp.py --local --exposure deferred
+
+# 注册其他已经通过 uv tool 安装、无需启动参数的 stdio MCP
+uv run scripts/setup-pi-mcp.py --server example --command example-mcp
+```
+
+脚本通过 `uv tool dir --bin` 定位可执行文件，将绝对入口路径交给 `pi mcp add`，不会使用 PATH 中的同名 MCP 命令。`--install` 仅安装本仓库 `mcp-server/`，从其他目录调用时用脚本绝对路径；`--force` 必须与 `--install` 同用。默认 exposure 为 `codemode`，还支持 `deferred`、`direct`、`hidden`。
+
+需要 `uv`、`pi` 位于 PATH。默认写用户级 `~/.pi/agent/mcp.json`；`--local` 写当前目录 `.pi/mcp.json`，项目配置仅在 pi 信任该项目后加载。**`pi mcp add` 会替换同名服务条目，包括其自定义环境、超时和工具暴露等设置**；其他服务由 pi 自身保留。需要保留同名自定义配置时，请先手动备份或使用不同 `--server` 名称。
+
+stdio 服务继承 pi 进程的环境；脚本不读取、打印或持久化凭据，也不加载 `.env`。调用 OpenAI 的工具仍要求启动 pi 时持有非空 `OPENAI_API_KEY`、`OPENAI_BASE_URL`；可选代理变量同样通过进程环境继承，不写可能因缺失而插值失败的引用。安装可能联网，注册本身不启动 MCP、不调用 OpenAI、不修改 Codex/Skill/Hooks。
+
+脚本成功只表示注册命令成功，不代表服务连接或工具测试通过。按需运行 `pi mcp list`（会连接所有已启用服务）验证状态，并在已有 pi 会话执行 `/reload`。安装和注册不是事务；后续失败不回滚已安装的 uv tool，错误输出不会回显子进程原文。若使用替代原生 MCP 的扩展，需先确认其配置方式，本脚本不配置这类扩展。
+
 ### 从旧名称迁移
 
 如果旧版本已安装并注册了 `dev-workflow-standards-mcp`，先移除旧 Codex 注册和 uv tool，再按上面的步骤安装并注册新名称。只对本机确实存在的旧条目执行移除命令：
