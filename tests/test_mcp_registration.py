@@ -49,6 +49,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                 "Issue",
                 "PR",
                 "最小充分",
+                "所有待交付的 git commit patch",
+                "不仅是最后一个 commit patch",
                 "默认中文",
                 "language_override",
                 "needs_revision",
@@ -114,6 +116,9 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             "quality_review",
             "不会读写",
             "OPENAI_BASE_URL",
+            "所有待交付的 git commit patch",
+            "merge-base",
+            "纯需求/缺陷 Issue 尚无对应提交",
         ):
             self.assertIn(phrase, tool.description)
         schema_text = json.dumps(tool.input_schema, ensure_ascii=False)
@@ -124,6 +129,9 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             "user_provided",
             "实际/期望/影响",
             "已完成diff",
+            "所有待交付commit patch",
+            "完整提交列表",
+            "最后一次提交",
             "默认中文",
         ):
             self.assertIn(phrase, schema_text)

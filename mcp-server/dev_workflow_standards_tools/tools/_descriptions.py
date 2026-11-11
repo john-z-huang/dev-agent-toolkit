@@ -57,6 +57,7 @@ SERVER_INSTRUCTIONS = (
 
 **候选内容与证据条件**
 
+Issue/PR 若用于交付已有 Git 改动，必须参考所有待交付的 git commit patch，而不仅是最后一个 commit patch。调用方先核实目标 base/head、比较基点（通常为 merge-base）及完整提交列表，逐个读取该范围内的 patch（含已推送但尚未进入目标 base 的提交，不以未推送范围替代 PR 范围），再提供覆盖每个提交的有界事实摘要和可追溯 SHA/路径；结合整个范围的最终净 diff 归纳重要变更，后续修正或回退不得描述为仍生效。不得仅用 git show HEAD、最后一次提交或工作区 diff 代表全部改动；无需向模型发送所有原始 patch，可分批收集但不得静默截断或遗漏提交。范围未知、patch 未读全或摘要仅覆盖部分提交时，在 missing_facts 标明缺口，不得声称完整。纯需求/缺陷 Issue 尚无对应提交时此规则不适用，不得编造提交或强制索要 patch。
 起草 Issue/PR 前先收集最小充分的真实项目事实与来源指针，再调用 `generate_skill_content`，无需先写整篇正文。通用事实包括用户目标/受众、背景/组件、路径/符号、范围/非目标、约束和关联项；事实、反馈、推测与建议分开。Issue 先区分缺陷与功能/变更请求：描述实际/期望/影响或目标/动机，环境与复现仅提交已知证据。PR 提供具体前后行为、已完成 diff/文件摘要及原因、实际验证命令/结果和未运行项、已知兼容风险与关联 Issue。缺失和冲突如实标注，不要求全仓库/完整会话或敏感配置。标题和自然语言正文默认中文，英文材料/模板/Agent 请求不构成其他语言授权；明确用户语言要求须通过 language_override 引用 user_provided 指令原文。技术原文保留。工具不自行读取项目上下文；Issue/PR 经生成与语义审查两次固定 gpt-6-luna Responses.parse 请求，ok=true 仍须检查 quality_status/adoptable 并人工审阅，needs_revision 不可直接发布，审查异常失败关闭。后续 Memory、Git、Issue/PR 写入优先使用相应专用工具；能力缺口按下述 CLI 规则补足，仍须满足既有授权。
 
 **MCP 优先与 CLI 补充**
@@ -256,11 +257,12 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "generate_skill_content": (
         "为 issue、pr、commit_message、plan、handoff 或 session_summary 生成结构化候选文本，适合已有明确证据、需要起草而非执行时。request.evidence 必须非空；每项 origin 标明来源，ref 唯一。session_summary 必须提供 source.created_at 与 source.title；source.thread_id 可从 source_link 推导；只接受对应 thread 的 provided_session 证据。"
         "调用前按类型准备事实，不必先写正文：通用为目标/受众、背景/组件、路径/符号指针、范围/非目标、约束和关联项；每项标明事实/推测、来源和缺失/冲突。Issue区分缺陷/功能请求，给实际/期望/影响或能力/动机，复现和环境仅限已知；PR给前后行为、已完成diff/文件摘要与原因、实际验证命令/结果和未运行项、已知兼容风险及关联Issue。不提交全仓库、完整会话或敏感配置。"
+        "Issue/PR 若用于交付已有 Git 改动，必须参考所有待交付的 git commit patch，而不仅是最后一个 commit patch。调用方先核实目标 base/head、比较基点（通常为 merge-base）及完整提交列表，逐个读取该范围内的 patch（含已推送但尚未进入目标 base 的提交，不以未推送范围替代 PR 范围），再提供覆盖每个提交的有界事实摘要和可追溯 SHA/路径；结合整个范围的最终净 diff 归纳重要变更，后续修正或回退不得描述为仍生效。不得仅用 git show HEAD、最后一次提交或工作区 diff 代表全部改动；无需向模型发送所有原始 patch，可分批收集但不得静默截断或遗漏提交。范围未知、patch 未读全或摘要仅覆盖部分提交时，在 missing_facts 标明缺口，不得声称完整。纯需求/缺陷 Issue 尚无对应提交时此规则不适用，不得编造提交或强制索要 patch。"
         "user_request定目标，focus_questions/output_format的用户重点/结构优先于默认；不增加事实。Issue/PR标题与自然语言正文默认中文，英文模板/错误/Agent请求不授权改语言，技术标识/路径/代码/错误原文保留。仅当用户明确要求其他语言时提供language_override={language,instruction_ref}，引用evidence内origin=user_provided的指令原文；省略/null用中文，其他kind禁止此字段。引用来源本地校验，指令语义由模型核对。"
         "ok=true仅表示候选和审查返回有效，candidate.title/content是标题/正文（commit_message正文可空）；used_evidence_refs只列支撑内容的输入引用，missing_facts列必要缺失/冲突，review_notes列修订要点。Issue/PR另含quality_status=ready_for_agent_review或needs_revision、adoptable和quality_review（language_compliant/evidence_supported/coverage_sufficient为模型建议）。任何缺项或否定检查均不可直接采纳，修改/补证后再审阅；通过也不是发布授权。不以字数判质量。拒绝/截断/坏引用/本地commit失败/审查异常看error_code且不可采纳；仅底层请求超时按统一配置重试，不自动修复候选或换模型。"
         "通过统一客户端Responses.parse联网调用OpenAI；每次强制读取OPENAI_API_KEY与OPENAI_BASE_URL，显式传SDK且固定gpt-6-luna。Issue/PR生成后再做一次有界语义审查，其余kind一次请求。不会读写文件/仓库、Memory、会话、执行Git/GitHub或候选动作；仅处理传入事实，后续写入另需授权。"
         'Issue示例：{"request":{"kind":"issue","user_request":"为维护者起草导出功能需求","evidence":[{"reference_id":"U1","content":"用户希望导出筛选结果，避免手动复制；仅涉及报表组件。验收条件尚未确认。","origin":"user_provided"}]}}。'
-        'PR示例：{"request":{"kind":"pr","user_request":"为评审者起草说明","evidence":[{"reference_id":"D1","content":"src/report.py的diff将空输入从抛错改为返回空列表，避免空报表失败；范围仅该函数。执行python -m unittest tests.test_report：通过。未运行集成测试；关联#12；暂无已知兼容风险。","origin":"current_observation"}]}}。以上路径/编号/结果均为合成示例，实际调用必须替换为已核实事实。'
+        'PR示例：{"request":{"kind":"pr","user_request":"为评审者起草说明","evidence":[{"reference_id":"D1","content":"已核实base=main@1111111、head=2222222、merge-base=1111111；完整提交列表仅2222222，已读其patch，最终净diff一致。src/report.py的diff将空输入从抛错改为返回空列表，避免空报表失败；范围仅该函数。执行python -m unittest tests.test_report：通过。未运行集成测试；关联#12；暂无已知兼容风险。","origin":"current_observation"}]}}。以上路径/编号/结果均为合成示例，实际调用必须替换为已核实事实。'
     )
     + OPENAI_NETWORK_DESCRIPTION,
     "check_api_input": (
@@ -441,7 +443,7 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "request": "严格结构化历史查找/持久化状态。必填 flags 为布尔值；relevant_facts_found 的 null 表示未知，false 表示已知未发现；origin 区分 original_session/current_session/none。",
     },
     "generate_skill_content": {
-        "request": "严格结构化候选请求；kind限定六种类型，evidence需1–100项且引用唯一。Issue准备实际/期望/影响或能力/动机；PR准备前后行为、已完成diff、真实验证/未运行项与风险，附来源指针而非先写正文。Issue/PR默认中文，language_override仅用于引用user_provided的明确用户语言指令；null/省略不改语言。session_summary必须含source且证据同thread。自定义重点/结构优先，不改变事实边界；文本有长度上限。",
+        "request": "严格结构化候选请求；kind限定六种类型，evidence需1–100项且引用唯一。Issue准备实际/期望/影响或能力/动机；已有Git改动的Issue/PR须核实base/head、比较基点和完整提交列表，提供覆盖所有待交付commit patch的SHA/路径摘要并结合最终净diff，不得仅最后一次提交，未读全标缺口；无对应提交的Issue不强制patch。PR准备前后行为、已完成diff、真实验证/未运行项与风险，附来源指针而非先写正文。Issue/PR默认中文，language_override仅用于引用user_provided的明确用户语言指令；null/省略不改语言。session_summary必须含source且证据同thread。自定义重点/结构优先，不改变事实边界；文本有长度上限。",
     },
     "check_api_input": {
         "request": "严格对象且extra=forbid；仅有purpose、content两个必填非空字符串字段，每个最多32768字符/32KiB UTF-8。含模型、固定审核问题与指令以及两字段的完整请求JSON最多48KiB UTF-8；超限返回unavailable/request_too_large且不发送审核请求。purpose说明具体外发用途；content须含最终完整外发指令、事实和上下文，保留嵌套JSON及换行，不得摘要、截断或附加target_tool。不检查文件或目录路径；独立的凭据、隐私和不透明载荷仍审核。默认允许将两字段发送至配置的Decisions审核服务，无需前置审核或逐次人工授权；审核通过后的业务外发范围见工具说明。",
