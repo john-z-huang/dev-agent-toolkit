@@ -1,4 +1,6 @@
-# Git/gh 只读查询边界
+# Git/gh/glab 只读查询边界
+
+GitLab 查询适用同样的副作用、授权和失败关闭条件；显式主机、多级项目路径、MR iid 及 `glab api --method GET` 形状见 [GitLab 兼容规则](gitlab.md#cli-能力缺口)，不套用 GitHub endpoint。
 
 本规约允许 Code Agent 在当前任务和已核实的仓库范围内自主查询，无须逐次申请额外的业务授权。它不覆盖上级指令、宿主审批、沙箱或产品限制；也不是通用命令执行器或技术安全隔离机制。
 

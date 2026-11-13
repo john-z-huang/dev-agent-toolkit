@@ -1,4 +1,6 @@
-# GitHub 资源操作
+# GitHub / GitLab 资源操作
+
+先核实托管平台。以下 Issue、推送、PR 拓扑与授权规则也适用于 GitLab MR；GitLab 使用对应 glab 工具，主机/多级 group、字段及合并差异见 [GitLab 兼容规则](../references/gitlab.md)。GitHub 专属参数与 checks 不直接套用 GitLab。
 
 ## 进入条件
 
@@ -6,7 +8,7 @@
 
 ## 执行条件
 
-共用：准确 owner/repo、账号、目标资源、相关分支及授权已核实；网络/认证失败不改用浏览器绕过。真实 Fork 才适用 [Fork 拓扑](../references/fork-maintenance.md)。
+共用：准确平台、主机/仓库（GitHub owner/repo；GitLab host/group[/subgroup]/project）、账号、目标资源、相关分支及授权已核实；网络/认证失败不改用浏览器绕过。真实 Fork 才适用 [Fork 拓扑](../references/fork-maintenance.md)。
 
 Issue：正文说明具体问题/目标、范围和验收；至少一个已核实工作类型标签，按策略指派本人。文案可用 `generate_skill_content`，候选须核对事实和质量再发布。
 

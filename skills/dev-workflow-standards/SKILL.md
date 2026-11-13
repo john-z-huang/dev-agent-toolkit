@@ -1,7 +1,7 @@
 ---
 name: dev-workflow-standards
 description: >-
-  开发操作的声明式指令 Hooks：适用于代码理解、项目修改、Python/Shell 执行、需代理的本地 Modal 依赖管理及 Git/GitHub 工作。
+  开发操作的声明式指令 Hooks：适用于代码理解、项目修改、Python/Shell 执行、需代理的本地 Modal 依赖管理及 Git/GitHub/GitLab 工作。
   按当前动作和资源状态提供进入、执行、离开与重新核验条件，由 Agent 自行规划顺序和选择工具。
 ---
 
@@ -30,6 +30,8 @@ Hook 是指令合同，由 Agent 根据实际事实判断适用性，不是宿�
 - MCP 进程环境与调用时限按宿主配置：Pi stdio 继承启动 Pi 的环境，配置使用 `timeout`（秒），而不是 Codex 的 `env_vars` / `tool_timeout_sec`。配置变化后重新加载，环境变化必要时重启 Pi；不输出配置值。见 [环境传递](references/openai-workflow-tools.md#pi-stdio-环境传递与工具时限)。
 
 ## 共用边界
+
+- 托管操作先核实 GitHub 或 GitLab 平台及准确目标；GitLab 使用 `glab` 和对应 Issue/MR 工具，详见 [GitLab 兼容规则](references/gitlab.md)。通用 Git、worktree、提交、授权及非强推约束跨平台一致；纯 Git 动作不依赖 GitHub 登录，自托管平台不能仅凭域名猜测。
 
 - 用户意图和宿主权限共同约束当前动作；既有授权在原范围持续有效，不因换工具重复询问，也不扩大到提交、推送、合并、删除、历史重写、配置或 Memory 写入。
 - 准确识别仓库/worktree 和资源；repo-bound 工具显式传绝对 `repo_path`。保留用户现有内容，结果依据真实回读，不编造测试、文件、提交或远端状态。

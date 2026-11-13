@@ -1,6 +1,8 @@
 # dev-workflow-standards
 
-此项目将开发规范拆为两层：Skill 文档以声明式 Hooks 描述动作的进入、执行、离开和重查条件，由 Agent 自行规划顺序；本地 MCP 服务执行固定 Git/GitHub 操作，并提供只读的 Codex 会话事实辅助工具。当前维护的本地 MCP 服务为 Python 实现，由 `uv` 管理，并通过 `uv tool` 安装到本机供 Codex 使用。
+GitLab 托管仓库使用 `glab` 和 9 个对应的 MCP 工具，覆盖仓库/Issue/MR 审计、标签、创建、推送、合并、Fork 同步及本地清理；原有 GitHub 接口保持兼容。支持自托管主机及多级 group，工具映射、参数与合并策略差异见 [GitLab 兼容规则](skills/dev-workflow-standards/references/gitlab.md)。本地 Git、授权、正常 hooks 与非强推条件跨平台一致。
+
+此项目将开发规范拆为两层：Skill 文档以声明式 Hooks 描述动作的进入、执行、离开和重查条件，由 Agent 自行规划顺序；本地 MCP 服务执行固定 Git/GitHub/GitLab 操作，并提供只读的 Codex 会话事实辅助工具。当前维护的本地 MCP 服务为 Python 实现，由 `uv` 管理，并通过 `uv tool` 安装到本机供 Codex 使用。
 
 领域规则判断与开发文案生成通过 OpenAI Python SDK 完成：判断使用 Decisions API，生成使用 Responses API。所有请求固定为 `gpt-6-luna`，强制在调用时读取 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`；缺少任意配置即拒绝请求，不使用默认凭据、默认地址或其他模型。Decisions 使用接口自身机制，生成按任务复杂度显式指定推理强度，默认 `medium`。
 
@@ -212,7 +214,7 @@ uv tool uninstall dev-workflow-standards-mcp
 
 Python 执行和依赖环境任务按需读取 [`references/python-environment.md`](skills/dev-workflow-standards/references/python-environment.md)，Shell 脚本开发和验证按需读取 [`references/shell-environment.md`](skills/dev-workflow-standards/references/shell-environment.md)。独立脚本无需先进入 Git 工作流；非开发任务不增加环境规则加载步骤。
 
-Git/GitHub 写操作必须满足对应动作的用户授权和执行层审批；已有授权在原范围内持续有效。操作优先使用能够满足需求的 MCP 工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，Code Agent 可按 [`MCP 优先与 CLI 补充`](skills/dev-workflow-standards/references/cli-fallback.md) 自行选择相关 CLI、组合必要命令，完成查询或已授权写入，无须仅因工具缺口再问授权。动作条件、必要检查、沙箱和审批继续生效；工具/服务实际发生连接、权限、认证、网络、状态或校验失败时保留现场，不换入口绕过。服务本身仍只接受固定领域参数，不提供任意 shell、git、gh 或项目测试命令。
+Git/GitHub/GitLab 写操作必须满足对应动作的用户授权和执行层审批；已有授权在原范围内持续有效。操作优先使用能够满足需求的 MCP 工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，Code Agent 可按 [`MCP 优先与 CLI 补充`](skills/dev-workflow-standards/references/cli-fallback.md) 自行选择相关 CLI、组合必要命令，完成查询或已授权写入，无须仅因工具缺口再问授权。动作条件、必要检查、沙箱和审批继续生效；工具/服务实际发生连接、权限、认证、网络、状态或校验失败时保留现场，不换入口绕过。服务本身仍只接受固定领域参数，不提供任意 shell、git、gh 或项目测试命令。
 
 已在当前 checkout 开始工作、需要从当前 HEAD 原地建立工作分支时，使用 `create_repository_branch`。它支持 detached HEAD 和普通分支，保留已暂存、未暂存及未跟踪内容；只新增本地分支并改变 HEAD，不创建其他 checkout。它与切换已有分支的 `switch_repository_branch`、创建新目录的 `create_repository_worktree` 分别适用不同场景。参数、OID 并发条件、Hook 限制和失败后的回读要求见 [`MCP 工具目录`](skills/dev-workflow-standards/references/mcp-tools.md#原地创建工作分支)。
 

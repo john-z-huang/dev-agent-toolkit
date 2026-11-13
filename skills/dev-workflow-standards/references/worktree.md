@@ -1,5 +1,7 @@
 # Git Worktree 开发与交付
 
+GitLab 仓库同样适用本文的通用 Git、拓扑、授权和保留条件；PR 对应 MR，平台工具、字段及例外按 [GitLab 兼容规则](gitlab.md) 选择，不直接执行本文的 GitHub 专属命令。
+
 仅当用户明确要求 worktree 时使用。Git 仓库、remote、GitHub 交付或并行任务本身不触发该模式。下文操作优先使用 [`mcp-tools.md`](mcp-tools.md) 中的对应工具；未提供工具或功能未覆盖时按 [`cli-fallback.md`](cli-fallback.md) 补足，保留必要检查、授权及创建前同步门禁。只读细节见 [`read-only-queries.md`](read-only-queries.md)。
 
 ## 工作区边界

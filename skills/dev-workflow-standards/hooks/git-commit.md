@@ -1,5 +1,7 @@
 # 暂存与提交
 
+GitHub 与 GitLab 托管仓库均适用；纯 Git 动作不要求 GitHub 登录，PR/MR 及平台工具差异见 [GitLab 兼容规则](../references/gitlab.md)。
+
 ## 进入条件
 
 准备修改 Git index 或创建 commit 时适用；仅编辑文件或分析不触发。

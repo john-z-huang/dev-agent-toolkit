@@ -1,5 +1,7 @@
 # Worktree 与基线操作
 
+GitHub 与 GitLab 托管仓库均适用；纯 Git 动作不要求 GitHub 登录，PR/MR 及平台工具差异见 [GitLab 兼容规则](../references/gitlab.md)。
+
 ## 进入条件
 
 准备新建、同步、恢复或移除 worktree/相关基线时适用。只有用户明确要求新建时才创建；remote、并行工作或已有 worktree 不触发重建。

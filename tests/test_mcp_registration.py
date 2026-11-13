@@ -80,6 +80,37 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             ):
                 self.assertIn(phrase, client.instructions)
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+            self.assertIn("host/group[/subgroup]/project", client.instructions)
+            self.assertIn("GitLab", client.instructions)
+            for name in (
+                "audit_gitlab_repository_state",
+                "list_gitlab_issue_labels",
+                "create_gitlab_issue",
+                "push_gitlab_issue_branch_to_origin",
+                "create_gitlab_merge_request",
+                "merge_gitlab_merge_request",
+                "audit_issue_mr_policy",
+                "push_gitlab_fork_main_fast_forward",
+                "cleanup_merged_mr_local_branch",
+            ):
+                metadata = tools[name]
+                self.assertIn("glab", metadata.description)
+                self.assertIn("不调用 OpenAI", metadata.description)
+                self.assert_described_properties(metadata.input_schema, name)
+                self.assertTrue(metadata.annotations.open_world_hint)
+                self.assertTrue(
+                    {"repo_path", "repo"}.issubset(metadata.input_schema["required"])
+                )
+                self.assertNotIn("endpoint", metadata.input_schema["properties"])
+            response = await client.call_tool(
+                "audit_issue_mr_policy",
+                {
+                    "repo_path": "/workspace/synthetic",
+                    "repo": "invalid",
+                    "mr_number": 7,
+                },
+            )
+            self.assertFalse(tool_json(response)["passed"])
         for name in (
             "check_branch_names",
             "check_commit_message",
@@ -190,12 +221,12 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                     if isinstance(item, dict):
                         self.assert_described_properties(item, tool_name)
 
-    async def test_all_44_tools_registered_with_described_schemas(self) -> None:
+    async def test_all_tools_registered_with_described_schemas(self) -> None:
         self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
         tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 44)
+        self.assertEqual(len(tools), 53)
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 44)
+        self.assertEqual(len(by_name), 53)
         self.assertNotIn("decide_skill_workflow", by_name)
         for tool in tools:
             self.assertTrue(tool.description, tool.name)
