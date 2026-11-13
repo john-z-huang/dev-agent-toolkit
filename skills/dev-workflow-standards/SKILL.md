@@ -37,6 +37,7 @@ Hook 是指令合同，由 Agent 根据实际事实判断适用性，不是宿�
 - 准确识别仓库/worktree 和资源；repo-bound 工具显式传绝对 `repo_path`。保留用户现有内容，结果依据真实回读，不编造测试、文件、提交或远端状态。
 - 优先使用覆盖需求的 MCP/已授权 Connector；能力缺口按 [CLI 补充边界](references/cli-fallback.md) 处理。实际失败、拒绝或写入不明适用 [恢复 Hook](hooks/recovery.md)，不能换入口绕过。
 - 语义判断和开发文案生成可按 [OpenAI 工具协议](references/openai-workflow-tools.md) 提交最小结构化事实，由专用工具承担分析/生成，再核对结果；不要求先自行完成同一份内容。会话动作工具仅为按需建议，不替 Agent 调度。
+- 需求或改动涉及可运行的 Web 页面、浏览器交互或页面内容验收时，按需加载 [Web 页面真实浏览器验证](references/web-browser-validation.md)，再只选择并阅读所需 CLI 的本地参考 Skill；不要求所有 Skill 加载者预先读取浏览器文档或 Skills。
 - `check_api_input` 默认允许向既定配置服务联网审核，无需前置审核、自我审核或逐次人工授权；审核通过后允许当前任务所需相同内容外发。业务工具自动审核实际出站内容，不重复公开预检。用户禁止外发及更高优先级限制仍生效；通过不授权发布或其他写入。详细条件见 [外部 API Hook](hooks/external-api.md)。
 - 不输出或记录凭据，不添加 Agent 署名/生成声明。资源、内容、授权或相关证据变化时，只重新核验受影响条件，不重跑整条任务。
 
