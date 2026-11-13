@@ -1,6 +1,8 @@
 # dev-workflow-standards
 
-此项目将开发规范拆为两层：Skill 文档以声明式 Hooks 描述动作的进入、执行、离开和重查条件，由 Agent 自行规划顺序；本地 MCP 服务执行固定 Git/GitHub 操作，并提供只读的 Codex 会话事实辅助工具。当前维护的本地 MCP 服务为 Python 实现，由 `uv` 管理，并通过 `uv tool` 安装到本机供 Codex 使用。
+GitLab 托管仓库使用 `glab` 和 9 个对应的 MCP 工具，覆盖仓库/Issue/MR 审计、标签、创建、推送、合并、Fork 同步及本地清理；原有 GitHub 接口保持兼容。支持自托管主机及多级 group，工具映射、参数与合并策略差异见 [GitLab 兼容规则](skills/dev-workflow-standards/references/gitlab.md)。本地 Git、授权、正常 hooks 与非强推条件跨平台一致。
+
+此项目将开发规范拆为两层：Skill 文档以声明式 Hooks 描述动作的进入、执行、离开和重查条件，由 Agent 自行规划顺序；本地 MCP 服务执行固定 Git/GitHub/GitLab 操作，并提供只读的 Codex 会话事实辅助工具。当前维护的本地 MCP 服务为 Python 实现，由 `uv` 管理，并通过 `uv tool` 安装到本机供 Codex 使用。
 
 领域规则判断与开发文案生成通过 OpenAI Python SDK 完成：判断使用 Decisions API，生成使用 Responses API。所有请求固定为 `gpt-6-luna`，强制在调用时读取 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`；缺少任意配置即拒绝请求，不使用默认凭据、默认地址或其他模型。Decisions 使用接口自身机制，生成按任务复杂度显式指定推理强度，默认 `medium`。
 
@@ -212,7 +214,7 @@ uv tool uninstall dev-workflow-standards-mcp
 
 Python 执行和依赖环境任务按需读取 [`references/python-environment.md`](skills/dev-workflow-standards/references/python-environment.md)，Shell 脚本开发和验证按需读取 [`references/shell-environment.md`](skills/dev-workflow-standards/references/shell-environment.md)。独立脚本无需先进入 Git 工作流；非开发任务不增加环境规则加载步骤。
 
-Git/GitHub 写操作必须满足对应动作的用户授权和执行层审批；已有授权在原范围内持续有效。操作优先使用能够满足需求的 MCP 工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，Code Agent 可按 [`MCP 优先与 CLI 补充`](skills/dev-workflow-standards/references/cli-fallback.md) 自行选择相关 CLI、组合必要命令，完成查询或已授权写入，无须仅因工具缺口再问授权。动作条件、必要检查、沙箱和审批继续生效；工具/服务实际发生连接、权限、认证、网络、状态或校验失败时保留现场，不换入口绕过。服务本身仍只接受固定领域参数，不提供任意 shell、git、gh 或项目测试命令。
+Git/GitHub/GitLab 写操作必须满足对应动作的用户授权和执行层审批；已有授权在原范围内持续有效。操作优先使用能够满足需求的 MCP 工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，Code Agent 可按 [`MCP 优先与 CLI 补充`](skills/dev-workflow-standards/references/cli-fallback.md) 自行选择相关 CLI、组合必要命令，完成查询或已授权写入，无须仅因工具缺口再问授权。动作条件、必要检查、沙箱和审批继续生效；工具/服务实际发生连接、权限、认证、网络、状态或校验失败时保留现场，不换入口绕过。服务本身仍只接受固定领域参数，不提供任意 shell、git、gh 或项目测试命令。
 
 已在当前 checkout 开始工作、需要从当前 HEAD 原地建立工作分支时，使用 `create_repository_branch`。它支持 detached HEAD 和普通分支，保留已暂存、未暂存及未跟踪内容；只新增本地分支并改变 HEAD，不创建其他 checkout。它与切换已有分支的 `switch_repository_branch`、创建新目录的 `create_repository_worktree` 分别适用不同场景。参数、OID 并发条件、Hook 限制和失败后的回读要求见 [`MCP 工具目录`](skills/dev-workflow-standards/references/mcp-tools.md#原地创建工作分支)。
 
@@ -291,34 +293,9 @@ bash -c 'uv run --frozen -- python ../tests/openai_official_smoke.py --live'
 
 输出仅含安全 JSON 状态、固定请求模型、成功时的 token 计数或失败分类，不输出真实配置、响应正文或原始异常。请求仅在超时时按统一配置重试，不切换模型；只有完整、未拒绝、模型匹配且结构正确的响应才返回 `success` 和退出码 0，失败退出码为 1。
 
-### Codex App Server 集成测试
+### Codex App Server 测试已移除
 
-测试驱动位于 `tests/codex_app_server_smoke.py`，通过 `tests/codex_app_server_client.py` 的标准库 JSON-RPC 客户端启动 `codex app-server --stdio`，完成 `initialize` / `initialized` 握手、`thread/start`、工具发现与调用；协议依据 [Codex App Server 官方文档](https://learn.chatgpt.com/docs/app-server)。项目已移除 Codex Python SDK、其捆绑 CLI 和 `codex-test` 依赖组，运行时、发布包和 Skill 均不包含该测试驱动。
-
-需预先独立安装支持上述接口的 Codex CLI，确保 `codex` 在 PATH 中；客户端按实际绝对路径启动，不下载、不安装或自动切换 CLI。普通离线测试使用合成子进程核验通信协议，不启动真实 Codex 或发起模型请求。测试期间不读取原用户的 Codex 配置、登录文件，不修改现有 Skill 安装。
-
-先构建 wheel，再从 `mcp-server/` 执行：
-
-```bash
-uv run --locked -- python ../tests/codex_app_server_smoke.py --wheel ../dist/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
-```
-
-默认仅做 App Server 初始化、临时 MCP 注册、工具发现和直接只读工具调用，不发起模型请求。wheel 被安装到临时目录，并核对加载来源。临时 Codex 状态目录和只读测试工作区与用户配置隔离。只暴露 `get_codex_session_summary_guidance` 和 `check_api_input`；前者使用合成问题/模板，后者验证合成敏感输入在本地被拒绝，普通模式不向 MCP 转发 API 配置。
-
-核验已更新的 `uv tool` 时，先通过其他所有适用测试，在既有授权内更新安装，再核对其实际可执行路径和版本：
-
-```bash
-uv run --locked -- python ../tests/codex_app_server_smoke.py \
-  --installed-executable /absolute/path/to/dev-workflow-standards-tools
-```
-
-该模式直接运行指定安装入口，检查入口所属 Python 环境、包版本和模块位置，不再次安装 wheel，也不以源码启动替代安装验证。wheel 模式与此模式互斥。测试另记录 App Server 的实际 CLI 路径和版本；旧进程不能替代新进程验证。
-
-需要真实模型端到端检查时显式添加 `--live`。所有模型测试固定 `gpt-6-luna` / `medium`，不接受其他模型或推理强度覆盖，不重试或回退。两种模式都在启动前读取当前进程非空的 `OPENAI_API_KEY`、`OPENAI_BASE_URL`，显式配置测试 provider；不使用默认地址或其他登录凭据。真实值不写入仓库或配置文件，不输出原始进程、RPC 或 HTTP 错误。
-
-`--live` 向 MCP 子进程按名称转发两项 API 环境变量、标准代理变量（含大小写）及 `SSL_CERT_FILE`，对最小合成开发事实执行 `check_api_input` 语义审核，再通过 `turn/start` 检查模型实际调用指定的只读工具，产生相应用量。检查绑定当前 thread/turn，保留早于响应到达的通知，核对实际 `item/completed`、工具参数/返回值与 `turn/completed` 状态；文字声称通过不被采纳，失败/中断、连接退出、无效消息或审批请求均不会默认为通过，也不会自动批准权限。
-
-总时限为 120 秒，结束或失败后有界关闭进程。输出仅含安全状态、固定模型/强度、实际 CLI 和 MCP 安装来源，以及实际工具调用计数；不输出凭据、端点或原始异常。该测试不模拟桌面宿主对真实私有项目数据的全部审批规则，也不授予全局配置、Memory 或 Git/GitHub 写入权限。
+本项目已移除 Codex App Server 专用测试用例、JSON-RPC 客户端和冒烟驱动。`tests/test_mcp_registration.py` 等仍验证标准 MCP stdio 初始化及工具发现；这些结果不代表 Codex App Server 集成测试已运行或通过。
 
 ## Git commit 信息生成
 

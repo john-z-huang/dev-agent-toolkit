@@ -1,5 +1,7 @@
 # 完成交付与交接
 
+GitHub 与 GitLab 托管仓库均适用；纯 Git 动作不要求 GitHub 登录，PR/MR 及平台工具差异见 [GitLab 兼容规则](../references/gitlab.md)。
+
 ## 进入条件
 
 准备报告当前任务完成、交接或说明无法继续时适用。不因此新增提交、推送、清理或全仓审计。

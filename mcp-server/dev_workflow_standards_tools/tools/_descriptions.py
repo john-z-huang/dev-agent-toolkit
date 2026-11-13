@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from . import _gitlab_descriptions
+
 SERVER_DESCRIPTION = (
-    "本地开发工作流 MCP 服务：提供固定范围的 Git、GitHub 与 worktree 操作，及用于检查和起草的只读辅助工具。"
+    "本地开发工作流 MCP 服务：提供固定范围的 Git、GitHub、GitLab 与 worktree 操作，及用于检查和起草的只读辅助工具。"
     "优先使用覆盖需求的 MCP 工具；未提供工具或功能未覆盖时，Agent 可在既有任务授权内自行使用 CLI 补足。"
     "check_api_input 默认允许联网审核，无需前置审核或逐次人工授权；"
     "当前任务所需项目内容审核通过后允许向既定配置服务外发，无需重复确认。"
@@ -612,5 +614,8 @@ PARAMETER_DESCRIPTIONS["generate_git_commit_message"] = {
     "request": "严格提交信息生成请求；user_request定目标，evidence为本次选定提交全部改动的事实和来源，focus_questions/output_format可选且优先默认；字段大小和来源约束见嵌套Schema。不是提交授权，不接受kind或模型覆盖。"
 }
 SERVER_INSTRUCTIONS += "\n提交信息生成：" + _COMMIT_GENERATION_CONTRACT
-assert len(TOOL_DESCRIPTIONS) == 44
+SERVER_INSTRUCTIONS += "\n\n" + _gitlab_descriptions.GITLAB_INSTRUCTIONS
+TOOL_DESCRIPTIONS.update(_gitlab_descriptions.TOOL_DESCRIPTIONS)
+PARAMETER_DESCRIPTIONS.update(_gitlab_descriptions.PARAMETER_DESCRIPTIONS)
+assert len(TOOL_DESCRIPTIONS) == 53
 assert set(TOOL_DESCRIPTIONS) == set(PARAMETER_DESCRIPTIONS)

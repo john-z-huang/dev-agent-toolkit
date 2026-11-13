@@ -297,6 +297,19 @@ def cleanup_merged_pr_local_branch(
     if preflight_error:
         return {"completed": False, "actions": [], "error": preflight_error}
     assert root is not None and info is not None
+    result = _cleanup_local_branch(root, info, branch_name, merged_head_oid)
+    if result["completed"]:
+        result.update(repo=repo, pr_number=pr_number)
+    return result
+
+
+def _cleanup_local_branch(
+    root: str,
+    info: dict[str, Any],
+    branch_name: str | None,
+    merged_head_oid: str | None,
+) -> dict[str, Any]:
+    """远端事实已核实后，共用本地快进与 OID 保护删除逻辑。"""
     base, target_branch, branch_error = _cleanup_branches(info, branch_name, root)
     if branch_error:
         return {"completed": False, "actions": [], "error": branch_error}
@@ -328,4 +341,4 @@ def cleanup_merged_pr_local_branch(
     delete_error = _delete_merged_branch(root, target_branch, merged_head_oid, actions)
     if delete_error:
         return {"completed": False, "actions": actions, "error": delete_error}
-    return {"completed": True, "repo": repo, "pr_number": pr_number, "actions": actions}
+    return {"completed": True, "actions": actions}

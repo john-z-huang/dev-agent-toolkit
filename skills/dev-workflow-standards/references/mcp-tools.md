@@ -1,5 +1,23 @@
 # MCP 工具目录
 
+## GitLab 对应工具
+
+GitLab 使用 `glab`，不使用 `gh` 或 GitHub `owner/repo` 校验。9 个对应工具及参数/副作用差异见 [GitLab 工具对应关系](gitlab.md#工具对应关系)；工具 Schema 与 MCP 初始化说明也暴露相同合同。所有 GitLab 工具必填 `repo_path` 与 `repo=host/group[/subgroup]/project`，支持自托管及多级 group；不调用 OpenAI、不读会话、不写 Memory/配置。具体写入仍需用户授权与适用宿主审批。GitHub→GitLab 仓库迁移是多阶段 CLI 操作，目前没有单一迁移 MCP 工具；迁移期间必须保持源 checkout 的 Git 配置不变，不得切换 origin 或增删 remote；范围、目标创建、refs/LFS 回读和 hosted data 边界见 [迁移指令](github-to-gitlab-migration.md)。
+
+| 工具 | 其他参数 | 关键返回及副作用 |
+|---|---|---|
+| `audit_gitlab_repository_state` | 无 | `ok` 本地读取；`gitlab/gitlab_error` 独立，联网只读。 |
+| `list_gitlab_issue_labels` | 无 | `ok/labels/limit`，联网只读前 100 项含继承标签。 |
+| `create_gitlab_issue` | `title, body, labels` | 创建并回读 Issue，`ok/created/issue`；结果不明 `created=null,write_attempted=true`。 |
+| `push_gitlab_issue_branch_to_origin` | `branch_name, issue_number` | `ok/error`，核实 Issue、origin 后非强推当前同名需求分支。 |
+| `create_gitlab_merge_request` | `title, body, base_branch, head_branch, issue_number` | 创建并回读同项目开放 MR，`ok/created/merge_request`，不推送、不删 source。 |
+| `audit_issue_mr_policy` | 可选 `issue_number, mr_number, expected_base, expected_head` | 至少一个编号，分支比较需 MR；`passed/errors`，确定性联网只读，不调用 Decisions。 |
+| `merge_gitlab_merge_request` | `mr_number, merge_method` | `ok/merged/pre_merge_head_oid`，合并远端 MR；main 只 squash，不自动合并/删 source。 |
+| `push_gitlab_fork_main_fast_forward` | 无 | `ok/error`，真实 Fork 镜像 main 的非强推。 |
+| `cleanup_merged_mr_local_branch` | `mr_number`；可选 `branch_name, merged_head_oid` | `completed/actions/error`，单独清理授权后切换/快进 pull/删除本地 source，保留精确 OID 强删门禁。 |
+
+可选字段默认 `null` 表示未请求；`merged_head_oid=null` 不允许强制删除。Issue/MR 编号为项目内正数 iid，不是全局 id。`created=true,ok=false` 或写入不明均先回读，不能自动重复写入。
+
 本项目支持在 Codex 或 Pi Code Agent 中注册并使用 Python MCP 服务 `dev-workflow-standards-tools`。操作优先选择本表中覆盖需求的工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 自行用 CLI 补足查询或已授权写入，保留必要检查，不绕过实际失败。MCP 仍只接受领域参数，不传 shell、git、gh 或测试命令。所有 repo-bound 工具都要求本次目标仓库的绝对 `repo_path`，且只在该 Git 根目录/worktree 内操作；不要假设 MCP 进程启动目录就是目标项目。
 
 只读工具带 `read_only_hint`；其他工具带写入/破坏性注解，Codex 服务配置为 `default_tools_approval_mode="writes"`。`Codex writes approval` 仅指 Codex 宿主审批；Pi Code Agent 未提供该机制时，按 [Skill 宿主审批兼容](../SKILL.md#宿主审批兼容) 执行：不要求不存在的审批工具/Hook，仍须有对应用户明确授权，遵守实际宿主权限和本地校验，不得绕过实际拒绝或错误。这些确认与注解不取代 Skill 中的用户授权前置条件。`gh` 工具使用本机已授权的 GitHub CLI，不接受或输出令牌。
