@@ -2,7 +2,7 @@
 
 ## GitLab 对应工具
 
-GitLab 使用 `glab`，不使用 `gh` 或 GitHub `owner/repo` 校验。9 个对应工具及参数/副作用差异见 [GitLab 工具对应关系](gitlab.md#工具对应关系)；工具 Schema 与 MCP 初始化说明也暴露相同合同。所有 GitLab 工具必填 `repo_path` 与 `repo=host/group[/subgroup]/project`，支持自托管及多级 group；不调用 OpenAI、不读会话、不写 Memory/配置。具体写入仍需用户授权与适用宿主审批。GitHub→GitLab 仓库迁移是多阶段 CLI 操作，目前没有单一迁移 MCP 工具；范围、目标创建、refs/LFS 回读、可选 cutover 和 hosted data 边界见 [迁移指令](github-to-gitlab-migration.md)。
+GitLab 使用 `glab`，不使用 `gh` 或 GitHub `owner/repo` 校验。9 个对应工具及参数/副作用差异见 [GitLab 工具对应关系](gitlab.md#工具对应关系)；工具 Schema 与 MCP 初始化说明也暴露相同合同。所有 GitLab 工具必填 `repo_path` 与 `repo=host/group[/subgroup]/project`，支持自托管及多级 group；不调用 OpenAI、不读会话、不写 Memory/配置。具体写入仍需用户授权与适用宿主审批。GitHub→GitLab 仓库迁移是多阶段 CLI 操作，目前没有单一迁移 MCP 工具；迁移期间必须保持源 checkout 的 Git 配置不变，不得切换 origin 或增删 remote；范围、目标创建、refs/LFS 回读和 hosted data 边界见 [迁移指令](github-to-gitlab-migration.md)。
 
 | 工具 | 其他参数 | 关键返回及副作用 |
 |---|---|---|

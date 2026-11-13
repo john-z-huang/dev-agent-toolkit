@@ -1,6 +1,6 @@
 # GitHub 仓库迁移到 GitLab
 
-本规则用于把本地 GitHub 仓库迁移到 GitLab 账号或指定 group 下同名项目。迁移是多阶段的本地配置及远端写入，不是单次 MCP 操作；当前 MCP 没有批量迁移工具。按 [MCP 优先与 CLI 补充](cli-fallback.md) 使用 Git、`gh`、`glab` 等实际 CLI 补足缺口；命令不得传给 MCP 工具。
+本规则用于把本地 GitHub 仓库迁移到 GitLab 账号或指定 group 下同名项目。迁移是多阶段的本地核验、Git refs 操作及远端写入，不是单次 MCP 操作；当前 MCP 没有批量迁移工具。迁移期间不得修改源 checkout 的 Git 配置。按 [MCP 优先与 CLI 补充](cli-fallback.md) 使用 Git、`gh`、`glab` 等实际 CLI 补足缺口；命令不得传给 MCP 工具。
 
 ## 范围与授权
 
@@ -9,9 +9,9 @@
 1. **Git 仓库数据**：提交对象/历史、分支、标签，以及按需 Git LFS 对象。正常 Git 推送不包含 GitHub 上托管的其他资源。
 2. **服务与项目数据**：Issues、PR、Discussions、Releases/附件、Wiki、Projects、Actions/Secrets、webhooks、deploy keys、Packages、Pages、保护规则等。它们不是 Git refs，迁移方法和可保留字段各异。
 
-如果用户未明确范围，先询问是否只迁移 Git 仓库数据，还是还要求迁移哪些 GitHub 资源。缺省不得把平台数据说成已迁移；不得假定 Git push 会迁移它们。范围未明确时可继续独立只读盘点，但不开始相关远端写入。若只要求仓库迁移，按 Git 数据和经确认的本地 remote 切换处理，**保留 GitHub 源项目和源 remote**。
+如果用户未明确范围，先询问是否只迁移 Git 仓库数据，还是还要求迁移哪些 GitHub 资源。缺省不得把平台数据说成已迁移；不得假定 Git push 会迁移它们。范围未明确时可继续独立只读盘点，但不开始相关远端写入。若只要求仓库迁移，按获准的 Git 数据范围处理，**保留 GitHub 源项目和源 checkout 现有 Git 配置不变**。
 
-用户意图、目标项目和每类写入必须明确：创建 GitLab 项目、推送 Git refs/LFS、改变本地 remote、调整可见性/default branch、迁移 GitHub 资源、归档或删除 GitHub 项目是不同动作。只执行用户授权范围内的动作；授权不足时询问最小缺失决定。不要要求用户粘贴或输出 `GH_TOKEN`、`GITLAB_TOKEN`、`OAUTH_TOKEN`、含凭据 URL 或认证响应。
+用户意图、目标项目和每类写入必须明确：创建 GitLab 项目、推送 Git refs/LFS、调整 GitLab 可见性/default branch、迁移 GitHub 资源、归档或删除 GitHub 项目是不同动作。源 checkout 的 Git 配置变更（remote、URL、upstream、push 默认值等）不属于迁移步骤，迁移过程中禁止执行。只执行用户授权范围内的其他动作；授权不足时询问最小缺失决定。不要要求用户粘贴或输出 `GH_TOKEN`、`GITLAB_TOKEN`、`OAUTH_TOKEN`、含凭据 URL 或认证响应。
 
 ## 1. 核实源仓库和迁移范围
 
@@ -35,7 +35,7 @@
 
 ## 3. 迁移 Git refs 和对象
 
-仅在源、目标都已核实，目标为空或 refs 已被逐项证明兼容，并且用户授权推送后开始。保留 GitHub 源项目；先添加一个未占用的临时 remote（例如 `gitlab-migration`），不要先替换 `origin`。remote 名称、fetch URL 和全部 push URL 均须与核实的 GitLab 目标一致；若 Git credential 未就绪，停止并说明缺口，不把认证失败改写成能力缺口。
+仅在源、目标都已核实，目标为空或 refs 已被逐项证明兼容，并且用户授权推送后开始。保留 GitHub 源项目和源 checkout 的现有 Git 配置：不得新增、删除、重命名或改写 remote，不得写入 `.git/config`，不得修改 remote URL、fetch/push URL、分支 upstream 或 push 默认值。将经核实且不含凭据的 GitLab 目标 URL 作为单次 Git/LFS 命令参数；若某 CLI 或认证方式要求在源 checkout 添加 remote、改配置或设置 upstream，则停止该路径，改用原项目之外的隔离临时 clone/copy，或报告无法安全继续。若 Git credential 未就绪，停止并说明缺口，不把认证失败改写成能力缺口。
 
 - 用源端当前 ref 清单作为范围，不以工作区或 `git show HEAD` 代表完整仓库。确认本地没有将与临时抓取 ref 冲突的 `refs/migrate/github/` 命名空间后，可将 GitHub 远端 refs 抓取到独立命名空间，避免覆盖本地分支和标签：
 
@@ -48,29 +48,29 @@
 - 用抓取前记录的精确分支/tag 名称及 OID 核对临时 refs。可将源端 refs 映射到空 GitLab 目标（示例是映射形状，不是可直接复制的目标仓库）：
 
   ```bash
-  git push gitlab-migration 'refs/migrate/github/heads/*:refs/heads/*'
-  git push gitlab-migration 'refs/migrate/github/tags/*:refs/tags/*'
+  git push <verified-gitlab-target-url> 'refs/migrate/github/heads/*:refs/heads/*'
+  git push <verified-gitlab-target-url> 'refs/migrate/github/tags/*:refs/tags/*'
   ```
 
   无对应 refs 时省略相应 push。不要用 `git push --mirror`：它可能强制改写或删除目标端 refs；不要用 `--force`、`--force-with-lease` 或自动删除目标端 refs。受保护分支拒绝时保留保护并停止，由用户/项目管理员决定合规配置，不绕过保护。
 - 另行对比本地分支/tag 与 GitHub 源 refs。用户要求纳入的本地独有分支/标签，可在不存在同名冲突且可正常快进写入时逐项推送；同名 refs 指向不同历史、彼此分叉或标签对象冲突时停止，展示安全的名称/OID 摘要并询问保留、改名或排除，不自动 merge、改写历史或覆盖。不得将本地未提交文件包装成已迁移提交。
-- 若检测到 Git LFS 文件，必须验证 LFS 客户端和 GitLab LFS 可用性，并按授权将相关 refs 的 LFS 对象传至 GitLab，例如 `git lfs push --all gitlab-migration <approved-ref>...`，显式列出本次获准迁移的分支/tag；仅 Git refs 推送成功不足以证明 LFS 完整。执行前按本机 Git LFS 版本核实参数和 refs 范围；LFS 上传失败/不明时先只读核对，不盲目重试。
-- Git submodule 的 repository 是独立仓库，普通 push 不会把它们迁入目标。记录 `.gitmodules` 中已核实的 URL 和可达性；只有用户明确要求时，分别按同一流程迁移子仓库并获授权后更新父仓库的 submodule URL。
+- 若检测到 Git LFS 文件，必须验证 LFS 客户端和 GitLab LFS 可用性，并按授权将相关 refs 的 LFS 对象传至 GitLab，例如 `git lfs push --all <verified-gitlab-target-url> <approved-ref>...`，显式列出本次获准迁移的分支/tag；仅 Git refs 推送成功不足以证明 LFS 完整。执行前按本机 Git LFS 版本核实目标 URL 是否受支持、参数和 refs 范围；若需在源 checkout 配置 remote，则改用原项目之外的隔离临时 clone/copy 或停止，不修改源 Git 配置。LFS 上传失败/不明时先只读核对，不盲目重试。
+- Git submodule 的 repository 是独立仓库，普通 push 不会把它们迁入目标。记录 `.gitmodules` 中已核实的 URL 和可达性；只有用户明确要求时，才可将子仓库作为独立仓库按同一流程迁移。迁移流程不得修改父项目的 `.gitmodules` URL 或源 checkout Git 配置；若后续工作必须变更这些配置，停止该迁移步骤并单独报告，不自行修改。
 
-命令必须由宿主按当前 CLI 能力、安全边界和既有授权执行；先后依赖的步骤依次核验。Git 写入、项目创建、LFS 上传和 remote 配置变更分别评估副作用；不得把 shell 命令传入 MCP 领域参数。
+命令必须由宿主按当前 CLI 能力、安全边界和既有授权执行；先后依赖的步骤依次核验。Git refs 写入、项目创建及 LFS 上传分别评估副作用；不得把 shell 命令传入 MCP 领域参数。迁移期间不得变更源 checkout 的 Git 配置。
 
 ## 4. 回读验收
 
-push 的退出码不够。分别用只读 `git ls-remote --heads gitlab-migration` 与 `git ls-remote --tags gitlab-migration` 回读目标 refs，与迁移范围内的源 OID 清单逐项比较分支/tag 名和对象 ID；所有应迁移的 refs 都须存在且匹配。另核实 GitLab 项目 namespace、可见性、default branch，LFS 对象可读，以及所需子模块仍可取用。任何缺失、差异或 API/网络错误均为未完成；先回读实际效果，不重复创建或盲目推送。
+push 的退出码不够。分别用只读 `git ls-remote --heads <verified-gitlab-target-url>` 与 `git ls-remote --tags <verified-gitlab-target-url>` 回读目标 refs，与迁移范围内的源 OID 清单逐项比较分支/tag 名和对象 ID；所有应迁移的 refs 都须存在且匹配。另核实 GitLab 项目 namespace、可见性、default branch，LFS 对象可读，以及所需子模块仍可取用。任何缺失、差异或 API/网络错误均为未完成；先回读实际效果，不重复创建或盲目推送。
 
 GitLab default branch 若与确认的 GitHub default branch 不一致，只有在 refs 已存在且用户明确授权调整项目设置后修改并回读；保护/权限策略不能由默认分支名称推定。
 
-## 5. 可选本地 cutover 与迁移后的服务
+## 5. 保持本地 Git 配置不变
 
-- 只有迁移验收通过且用户明确要求本地切换时，才把 GitLab 设为 `origin`、将原 GitHub remote 保留为 `github`（或经核实的无冲突别名），并为所需分支设置对应 upstream。操作前核查别名占用；不能删除/丢弃 GitHub remote、原分支、worktree 或配置。切换后回读 remote 身份、全部 push URL 和分支 upstream。
+- 本迁移流程绝不对源 checkout 执行本地 cutover：不把 GitLab 设为 `origin`，不把 GitHub remote 改名为 `github`，不添加临时 remote，不改 remote URL、fetch/push URL、分支 upstream、push 默认值或 `.git/config`。现有配置必须保持原样。需要使用命名 remote 的 CLI 操作只能在源项目之外的隔离临时 clone/copy 中进行；优先将经核实的 GitLab URL 作为单次命令参数。迁移期间不因用户提出切换要求而修改源配置；将其留作迁移之外的独立后续任务。
 - GitHub 项目保持原状。归档、删除、改名、转移 owner、关闭 Issue/PR、改写外部链接、撤销 secrets/keys 或修改可见性都是单独操作，须有分别覆盖该动作的明确授权及回读。
 - 若用户要迁移 Issues/PRs、Releases、Wiki、CI、保护规则等 hosted data，先逐类列出源对象范围、GitLab 目标表示、缺失/不可映射字段和可验证结果；按目标 GitLab.com 当前官方功能及必要的 `gh`/`glab` 文档确认方法。PR→MR、Issue 编号、标签/里程碑、评论/审核、附件、wiki refs、CI secrets 与保护策略不能假定一一对应。凭据只使用本机已认证 CLI/安全凭据机制，不嵌入 URL、日志或文件；无官方、可核对的路径或授权不足时，明确报告该类未迁移，不声称全量完成。
 
 ## 完成报告
 
-按类别报告：已核实的 GitHub 源和 GitLab 目标；迁移的分支/tag 数量及 OID 验证结果；LFS/submodule 状态；default branch/可见性；本地 `origin` 是否已切换；仍保留在 GitHub 或未迁移的 hosted data；实际验证及失败/不明项。不要把“Git refs 已迁移”说成“整个 GitHub 项目及其服务数据全部迁移”。
+按类别报告：已核实的 GitHub 源和 GitLab 目标；迁移的分支/tag 数量及 OID 验证结果；LFS/submodule 状态；default branch/可见性；源 checkout 的 Git 配置是否保持不变；仍保留在 GitHub 或未迁移的 hosted data；实际验证及失败/不明项。不要把“Git refs 已迁移”说成“整个 GitHub 项目及其服务数据全部迁移”。

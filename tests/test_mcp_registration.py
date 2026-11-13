@@ -84,7 +84,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             self.assertIn("GitLab", client.instructions)
             self.assertIn("GitHub→GitLab 仓库迁移", client.instructions)
             self.assertIn("git push --mirror", client.instructions)
-            self.assertIn("GitLab 切到 origin", client.instructions)
+            self.assertIn("不得修改源 checkout 的 Git 配置", client.instructions)
+            self.assertNotIn("GitLab 切到 origin", client.instructions)
             for name in (
                 "audit_gitlab_repository_state",
                 "list_gitlab_issue_labels",
