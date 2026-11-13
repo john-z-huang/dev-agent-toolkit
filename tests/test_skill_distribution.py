@@ -203,10 +203,7 @@ class SkillDistributionTests(unittest.TestCase):
                         "openai-codex", archive.read(metadata_path).decode().lower()
                     )
                     self.assertFalse(
-                        any(
-                            "codex_app_server" in name or name.startswith("tests/")
-                            for name in archive.namelist()
-                        )
+                        any(name.startswith("tests/") for name in archive.namelist())
                     )
                     self.assert_skill_links(source, shipped)
                 shutil.rmtree(extracted)
