@@ -1,6 +1,6 @@
 # GitLab 托管仓库兼容规则
 
-从当前任务、已核实 remote 和平台信息确定 GitHub 或 GitLab，不能仅凭域名猜自托管平台；混合平台、多 remote 和 Fork 分别核实目标。纯 Git、worktree、暂存和提交不依赖 GitHub 登录。授权、正常 hooks、保留用户改动、非强推、已发布分支不 rebase、基线和清理条件跨平台一致。
+从当前任务、已核实 remote 和平台信息确定 GitHub 或 GitLab，不能仅凭域名猜自托管平台；混合平台、多 remote 和 Fork 分别核实目标。纯 Git、worktree、暂存和提交不依赖 GitHub 登录。授权、正常 hooks、保留用户改动、非强推、已发布分支不 rebase、基线和清理条件跨平台一致。GitHub 仓库迁移到 GitLab 的独立端到端流程见 [GitHub→GitLab 迁移](github-to-gitlab-migration.md)；当前没有单一 MCP 迁移工具。
 
 ## 项目、身份与编号
 

@@ -82,6 +82,9 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
             self.assertIn("host/group[/subgroup]/project", client.instructions)
             self.assertIn("GitLab", client.instructions)
+            self.assertIn("GitHub→GitLab 仓库迁移", client.instructions)
+            self.assertIn("git push --mirror", client.instructions)
+            self.assertIn("GitLab 切到 origin", client.instructions)
             for name in (
                 "audit_gitlab_repository_state",
                 "list_gitlab_issue_labels",

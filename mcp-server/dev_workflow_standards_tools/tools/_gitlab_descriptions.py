@@ -17,6 +17,8 @@ GitLab MR 正文生成可复用 generate_skill_content 的 kind=pr，事实中�
 合并必须单独授权；pipeline、审批、冲突与保护必须满足，不以 GitHub required checks API 代替 GitLab 状态。
 created=null 或 merged=null 且 write_attempted=true 表示写入结果不明；先回读实际资源，禁止自动重试。
 GitLab 跨项目 Fork MR 的创建与本地清理未被这些封装覆盖；先核实 source/target 项目及分支拓扑，按能力缺口规则补足，不能绕过失败。
+
+GitHub→GitLab 仓库迁移没有单一 MCP 工具，是多阶段 Git/gh/glab 操作；命令不能传入 MCP。先确认迁移范围：Git commits/全部所需 branches/tags、Git LFS 与本地未推送 refs，和 Issues/PRs、Releases、Wiki、Actions、保护规则等 hosted data 是不同类别；范围未明时先问，不能把普通 push 说成平台数据迁移。核实绝对 repo_path、GitHub 源 owner/repo、GitLab 当前身份、完整 gitlab.com namespace/project、源默认分支及精确 refs/OID；同名不证明目标身份。目标存在时核对是否空/refs 是否兼容；非空或有冲突即停，不覆盖、不强推。不存在时只有用户明确授权且可见性/default branch 已确认才创建空项目。保持 GitHub 源和 origin 不变，先加未占用的临时 GitLab remote；未授权前不创建项目、不推 refs/LFS、不改 remote。不要用 git push --mirror、--force 或 --prune；从当前 GitHub refs 清单迁移全部获准的 branches/tags，并逐项比较 GitLab 回读 OID。浅历史、local-only 同名分叉、LFS 缺失、保护分支拒绝或写入不明均失败关闭，先回读/问用户。LFS 若存在须独立迁移与验收；submodule 是独立仓库。只有 Git 数据验收通过且用户明确要求，才把 GitLab 切到 origin 并将 GitHub remote 保留为 github；归档/删除源、迁移 hosted data、CI/secrets/权限设置均须分别确认和验证。服务/权限/网络实际失败不是 CLI 能力缺口，不能换入口绕过。完整步骤见 Skill 的 references/github-to-gitlab-migration.md。
 """.strip()
 
 COMMON = (

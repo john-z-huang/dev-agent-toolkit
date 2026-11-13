@@ -31,7 +31,7 @@ Hook 是指令合同，由 Agent 根据实际事实判断适用性，不是宿�
 
 ## 共用边界
 
-- 托管操作先核实 GitHub 或 GitLab 平台及准确目标；GitLab 使用 `glab` 和对应 Issue/MR 工具，详见 [GitLab 兼容规则](references/gitlab.md)。通用 Git、worktree、提交、授权及非强推约束跨平台一致；纯 Git 动作不依赖 GitHub 登录，自托管平台不能仅凭域名猜测。
+- 托管操作先核实 GitHub 或 GitLab 平台及准确目标；GitLab 使用 `glab` 和对应 Issue/MR 工具，详见 [GitLab 兼容规则](references/gitlab.md)。GitHub 仓库迁移到 GitLab 的范围、验收和无强推流程见 [GitHub→GitLab 迁移](references/github-to-gitlab-migration.md)。通用 Git、worktree、提交、授权及非强推约束跨平台一致；纯 Git 动作不依赖 GitHub 登录，自托管平台不能仅凭域名猜测。
 
 - 用户意图和宿主权限共同约束当前动作；既有授权在原范围持续有效，不因换工具重复询问，也不扩大到提交、推送、合并、删除、历史重写、配置或 Memory 写入。
 - 准确识别仓库/worktree 和资源；repo-bound 工具显式传绝对 `repo_path`。保留用户现有内容，结果依据真实回读，不编造测试、文件、提交或远端状态。
