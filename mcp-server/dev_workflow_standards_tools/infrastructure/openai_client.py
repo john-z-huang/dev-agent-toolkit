@@ -497,3 +497,37 @@ async def parse_response(
         ),
         purpose=purpose,
     )
+
+
+async def create_web_search_response(
+    *, instructions: str, input: str, allowed_domains: list[str], reasoning_effort: str
+) -> Any:
+    """通过统一审核与重试边界执行搜索，不接受任意工具或模型覆盖。"""
+    budgets = {"low": 4096, "medium": 8192, "high": 16384}
+    if reasoning_effort not in budgets:
+        raise OpenAIWorkflowError("invalid_search_effort")
+    search_tool: dict[str, Any] = {
+        "type": "web_search",
+        "external_web_access": True,
+        "search_context_size": "medium",
+    }
+    if allowed_domains:
+        search_tool["filters"] = {"allowed_domains": list(allowed_domains)}
+    payload = {
+        "model": MODEL_NAME,
+        "instructions": str(instructions),
+        "input": str(input),
+        "tools": [search_tool],
+        "tool_choice": "required",
+        "include": ["web_search_call.action.sources"],
+        "reasoning": {"effort": reasoning_effort},
+        "max_output_tokens": budgets[reasoning_effort],
+        "store": False,
+        "truncation": "disabled",
+    }
+    # 审核、实际发送和重试共享同一快照，避免等待期间调用者修改域名列表。
+    return await _invoke(
+        payload,
+        lambda client: client.responses.create(**payload),
+        purpose="根据公开查询执行联网搜索，返回有来源支撑的摘要和引用。",
+    )

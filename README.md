@@ -266,6 +266,8 @@ MCP 进程必须能继承上述两个 OpenAI 环境变量；需要代理时还�
 
 ## 本地验证
 
+没有原生联网能力的 coding agent 可调用新增的 `web_search`：固定 `gpt-6-luna`，自动按查询复杂度选择推理强度，通过 Responses API 检索公开网页并返回带引用摘要和来源。输入示例、环境要求与错误处理见 [公开网络搜索](skills/dev-workflow-standards/references/web-search.md)。
+
 在 `mcp-server/` 使用项目环境运行离线测试：
 
 ```text

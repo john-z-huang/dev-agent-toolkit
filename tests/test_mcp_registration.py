@@ -228,9 +228,9 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
     async def test_all_tools_registered_with_described_schemas(self) -> None:
         self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
         tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 53)
+        self.assertEqual(len(tools), 54)
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 53)
+        self.assertEqual(len(by_name), 54)
         self.assertNotIn("decide_skill_workflow", by_name)
         for tool in tools:
             self.assertTrue(tool.description, tool.name)

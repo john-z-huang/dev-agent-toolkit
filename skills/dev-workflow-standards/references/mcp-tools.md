@@ -32,6 +32,7 @@ GitLab 使用 `glab`，不使用 `gh` 或 GitHub `owner/repo` 校验。9 个对�
 
 | 工具 | 输入 | 返回 |
 |---|---|---|
+| `web_search` | `request`：必填公开 `query`；可选域名白名单、回答语言 | 固定 gpt-6-luna，Decisions 自适应选择 low/medium/high，Responses 强制联网；返回摘要、行内引用和真实来源，不读取本地项目。详见 [公开网络搜索](web-search.md)。 |
 | `check_api_input` | 强类型 `request`，仅必填非空字符串 `purpose`、`content`；不接受目标工具名或仓库路径参数 | 默认允许联网审核，无需前置审核或逐次人工授权；自身仍先执行本地静态检测，再进行 Decisions 审核。不检查文件或目录路径，凭据、隐私及不透明载荷等审核继续。查看 `passed`、状态及安全修订提示。通过后允许当前任务所需项目内容向既定配置服务外发，无需重复确认；不扩大其他操作权限。实际出站仍强制复检，详见 [`API 输入审核`](api-input-review.md)。 |
 | `decide_codex_session_action` | 强类型 `request`：历史读取状态、事实覆盖、保存限制和新增事实来源 | Decisions 的查询与持久化分支；不能用当前新事实更新历史摘要。 |
 | `start_issue_pr_draft` / `revise_issue_pr_draft` | 首轮完整draft；修订携带会话ID、版本、唯一请求ID、反馈及显式证据变更 | 进程内有界修订，生成与独立审查；反馈不等于证据，重启失效。详见[多轮协议](openai-workflow-tools.md#issuepr-多轮修订草稿)。 |
