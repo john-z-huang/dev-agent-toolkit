@@ -4,6 +4,23 @@
 script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
 
 case "${1:-}" in
+    --uv-build)
+        shift
+        exec uv build --managed-python "$script_dir/mcp-server" --out-dir "$script_dir/dist" "$@"
+        ;;
+    --uv-tool-install)
+        shift
+        if [[ $# -eq 0 || ( $# -eq 1 && $1 == --force ) ]]; then
+            version="$(uv version --short --project "$script_dir/mcp-server")" || exit $?
+            wheel="$script_dir/dist/dev_workflow_standards_tools-$version-py3-none-any.whl"
+            if [[ ! -f "$wheel" ]]; then
+                printf '找不到当前版本的 wheel，请先运行 ./dws --uv-build。\n  %s\n' "$wheel" >&2
+                exit 1
+            fi
+            set -- "$@" "$wheel"
+        fi
+        exec uv tool install --managed-python "$@"
+        ;;
     --hooks-install|--hooks-update)
         operation="$1"
         shift
@@ -37,6 +54,9 @@ case "${1:-}" in
     --help|-h|"")
         cat <<'HELP'
 用法：./dws 操作参数 [对应操作的选项]
+  --uv-build        仅构建 mcp-server 发行包，输出到仓库的 dist/
+  --uv-tool-install [--force]  安装 dist/ 中与项目版本匹配的 wheel
+  --uv-tool-install [uv 选项] <wheel 路径>  安装指定 wheel
   --mcp-install     安装 MCP 服务，并在 Codex 中注册和配置
   --mcp-update      更新 MCP 服务，并在 Codex 中注册和配置
   --skills-install  从已安装的完整发行包安装技能（Skill）
@@ -46,7 +66,7 @@ case "${1:-}" in
   --hooks-install   安装原生 Codex Hooks（--global 或 --project-root）
   --hooks-update    更新受管 Hooks，拒绝覆盖本地修改
 技能和 AGENTS.md 操作不安装或更新 MCP 服务，也不修改 MCP 注册。
-在操作参数后加 --help 查看对应选项，加 --dry-run 预览。
+在操作参数后加 --help 查看对应选项。MCP、Skill、AGENTS.md 和 Hooks 操作支持 --dry-run。
 兼容原 MCP 参数，例如 --install --force 或 --env-only。
 HELP
         exit 0
