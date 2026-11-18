@@ -9,7 +9,7 @@
 | 准备生成或运行 Python/Shell | [执行环境](environment.md) | [Python](../references/python-environment.md)、[Shell](../references/shell-environment.md) |
 | 准备创建、同步、恢复或移除 worktree | [Worktree](worktree.md) | [基线同步](../references/worktree-base-sync.md)、[受限恢复](../references/worktree-recovery.md) |
 | 准备暂存或提交 | [暂存与提交](git-commit.md) | [暂存检查](../references/check-staged-changes.md)、[Git Hook](../references/git-hooks.md) |
-| 准备创建 Issue、推送、创建 PR/MR、合并 | [托管资源](github-delivery.md) | [GitHub 策略](../references/github.md)、[GitLab 兼容](../references/gitlab.md)、[Fork](../references/fork-maintenance.md)、[堆叠 PR](../references/stacked-pr.md) |
+| 准备调用 gh 或访问 GitHub 的 MCP/Connector，或准备创建 Issue、推送、创建 PR/MR、合并 | [托管资源](github-delivery.md) | [GitHub 策略](../references/github.md)、[GitLab 兼容](../references/gitlab.md)、[Fork](../references/fork-maintenance.md)、[堆叠 PR](../references/stacked-pr.md) |
 | 引用历史会话事实或准备保存摘要 | [会话事实](session-facts.md) | [来源与格式](../references/codex-session-facts.md) |
 | 准备外发 API 请求 | [外部 API](external-api.md) | [审核](../references/api-input-review.md)、[请求协议](../references/openai-workflow-tools.md) |
 | 失败、拒绝、冲突、结果不明 | [恢复](recovery.md) | [环境权限](../references/environment.md)、[CLI](../references/cli-fallback.md) |
