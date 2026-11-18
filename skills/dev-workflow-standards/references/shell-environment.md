@@ -4,7 +4,7 @@
 
 ## 本机 macOS 环境事实
 
-本机交互 Shell 默认为 Zsh 5.9，Bash 和 sh 的版本为 `3.2.57(1)-release`。这些是本机事实，不是所有 macOS、容器或远端环境的通用版本保证；在其他环境中按实际可用 Shell 和版本判断。
+本机交互 Shell 默认为 Zsh 5.9，系统自带的 `/bin/bash` 和 `/bin/sh` 版本为 `3.2.57(1)-release`。在其他 macOS、容器或远端环境中，按实际可用的 Shell 和版本判断。
 
 ## 本地新生成脚本
 
@@ -12,6 +12,27 @@
 - Bash 脚本文件第一行必须使用 `#!/bin/bash` 或 `#!/usr/bin/env bash` 声明运行环境，避免被默认 Zsh 按不兼容语法执行。
 - 为本机生成的 Bash 脚本必须兼容 Bash `3.2.57(1)-release`，不使用超过该版本的特性。例如不要使用关联数组、`mapfile` 或 `readarray`。
 - 按 shebang 执行可执行脚本，或显式使用适用的 Bash；不要用 `zsh script.sh` 或 `sh script.sh` 验证 Bash 脚本的运行行为。
+
+### 直接在终端运行
+
+Code Agent 为 macOS 本地终端生成可直接粘贴运行的 Bash 命令时，推荐使用 `bash -c '...'` 或 `bash <<'EOF'`。给 `-c` 的命令字符串或 here-document 的分隔符加单引号，正文中的变量和命令替换就会由 Bash 在执行时展开。
+
+简短且便于用单引号整体包裹的命令适合用 `bash -c '...'`。
+
+```bash
+bash -c 'values=(alpha beta); printf "%s\n" "${values[0]}"'
+```
+
+多行脚本或含单引号的正文适合用 `bash <<'EOF'`。结束行的 `EOF` 顶格单独书写。
+
+```bash
+bash <<'EOF'
+values=(alpha beta)
+printf '%s\n' "${values[0]}"
+EOF
+```
+
+`bash` 按当前 `PATH` 解析。需要明确使用 macOS 自带的 Bash 3.2 时，使用 `/bin/bash -c '...'` 或 `/bin/bash <<'EOF'`。
 
 ## 已有脚本
 
@@ -27,7 +48,8 @@
 
 | 场景 | 处理 |
 |---|---|
-| 本机默认终端是 Zsh，需要新建本地脚本 | 生成带 Bash shebang 的 Bash 3.2 兼容脚本。 |
+| 在本机 Zsh 终端直接运行 Bash 命令 | 简短命令推荐用 `bash -c '...'`，多行脚本推荐用 `bash <<'EOF'`，正文兼容 Bash 3.2。 |
+| 新建本地 Bash 脚本文件 | 生成带 Bash shebang 的 Bash 3.2 兼容脚本。 |
 | 本地已有 Zsh 脚本 | 检查 Zsh 5.9 兼容性，按已有 shebang 或显式 Zsh 执行。 |
 | 容器或远端尚未确认 Bash/Zsh 可用 | 优先编写可由 `sh` 执行的脚本，不使用 Bash 专属语法。 |
 | 已确认目标环境存在 Bash，任务需要其特性 | 可以选择 Bash，并按目标实际版本检查兼容性。 |
