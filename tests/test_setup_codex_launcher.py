@@ -12,6 +12,86 @@ LAUNCHER = Path(__file__).resolve().parents[1] / "dws"
 
 @unittest.skipUnless(Path("/bin/bash").is_file(), "requires Bash")
 class SetupLauncherTests(unittest.TestCase):
+    def test_uv_operations_forward_only_the_selected_command(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="uv launcher ") as directory:
+            root = Path(directory).resolve()
+            uv = root / "uv"
+            uv.write_text(
+                "#!/bin/bash\nprintf '%s\\0' \"$@\"\nexit 23\n", encoding="utf-8"
+            )
+            uv.chmod(0o755)
+            for operation, options, command in (
+                (
+                    "--uv-build",
+                    ["--wheel"],
+                    [
+                        "build",
+                        "--managed-python",
+                        str(LAUNCHER.parent / "mcp-server"),
+                        "--out-dir",
+                        str(LAUNCHER.parent / "dist"),
+                    ],
+                ),
+                (
+                    "--uv-tool-install",
+                    ["--force", "dist with spaces/package.whl"],
+                    ["tool", "install", "--managed-python"],
+                ),
+            ):
+                with self.subTest(operation=operation):
+                    result = subprocess.run(
+                        [str(LAUNCHER), operation, *options],
+                        cwd=root,
+                        env={**os.environ, "PATH": f"{root}:/usr/bin:/bin"},
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 23, result.stderr)
+                    self.assertEqual(
+                        result.stdout.decode().split("\0")[:-1], [*command, *options]
+                    )
+
+    def test_default_tool_install_requires_the_current_project_wheel(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="uv launcher ") as directory:
+            root = Path(directory).resolve()
+            checkout = root / "checkout with spaces"
+            dist = checkout / "dist"
+            dist.mkdir(parents=True)
+            launcher = checkout / LAUNCHER.name
+            shutil.copy2(LAUNCHER, launcher)
+            uv = root / "uv"
+            uv.write_text(
+                '#!/bin/bash\n'
+                'if [ "$1" = version ]; then\n'
+                '    printf "2.3.4rc1\\n"\n'
+                'else\n'
+                '    printf "%s\\0" "$@"\n'
+                'fi\n',
+                encoding="utf-8",
+            )
+            uv.chmod(0o755)
+            (dist / "dev_workflow_standards_tools-2.3.3-py3-none-any.whl").touch()
+            wheel = dist / "dev_workflow_standards_tools-2.3.4rc1-py3-none-any.whl"
+            command = [str(launcher), "--uv-tool-install"]
+            env = {**os.environ, "PATH": f"{root}:/usr/bin:/bin"}
+
+            result = subprocess.run(command, cwd=root, env=env, capture_output=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn(b"./dws --uv-build", result.stderr)
+            self.assertEqual(result.stdout, b"")
+
+            wheel.touch()
+            for options in ([], ["--force"]):
+                with self.subTest(options=options):
+                    result = subprocess.run(
+                        [*command, *options], cwd=root, env=env, capture_output=True
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(
+                        result.stdout.decode().split("\0")[:-1],
+                        ["tool", "install", "--managed-python", *options, str(wheel)],
+                    )
+
     def test_tool_lookup_failure_does_not_fall_back_to_path_or_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

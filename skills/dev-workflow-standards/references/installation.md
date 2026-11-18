@@ -16,6 +16,13 @@ Skill 指令从发布包复制为普通文件快照。开发仓库可以放在�
 
 操作参数放在首位，每次选择一项；其余参数传给对应管理程序：
 
+| 独立操作 | 执行范围 |
+| --- | --- |
+| `--uv-build` | 调用 `uv build` 构建仓库的 `mcp-server/`，输出到仓库的 `dist/`。 |
+| `--uv-tool-install [--force]` | 调用 `uv tool install` 安装 `dist/` 中与项目当前版本匹配的 wheel；重装时加 `--force`。 |
+
+这两项独立于 MCP 注册和指令更新。使用各自的 `--help` 查看 uv 选项。需要指定其他 wheel 或传递更多 uv 选项时，使用 `--uv-tool-install [uv 选项] <wheel 路径>`，相对路径以调用目录为准。
+
 | 资源 | 安装参数 | 更新参数 | 执行范围 |
 | --- | --- | --- | --- |
 | MCP Server | `--mcp-install` | `--mcp-update` | 安装或更新软件包、注册服务并配置环境变量转发。 |
@@ -44,11 +51,11 @@ Skill 支持 `--target` 和 `--dry-run`。全局指令支持 `--source`、`--dry
 
 ## 安装发布包
 
-以下构建、安装和更新命令均在本仓库根目录执行。先构建完整 wheel，再从 `./dist/` 安装；示例对应当前版本 `0.2.0`，版本变更时使用该目录中实际生成的 wheel 文件名。本项目不假定已有公开包索引。
+以下命令在仓库根目录执行。先构建完整 wheel，再安装 `dist/` 中与 `mcp-server/pyproject.toml` 当前版本匹配的产物。
 
 ```bash
-uv build ./mcp-server --out-dir ./dist
-uv tool install ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
+./dws --uv-build
+./dws --uv-tool-install
 "$(uv tool dir --bin)/dev-workflow-standards" skills install --dry-run
 "$(uv tool dir --bin)/dev-workflow-standards" skills install
 "$(uv tool dir --bin)/dev-workflow-standards" skills show
@@ -65,8 +72,8 @@ uv tool install ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
 源码或文档变更后，在仓库根目录重新构建并更新工具。先按实际构建产物更新 wheel，再显式更新已安装 Skill；软件包安装不会自动更新 Skill 快照：
 
 ```bash
-uv build ./mcp-server --out-dir ./dist
-uv tool install --force ./dist/dev_workflow_standards_tools-0.2.0-py3-none-any.whl
+./dws --uv-build
+./dws --uv-tool-install --force
 "$(uv tool dir --bin)/dev-workflow-standards" skills update --dry-run
 "$(uv tool dir --bin)/dev-workflow-standards" skills update
 "$(uv tool dir --bin)/dev-workflow-standards" skills show
@@ -110,7 +117,7 @@ uv tool dir --bin
 
 默认 Skill 目录 `~/.agents/skills/dev-workflow-standards-skill` 可被 Pi 发现；更新已安装快照后用 `/reload` 重新加载。Skill 更新不等于 MCP 更新或重连。
 
-MCP 可通过源码的 `scripts/setup-pi-mcp.py` 注册已安装的 uv tool（可选 `--install` 安装）；此脚本不包含在 Skill Markdown 快照中。详见 [README 的 Pi 安装说明](https://github.com/john-z-huang/dev-workflow-standards#给-pi-code-agent-注册-mcp)。Pi 原生配置为用户级 `~/.pi/agent/mcp.json` 或已信任项目的 `.pi/mcp.json`；stdio 继承启动环境，调用时限字段为 `timeout`（秒），不照搬 Codex `env_vars` 或 `tool_timeout_sec`。注册会写配置，需要对应授权；替换同名服务前保留自定义设置。连接状态、实际工具发现及只读调用才是验证证据，注册成功不等于可用。
+MCP 可通过源码的 `scripts/setup-pi-mcp.py` 注册已安装的 uv tool（可选 `--install` 安装）；此脚本不包含在 Skill Markdown 快照中。详见 [Pi 安装说明](https://github.com/john-z-huang/dev-workflow-standards/blob/main/INSTALL.md#给-pi-code-agent-注册-mcp)。Pi 原生配置为用户级 `~/.pi/agent/mcp.json` 或已信任项目的 `.pi/mcp.json`；stdio 继承启动环境，调用时限字段为 `timeout`（秒），不照搬 Codex `env_vars` 或 `tool_timeout_sec`。注册会写配置，需要对应授权；替换同名服务前保留自定义设置。连接状态、实际工具发现及只读调用才是验证证据，注册成功不等于可用。
 
 `agents update` / `--agents-*` 仍只管理 Codex 全局 `~/.codex/AGENTS.md`，`--hooks-*` 仍只管理原生 Codex Hooks；它们不是 Pi 全局指令或扩展安装入口，也不是 Pi 使用 Skill/MCP 的前置条件。不自动迁移或修改 Pi 全局配置。审批与工具发现见 [Skill 入口](../SKILL.md#宿主审批兼容)。
 
@@ -128,12 +135,12 @@ MCP 可通过源码的 `scripts/setup-pi-mcp.py` 注册已安装的 uv tool（�
 
 每次实际改变已有全局文件前，默认先把原字节备份到 `~/.codex/AGENTS_BAK_<Unix秒时间戳>.md`。备份失败或同秒名称冲突即停止，不覆盖已有备份；目标不存在、内容不变及只读预览不产生备份。备份由用户自行保留和选择恢复，不自动删除。目标文件、受管记录和锁仅服务于本次全局文件更新，不注册 MCP、不修改其他配置。更新期间停止外部编辑，发生中断时先核对实际目标、记录和备份再恢复；不要仅凭退出前的文字认定成功。
 
-详细命令和边界见 [仓库全局指令说明](https://github.com/john-z-huang/dev-workflow-standards#版本管理与更新全局-agentsmd)。
+详细命令和边界见 [仓库全局指令说明](https://github.com/john-z-huang/dev-workflow-standards/blob/main/INSTALL.md#版本管理与更新全局-agentsmd)。
 
 ## MCP 与源码辅助脚本
 
 原 `dev-workflow-standards-tools` 命令仍直接启动 stdio MCP。Skill 管理入口是另一个命令，不向该入口加入隐式安装动作。MCP 注册、环境变量名称转发及审批继续遵循原规则。
 
-源码入口的操作参数见本文前面的“源码仓库的安装更新入口”，注册、转发和审批选项见 [README 的 Codex 安装说明](https://github.com/john-z-huang/dev-workflow-standards#codex-中安装)。仅注册已有 MCP 安装可运行 `./dws --server dev-workflow-standards-tools`；仅修复已注册服务的转发声明使用 `--env-only`。无参数不再执行注册，只打印帮助。原 Python 入口及 `--install`、`--install --force` 等 MCP 参数仍兼容。
+源码入口的操作参数见本文前面的“源码仓库的安装更新入口”，注册、转发和审批选项见 [Codex 安装说明](https://github.com/john-z-huang/dev-workflow-standards/blob/main/INSTALL.md#codex-中安装)。仅注册已有 MCP 安装可运行 `./dws --server dev-workflow-standards-tools`；仅修复已注册服务的转发声明使用 `--env-only`。无参数不再执行注册，只打印帮助。原 Python 入口及 `--install`、`--install --force` 等 MCP 参数仍兼容。
 
 根目录入口通过 `exec` 调用 `scripts/setup-codex-mcp.py` 执行 MCP 操作，两者必须保持仓库中的相对路径。入口不依赖调用者的工作目录，原样转发参数与退出状态。这两个脚本属于源码开发资产，不包含在 Skill 快照中。完整仓库结构和 Hook/历史兼容脚本见 [项目仓库](https://github.com/john-z-huang/dev-workflow-standards)。独立 Skill 不依赖这些脚本才能加载；固定操作优先按 [MCP 工具目录](mcp-tools.md) 调用已注册服务，未提供工具或功能未覆盖时按 [CLI 补充规约](cli-fallback.md) 在任务授权内完成。
