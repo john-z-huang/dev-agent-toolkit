@@ -4,11 +4,13 @@
 
 ## 进入条件
 
-准备创建/修改 Issue、推送分支、创建/修改 PR 或合并时适用各自动作条件；本地存在 remote 不触发发布。Git Hook 配置和历史重写另需相应明确授权，见 [Git Hook](../references/git-hooks.md)、[历史维护](../references/rewrite-weather-commit-subjects.md)。
+准备使用 `gh` 或调用访问 GitHub 的 MCP/Connector 时，适用 GitHub 账号核验条件。准备创建/修改 Issue、推送分支、创建/修改 PR 或合并时，适用各自动作条件。本地存在 remote 不触发发布。Git Hook 配置和历史重写另需相应明确授权，见 [Git Hook](../references/git-hooks.md)、[历史维护](../references/rewrite-weather-commit-subjects.md)。
 
 ## 执行条件
 
 共用：准确平台、主机/仓库（GitHub owner/repo；GitLab host/group[/subgroup]/project）、账号、目标资源、相关分支及授权已核实；网络/认证失败不改用浏览器绕过。真实 Fork 才适用 [Fork 拓扑](../references/fork-maintenance.md)。
+
+GitHub：先运行 `ghwho`，再按 [多账号核验](../references/github.md#多账号核验) 确认实际执行身份及目标仓库权限。切换账号后重新核验。所有已登录账号均缺少所需权限时停止相关操作并请用户介入。
 
 Issue：正文说明具体问题/目标、范围和验收；至少一个已核实工作类型标签，按策略指派本人。文案可用 `generate_skill_content`，候选须核对事实和质量再发布。
 
