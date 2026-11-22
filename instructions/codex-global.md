@@ -9,6 +9,43 @@ token-io-decoupling 和 dev-workflow-standards 只在各自适用范围内执行
 用户针对当前任务给出的明确目标、业务要求和验收标准属于 Semantic Contract 的输入；除非更高优先级指令要求，否则不要因为 Skill 的一般性建议而擅自改变用户明确要求的任务结果。
 
 
+## 本机 macOS Shell 命令
+
+**每条在本机 macOS 执行的 Shell 命令都必须显式调用 Bash。** 这条规则从首次 Shell 工具调用起生效，包括读取 Skill、查看文件、检查环境等辅助命令，也适用于提供给用户直接运行的命令。Zsh 只可作为外层启动器，完整的命令正文必须交给 Bash。
+
+**生成命令前先按用途选择解释器。** 只要命令或脚本要反复执行、保存或分发，就按「重复执行或分发」处理，即使这次只运行一次来验证。
+
+### 高版本bash环境
+
+**按需探测新版 Bash。** 本机临时命令默认使用系统 `/bin/bash` 和 Bash 3.2 兼容写法，包括读取 Skill、查看文件等辅助命令。只有 Code Agent 判断当前命令需要 Bash 3.2 不支持的语法或特性时，才运行下面的只读检查，查找 Homebrew 安装的新版 Bash。可复用当前环境中已核实的路径和版本。
+
+```bash
+/bin/bash -c 'prefix=$(brew --prefix bash) && [[ "$prefix" == /* && -x "$prefix/bin/bash" ]] && echo "Homebrew Bash 版本" && "$prefix/bin/bash" --version && echo "Homebrew Bash 可执行文件路径" && printf "%s\n" "$prefix/bin/bash"'
+```
+
+- **确认新版 Bash 可执行且支持所需特性**后，用它生成并运行当前临时命令。命令须以已核实的 Bash 绝对路径开头，例如用 `绝对路径 -c '…'` 指定解释器。环境变化后重新核实。
+- **探测失败、版本不高于 3.2 或不满足所需特性**时，使用 `/bin/bash` 和 Bash 3.2 兼容写法。如果没有兼容写法，说明所需的最低版本。
+
+下面用 `pwd` 演示已核实的 Bash 绝对路径调用格式。
+
+```bash
+/opt/homebrew/opt/bash/bin/bash -c 'pwd'
+```
+
+### 重复执行或分发
+
+**重复执行、保存或分发的命令和脚本必须兼容 Bash 3.2。本机验证必须用系统 `/bin/bash` 实际运行验证对象。** 即使当前会话已探测到 Homebrew Bash，或刚用它执行过临时命令，验证可复用命令时也必须显式调用 `/bin/bash -c`，验证脚本文件时用 `/bin/bash script.sh`。脚本文件用 Bash shebang 声明解释器，保持可移植性。
+
+读取文件等临时辅助命令按实际所需特性选择解释器。可复用的验证对象仍须用 `/bin/bash` 执行。
+
+### 命令写法
+
+内联命令用选定的 Bash 绝对路径配合 `-c`，多行命令也可用带引号的 here-document。将管道、重定向和展开留在 Bash 正文中。动态值可通过位置参数传入，并用 `"$1"` 等引用。用户明确指定其他 Shell，或正文明确在容器或远端执行时，按对应目标环境选择解释器。
+
+```bash
+/bin/bash -c 'printf "%s\n" "$1"' bash 'path with spaces'
+```
+
 ## Skill Availability
 
 如果无法找到、读取或正确加载本文件要求的 Skill，不要凭记忆重建规则；停止依赖该 Skill 的工作，并报告具体阻塞原因和无法加载的路径。所需能力缺失或未知时，按相应 Skill 的阻塞规则处理，不得静默替换能力、模型、参数或执行路线。
@@ -20,9 +57,7 @@ token-io-decoupling Skill 仅适用于 Coding 工作：项目或仓库探索、�
 
 简单日常事务，以及完全由其他专用 Skill 处理且不包含 Coding 工作的任务，无需加载本 Skill；混合任务只要包含 Coding 工作，仍须加载。
 
-适用任务开始前，加载并阅读 [token-io-decoupling Skill]({{HOME}}/.agents/skills/token-io-decoupling-skill/SKILL.md)，按其 `Start here` 完成 Contract、Environment 和 Mode 检查点，选择且只选择一条执行路线，并按该路线完成检查点和 Acceptance。该 Skill 在整个任务期间持续生效。
-
-运行环境分支、模型与参数绑定、角色和 Session 拓扑、Context Firewall、验证边界以及其他调度规则，以该 Skill 和它引用的 owner 文档为准；本文件不重复维护这些策略。运行环境与模型规则见 [运行环境与模型厂商支持]({{HOME}}/.agents/skills/token-io-decoupling-skill/references/coding/layer-01-fundamental-concepts/session-runtime/runtime-provider-support_zh_cn.md)。
+适用任务开始前，加载并阅读 [token-io-decoupling Skill]({{HOME}}/.agents/skills/token-io-decoupling-skill/SKILL.md)，按其入口和当前任务适用的参考资料执行。该 Skill 在整个任务期间持续生效。
 
 
 ## 开发工作流规范
