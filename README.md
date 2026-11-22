@@ -38,6 +38,10 @@ Git/GitHub/GitLab 写操作必须满足对应动作的用户授权和执行层�
 
 维护服务或工具时，必须同步更新客户端可见的说明，不能只改本文件。尤其要区分只读与离线、本地校验与 API 建议、候选内容与已执行操作，以及操作失败与部分副作用。初始化和工具发现检查应验证说明、输入约束和工具注解与实现一致；说明不得改变已有参数类型、默认值或校验规则。
 
+### 项目 Memory 只读工具
+
+`serena_memory_tail_read` 读取 MCP 启动项目中指定 Memory 的尾部，`serena_memory_write_check` 检查预期文本是否出现在同一范围。两个工具均离线运行，从实际启动目录下的 `.serena/memories/` 读取。路径范围、参数和状态见 [MCP 工具目录](skills/dev-workflow-standards/references/mcp-tools.md#项目-memory-只读工具)。
+
 ### Codex 会话事实辅助工具
 
 - `get_codex_session_summary_guidance`：获取默认阅读问题与完整摘要模板；可传自定义问题或模板，以用户明确要求为准。

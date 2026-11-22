@@ -228,9 +228,9 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
     async def test_all_tools_registered_with_described_schemas(self) -> None:
         self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
         tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 54)
+        self.assertEqual(len(tools), 56)
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 54)
+        self.assertEqual(len(by_name), 56)
         self.assertNotIn("decide_skill_workflow", by_name)
         for tool in tools:
             self.assertTrue(tool.description, tool.name)
@@ -240,6 +240,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             "get_codex_session_summary_guidance",
             "order_codex_session_sources",
             "prepare_codex_session_memory",
+            "serena_memory_tail_read",
+            "serena_memory_write_check",
         }
         ai_names = {
             "decide_codex_session_action",

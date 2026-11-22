@@ -64,6 +64,17 @@ Pi 工具默认可能间接暴露：先用 `searchTools` / `describeTool` 核对
 
 使用会话事实要求原文来源可追溯；准备摘要要求准确项目、去重及当前写入许可；保存成功以实际内容回读为准。这些是相应动作的数据条件，不规定统一调用路线。用户禁止持久化时仅只读参考；本工具不会绕过该限制。完整规约见 [`codex-session-facts.md`](codex-session-facts.md)。
 
+## 项目 Memory 只读工具
+
+两个工具从 MCP 进程启动目录下的 `.serena/memories/` 读取本地 UTF-8 文件。先核实实际启动目录是目标项目根。名称支持子目录、可选 `mem:` 前缀和可选 `.md` 后缀。绝对路径、全局 Memory、越界路径及符号链接均会被拒绝。
+
+| 工具 | 输入 | 用途 |
+|---|---|---|
+| `serena_memory_tail_read` | `memory_path`, `tail_lines` | 返回总行数、所读行号范围和尾部文本，保留 LF、CRLF 和 CR 行尾。 |
+| `serena_memory_write_check` | `memory_path`, `changed_content`, `tail_lines` | 在相同范围内做区分大小写的字面匹配，返回 `success` 和匹配偏移。匹配只能证明该范围包含预期文本。 |
+
+`tail_lines` 为 0–10000 的整数，0 返回空文本和总行数。所读尾部与 `changed_content` 各限 64000 字符。目录或文件缺失、不可读或超限时返回 `status=unavailable` 和 `reason_code`。两项均离线执行，不写入文件或 Memory，实际保存使用宿主可用并获准的 Memory 工具。
+
 ## 检查与只读审计
 
 | 工具 | 输入 | 用途 |
