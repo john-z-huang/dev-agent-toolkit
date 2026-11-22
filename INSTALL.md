@@ -47,15 +47,14 @@ Skill 的安装、更新和查看均使用上述显式入口，定位到 `uv too
 
 全局指令的唯一源文件是 [`instructions/codex-global.md`](instructions/codex-global.md)，与仓库根目录的项目 `AGENTS.md` 分开维护。模板可使用 `{{HOME}}` 引用当前用户的绝对主目录。全局指令可以独立于 Skill 安装和更新。
 
-从仓库源文件预览并更新时，先按上文构建并安装包含本次修改的完整 wheel，再在仓库根目录执行：
+仓库中的 `./dws --agents-update` 通过已安装的管理 CLI 读取当前 checkout 的模板。安装管理 CLI 后，可在仓库根目录预览并更新：
 
 ```bash
-"$(uv tool dir --bin)/dev-workflow-standards" agents show --source ./instructions/codex-global.md
-"$(uv tool dir --bin)/dev-workflow-standards" agents update --source ./instructions/codex-global.md --dry-run
-"$(uv tool dir --bin)/dev-workflow-standards" agents update --source ./instructions/codex-global.md --adopt
+./dws --agents-update --dry-run
+./dws --agents-update
 ```
 
-目标固定为当前用户的 `~/.codex/AGENTS.md`。首次接管已有文件须显式传入 `--adopt`；内容相同时只建立受管记录，不重写目标或创建备份，后续正常更新不需要该参数。不传 `--source` 时使用已安装发布包内的指令源，脱离开发仓库也能运行。`show` 返回状态和内容指纹，`--dry-run` 返回差异、冲突和预计备份名；两者均不创建目录、备份、锁文件或受管记录。管理命令会校验模板中实际使用的占位符和本地绝对链接。
+目标固定为当前用户的 `~/.codex/AGENTS.md`。首次接管已有文件须显式传入 `--adopt`；内容相同时只建立受管记录，不重写目标或创建备份，后续正常更新不需要该参数。项目入口可用 `--source` 指定其他模板。直接运行已安装的 `dev-workflow-standards agents` 命令时，省略 `--source` 会读取发布包内的指令源，适用于脱离仓库使用。`show` 返回状态和内容指纹，`--dry-run` 返回差异、冲突和预计备份名；两者均不创建目录、备份、锁文件或受管记录。管理命令会校验模板中实际使用的占位符和本地绝对链接。
 
 每次实际更新或覆盖已有目标前，默认将原文件逐字节备份到 `~/.codex/AGENTS_BAK_<秒级时间戳>.md`，其中时间戳为 Unix 秒数。备份失败或同一秒的备份名称已存在时停止，不覆盖旧备份、不增加后缀。目标不存在或内容相同时不创建备份。受管文件有本地修改时默认拒绝更新，审阅差异后可显式使用 `--replace-local`，仍须先备份。备份不会自动清理；需要恢复时先保留当前内容，再人工选择对应备份恢复。
 
@@ -101,7 +100,7 @@ Skill 的安装、更新和查看均使用上述显式入口，定位到 `uv too
 ./dws --agents-update --dry-run
 ```
 
-Skill 选项包括 `--target`、`--dry-run`；全局指令选项包括 `--source`、`--dry-run`、`--adopt`、`--replace-local`。`--agents-install` 和 `--agents-update` 均复用管理 CLI 的 `agents update`：目标不存在时创建，已有未知文件仍需显式 `--adopt`，不会绕过备份或本地修改保护。资源操作使用已安装包内的内容；需要最新源码时，先独立更新完整发行包。各操作后加 `--help` 查看选项；原 MCP 参数 `--install`、`--install --force`、`--env-only` 仍兼容。
+Skill 选项包括 `--target`、`--dry-run`；全局指令选项包括 `--source`、`--dry-run`、`--adopt`、`--replace-local`。`--agents-install` 和 `--agents-update` 均复用管理 CLI 的 `agents update`：目标不存在时创建，已有未知文件仍需显式 `--adopt`，备份和本地修改保护仍然生效。全局指令默认使用当前 checkout 的模板。Skill 操作使用已安装发行包内的快照，更新快照前先更新发行包。各操作后加 `--help` 查看选项；原 MCP 参数 `--install`、`--install --force`、`--env-only` 仍兼容。
 
 更新已有安装：
 
