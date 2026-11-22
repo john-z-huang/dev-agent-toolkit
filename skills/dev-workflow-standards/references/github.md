@@ -20,6 +20,25 @@ GitLab 按 [GitLab 兼容规则](gitlab.md) 选择对应工具及字段。Issue�
 
 命令参数见 [GitHub CLI 账号状态](https://cli.github.com/manual/gh_auth_status)、[账号切换](https://cli.github.com/manual/gh_auth_switch)和[仓库查询](https://cli.github.com/manual/gh_repo_view)。
 
+## 正文草稿
+
+1. 选择 [Issue 模板](../assets/issue.md)或 [PR 模板](../assets/pr.md)。用户指定模板或输出结构时优先遵循。标题单独填写，草稿只保存正文；标签、指派、base/head 等作为创建参数按下文核实。
+2. 直接运行 Skill 自带的[独立 Python 脚本](../scripts/github_draft.py)，仅需 Python 3 标准库。脚本从自身所在 Skill 的 `assets/` 读取模板，可在任意工作目录调用。以下示例使用默认安装路径；自定义安装时使用实际脚本路径。将 `issue` 换为 `pr` 即使用 PR 模板。使用用户指定的草稿路径，未指定时选择任务独立的临时目录。父目录须已存在；已有文件会保留。用户提供其他模板时，创建和检查均传入同一 `--template 文件路径`。
+
+   ```bash
+   /bin/bash -c 'python3 "$HOME/.agents/skills/dev-workflow-standards-skill/scripts/github_draft.py" create issue ./issue.md'
+   ```
+
+3. 按下文的事实与提交证据要求逐节填写，移除模板提示。使用 `generate_skill_content` 时将选定结构传入 `output_format`，核对候选的 `quality_status`、`adoptable` 和缺失事实后再采纳。默认用中文；用户明确指定其他语言时沿用现有语言覆盖规则。
+4. 填写后运行[独立格式校验脚本](../scripts/validate_github_draft.py)。脚本检查二级章节及其顺序、空章节和残留的模板提示。使用默认 PR 模板时，在「关联 Issue」一节单独写一行关闭引用，如 `Closes #123`，也可写成列表项。检查成功返回 0，失败返回非零并指出原因。
+
+   ```bash
+   /bin/bash -c 'python3 "$HOME/.agents/skills/dev-workflow-standards-skill/scripts/validate_github_draft.py" issue ./issue.md'
+   /bin/bash -c 'python3 "$HOME/.agents/skills/dev-workflow-standards-skill/scripts/validate_github_draft.py" pr ./pr.md'
+   ```
+
+   回读最终文件，核对验收与验证状态准确、PR 关闭引用匹配目标 Issue。报告草稿路径。需要发布且满足相应授权和条件时，把文件全文作为创建工具的 `body` 传入；适用 CLI 补充路径时用同一文件作为 `--body-file`。
+
 ## Issue
 
 任何待推送功能或修复必须有关联的开放 Issue。用户明确要求推送时，若没有相关 Issue，可以按该用户指令直接补建，不再另问。

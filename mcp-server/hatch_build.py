@@ -10,6 +10,9 @@ from urllib.parse import unquote, urlsplit
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 
+_SKILL_SCRIPTS = {"scripts/github_draft.py", "scripts/validate_github_draft.py"}
+
+
 def _skill_payload(source: Path) -> dict[str, bytes]:
     """校验 Skill 文件类型及内部链接，并读取独立发布所需的完整快照。"""
     payload = {}
@@ -19,12 +22,14 @@ def _skill_payload(source: Path) -> dict[str, bytes]:
         if path.is_dir():
             continue
         name = path.relative_to(source).as_posix()
-        if path.suffix != ".md" or any(
+        if (path.suffix != ".md" and name not in _SKILL_SCRIPTS) or any(
             part.startswith(".") for part in path.relative_to(source).parts
         ):
-            raise ValueError("Skill 源只允许显式维护的 Markdown 资料")
+            raise ValueError("Skill 源只允许 Markdown 资料及指定的 GitHub 草稿脚本")
         payload[name] = path.read_bytes()
     for name, data in payload.items():
+        if not name.endswith(".md"):
+            continue
         for link in re.findall(r"\]\(([^)]+)\)", data.decode("utf-8")):
             url = urlsplit(link)
             if url.scheme or not url.path:

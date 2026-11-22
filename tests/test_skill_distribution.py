@@ -23,6 +23,8 @@ class SkillDistributionTests(unittest.TestCase):
     def assert_skill_links(self, source: Path, shipped: dict[str, bytes]) -> None:
         """逐个检查随 wheel 发布的相对链接，确保发布快照完整且没有越界。"""
         for name, data in shipped.items():
+            if not name.endswith(".md"):
+                continue
             for link in re.findall(r"\]\(([^)]+)\)", data.decode()):
                 url = urlsplit(link)
                 if url.scheme or not url.path:
@@ -152,6 +154,8 @@ class SkillDistributionTests(unittest.TestCase):
                         p.relative_to(source).as_posix(): p.read_bytes()
                         for p in source.rglob("*.md")
                     }
+                    for script in ("scripts/github_draft.py", "scripts/validate_github_draft.py"):
+                        expected_files[script] = (source / script).read_bytes()
                     self.assertEqual(shipped, expected_files)
                     self.assertIn("hooks/index.md", shipped)
                     self.assertIn("hooks/recovery.md", shipped)
