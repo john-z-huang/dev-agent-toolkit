@@ -38,8 +38,10 @@ case "${1:-}" in
         case "$operation" in
             --skills-install) set -- skills install "$@" ;;
             --skills-update) set -- skills update "$@" ;;
-            # agents update 已支持首次创建，并保留已有文件的接管与备份校验。
-            --agents-install|--agents-update) set -- agents update "$@" ;;
+            --agents-install|--agents-update)
+                # 项目入口默认读取当前模板，调用方可用后面的 --source 覆盖。
+                set -- agents update --source "$script_dir/instructions/codex-global.md" "$@"
+                ;;
         esac
         exec "$tool_bin/dev-workflow-standards" "$@"
         ;;
@@ -61,8 +63,8 @@ case "${1:-}" in
   --mcp-update      更新 MCP 服务，并在 Codex 中注册和配置
   --skills-install  从已安装的完整发行包安装技能（Skill）
   --skills-update   从已安装的完整发行包更新技能（Skill）
-  --agents-install  创建全局 AGENTS.md；已有文件须显式接管
-  --agents-update   更新全局 AGENTS.md，保留接管、备份与冲突校验
+  --agents-install  从仓库模板创建全局 AGENTS.md；已有文件须显式接管
+  --agents-update   从仓库模板更新全局 AGENTS.md，保留备份与冲突校验
   --hooks-install   安装原生 Codex Hooks（--global 或 --project-root）
   --hooks-update    更新受管 Hooks，拒绝覆盖本地修改
 技能和 AGENTS.md 操作不安装或更新 MCP 服务，也不修改 MCP 注册。

@@ -110,12 +110,16 @@ class SetupLauncherTests(unittest.TestCase):
             self.assertEqual(result.returncode, 19, result.stderr)
 
     def test_resource_operations_use_only_installed_management_cli(self) -> None:
-        operations = {
-            "--skills-install": ["skills", "install"],
-            "--skills-update": ["skills", "update"],
-            "--agents-install": ["agents", "update"],
-            "--agents-update": ["agents", "update"],
-        }
+        source = str(LAUNCHER.parent / "instructions" / "codex-global.md")
+        agents = ["agents", "update", "--source", source]
+        operations = (
+            ("--skills-install", [], ["skills", "install"]),
+            ("--skills-update", [], ["skills", "update"]),
+            ("--agents-install", [], agents),
+            ("--agents-update", [], agents),
+            ("--agents-update", ["--source", "custom template.md"], agents),
+            ("--agents-update", ["--source=custom template.md"], agents),
+        )
         with tempfile.TemporaryDirectory(prefix="installed tools ") as directory:
             root = Path(directory)
             (root / "uv").write_text(
@@ -129,10 +133,11 @@ class SetupLauncherTests(unittest.TestCase):
             )
             for executable in (root / "uv", cli):
                 executable.chmod(0o755)
-            for operation, expected in operations.items():
-                with self.subTest(operation=operation):
+            for operation, options, expected in operations:
+                with self.subTest(operation=operation, options=options):
                     result = subprocess.run(
-                        [str(LAUNCHER), operation, "--dry-run"],
+                        [str(LAUNCHER), operation, *options, "--dry-run"],
+                        cwd=root,
                         env={**os.environ, "PATH": f"{root}:/usr/bin:/bin"},
                         capture_output=True,
                         check=False,
@@ -140,7 +145,7 @@ class SetupLauncherTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 24, result.stderr)
                     self.assertEqual(
                         result.stdout.decode().split("\0")[:-1],
-                        [*expected, "--dry-run"],
+                        [*expected, *options, "--dry-run"],
                     )
 
     def test_explicit_mcp_operations_select_install_or_update(self) -> None:
