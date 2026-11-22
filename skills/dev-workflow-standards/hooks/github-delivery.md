@@ -14,6 +14,8 @@ GitHub：先运行 `ghwho`，再按 [多账号核验](../references/github.md#�
 
 Issue：正文说明具体问题/目标、范围和验收；至少一个已核实工作类型标签，按策略指派本人。文案可用 `generate_skill_content`，候选须核对事实和质量再发布。
 
+新建 GitHub Issue 或 PR 时，按[正文草稿](../references/github.md#正文草稿)从对应模板生成并填写独立的 Markdown 文件，回读定稿后用于创建。
+
 推送：当前需求分支、origin、开放 Issue、label、本人 assignee、提交范围和适用检查正确，工具要求的干净状态满足，仅非强推。用户明确要求推送时，既有策略同时涵盖补齐缺失 Issue 和创建关联开放 PR，不涵盖合并/关闭。
 
 PR：已推送 head 与准确 base、开放 Issue 和关闭关联明确；[堆叠 PR](../references/stacked-pr.md) 不默认 main。正文、本人 assignee 与资源关系可核验。

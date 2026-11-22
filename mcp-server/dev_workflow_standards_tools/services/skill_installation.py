@@ -61,7 +61,10 @@ def _manifest(data: bytes) -> dict:
                     part in {"", ".", ".."} or part.startswith(".")
                     for part in path.parts
                 )
-                or path.suffix != ".md"
+                or (
+                    path.suffix != ".md"
+                    and name not in {"scripts/github_draft.py", "scripts/validate_github_draft.py"}
+                )
                 or len(name) > 240
                 or not isinstance(digest, str)
                 or len(digest) != 64
