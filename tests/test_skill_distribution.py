@@ -270,23 +270,9 @@ class SkillDistributionTests(unittest.TestCase):
             run([*args, "update", "--target", str(target)], expected=1)
             self.assertEqual((target / "user-notes.md").read_text(), "keep this")
 
-            # wheel 独立包含全局模板；所需本地链接仅在临时 HOME 内补齐，不写真实用户文件。
+            # 在未安装 Skill 的临时主目录中验证 wheel 自带的全局模板。
             global_home.mkdir(parents=True, exist_ok=True)
-            global_skill = (
-                global_home / ".agents" / "skills" / "dev-workflow-standards-skill"
-            )
-            shutil.copytree(ROOT / "skills" / "dev-workflow-standards", global_skill)
-            rendered_source = global_source.read_text(encoding="utf-8").replace(
-                "{{HOME}}", str(global_home)
-            )
-            for link in re.findall(r"\]\(([^)]+)\)", rendered_source):
-                url = urlsplit(link)
-                if url.scheme or not url.path.startswith(str(global_home) + "/"):
-                    continue
-                dependency = Path(unquote(url.path))
-                dependency.parent.mkdir(parents=True, exist_ok=True)
-                if not dependency.exists():
-                    dependency.write_text("test local dependency\n", encoding="utf-8")
+            self.assertFalse((global_home / ".agents" / "skills").exists())
             agent_args = [str(cli), "agents"]
             agent_target = global_home / ".codex" / "AGENTS.md"
             preview = json.loads(run([*agent_args, "update", "--dry-run"]).stdout)
@@ -295,7 +281,7 @@ class SkillDistributionTests(unittest.TestCase):
             self.assertEqual(
                 json.loads(run([*agent_args, "update"]).stdout)["status"], "updated"
             )
-            self.assertTrue(agent_target.is_file())
+            self.assertEqual(agent_target.read_bytes(), global_source.read_bytes())
             show_agents = json.loads(run([*agent_args, "show"]).stdout)
             self.assertEqual(show_agents["status"], "up_to_date")
 

@@ -34,7 +34,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     agent_commands = agents.add_subparsers(dest="action", required=True)
     show = agent_commands.add_parser(
-        "show", help="只读查看候选内容哈希、目标状态和本地依赖"
+        "show", help="只读校验模板并查看候选内容哈希和目标状态"
     )
     show.add_argument(
         "--source", help="显式 Markdown 模板路径；默认使用 wheel 中独立打包的模板"

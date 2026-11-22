@@ -28,55 +28,13 @@ class GlobalAgentsTests(unittest.TestCase):
         self.target = self.home / ".codex" / "AGENTS.md"
         self.metadata = self.home / ".codex" / ".AGENTS.md.dev-workflow-standards.json"
         self.lock = self.home / ".codex" / ".AGENTS.md.global-agents.lock"
-        self._install_dependencies()
 
     def tearDown(self):
         self.env.stop()
         self.temporary.cleanup()
 
     def _template(self, body: str) -> str:
-        links = (
-            ("token skill", ".agents/skills/token-io-decoupling-skill/SKILL.md"),
-            ("runtime", ".agents/skills/token-io-decoupling-skill/runtime.md"),
-            ("dev skill", ".agents/skills/dev-workflow-standards-skill/SKILL.md"),
-            (
-                "hook index",
-                ".agents/skills/dev-workflow-standards-skill/hooks/index.md",
-            ),
-            (
-                "mcp tools",
-                ".agents/skills/dev-workflow-standards-skill/references/mcp-tools.md",
-            ),
-            (
-                "recovery",
-                ".agents/skills/dev-workflow-standards-skill/hooks/recovery.md",
-            ),
-            (
-                "code understanding",
-                ".agents/skills/dev-workflow-standards-skill/references/code-understanding.md",
-            ),
-        )
-        return (
-            "# Global instructions\n\n"
-            + body
-            + "\n\n"
-            + "\n".join(f"[{label}]({{{{HOME}}}}/{path})" for label, path in links)
-            + "\n"
-        )
-
-    def _install_dependencies(self):
-        for relative in (
-            ".agents/skills/token-io-decoupling-skill/SKILL.md",
-            ".agents/skills/token-io-decoupling-skill/runtime.md",
-            ".agents/skills/dev-workflow-standards-skill/SKILL.md",
-            ".agents/skills/dev-workflow-standards-skill/hooks/index.md",
-            ".agents/skills/dev-workflow-standards-skill/references/mcp-tools.md",
-            ".agents/skills/dev-workflow-standards-skill/hooks/recovery.md",
-            ".agents/skills/dev-workflow-standards-skill/references/code-understanding.md",
-        ):
-            path = self.home / relative
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("local test dependency\n", encoding="utf-8")
+        return f"# Global instructions\n\n{body}\n"
 
     def _manage(self, action="update", **options):
         return self.global_agents.manage_global_agents(
@@ -196,14 +154,14 @@ class GlobalAgentsTests(unittest.TestCase):
             self._manage(dry_run=True)
 
     def test_missing_link_dependency_fails_before_any_target_write(self):
-        dependency = (
-            self.home
-            / ".agents/skills/dev-workflow-standards-skill/references/mcp-tools.md"
-        )
-        dependency.unlink()
+        self._set_candidate("[Local notes]({{HOME}}/notes.md)")
         with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "缺失"):
             self._manage()
         self.assertFalse(self.home.joinpath(".codex").exists())
+
+        (self.home / "notes.md").write_text("notes\n", encoding="utf-8")
+        self.assertEqual(self._manage()["status"], "updated")
+        self.assertEqual(self.target.read_bytes(), self._rendered())
 
     def test_malformed_metadata_fails_closed_even_with_override(self):
         self._manage()

@@ -119,8 +119,6 @@ def _render(template: bytes, home: Path) -> bytes:
         text = template.decode("utf-8")
     except UnicodeError:
         raise GlobalAgentsError("全局 AGENTS 指令源必须是 UTF-8 Markdown") from None
-    if HOME_PLACEHOLDER not in text:
-        raise GlobalAgentsError("全局 AGENTS 指令源缺少 {{HOME}} 占位符")
     text = text.replace(HOME_PLACEHOLDER, str(home))
     if (
         "{{" in text
@@ -130,10 +128,7 @@ def _render(template: bytes, home: Path) -> bytes:
     ):
         raise GlobalAgentsError("全局 AGENTS 指令源包含未知或格式错误的占位符")
 
-    # Validate every local absolute Markdown reference that is anchored at this
-    # user's home, and require both Skill entrypoints independently of the source.
     home_prefix = str(home).rstrip("/") + "/"
-    found_paths = set()
     for link in _MARKDOWN_LINK.findall(text):
         parsed = urlsplit(link)
         if parsed.scheme or not parsed.path.startswith("/"):
@@ -148,14 +143,6 @@ def _render(template: bytes, home: Path) -> bytes:
         if path.is_symlink() or not _lexists(path):
             raise GlobalAgentsError("全局 AGENTS 指令源引用的本地文件缺失或为符号链接")
         _read_regular(path, label="全局 AGENTS 链接目标")
-        found_paths.add(path)
-
-    required = {
-        home / ".agents" / "skills" / "token-io-decoupling-skill" / "SKILL.md",
-        home / ".agents" / "skills" / "dev-workflow-standards-skill" / "SKILL.md",
-    }
-    if not required.issubset(found_paths):
-        raise GlobalAgentsError("全局 AGENTS 指令源必须链接两个已安装 Skill 入口")
     return text.encode("utf-8")
 
 
