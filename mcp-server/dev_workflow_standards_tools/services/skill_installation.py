@@ -19,7 +19,6 @@ from pathlib import Path, PurePosixPath
 
 OWNER = "dev-workflow-standards-tools"
 SKILL = "dev-workflow-standards"
-DEFAULT_DIRECTORY = "dev-workflow-standards-skill"
 MARKER = ".dev-workflow-skill.json"
 MAX_FILES = 200
 MAX_BYTES = 2_000_000
@@ -94,19 +93,13 @@ def _target(raw: str | None) -> Path:
     raw = (
         raw
         if raw is not None
-        else str(Path.home() / ".agents" / "skills" / DEFAULT_DIRECTORY)
+        else str(Path.home() / ".agents" / "skills" / SKILL)
     )
     if not raw or "\x00" in raw or ".." in Path(raw).parts:
         raise SkillError("目标不能为空或含路径穿越")
     target = Path(os.path.abspath(Path(raw).expanduser()))
     if target == Path(target.anchor):
         raise SkillError("不能将文件系统根目录作为 Skill 目标")
-    legacy = Path.home() / ".agents" / "skills" / SKILL
-    for protected in (legacy, legacy.resolve()):
-        if target.is_relative_to(protected) or protected.is_relative_to(target):
-            raise SkillError(
-                "旧项目目录受保护；请使用 dev-workflow-standards-skill 或其他独立目标"
-            )
     for path in reversed((target, *target.parents)):
         if path.is_symlink():
             raise SkillError("目标或祖先目录是符号链接；请提供真实且独立的路径")
@@ -168,7 +161,7 @@ def _installed(target: Path) -> tuple[dict, dict[str, str]]:
     try:
         data = _read_regular(target / MARKER)
     except FileNotFoundError:
-        raise SkillError("目标不是本工具管理的安装；不会迁移或覆盖旧目录") from None
+        raise SkillError("目标不是本工具管理的安装") from None
     manifest = _manifest(data)
     snapshot = _snapshot(target)
     if snapshot != {**manifest["files"], MARKER: _digest(data)}:
@@ -260,7 +253,7 @@ def _skill_preflight(action: str, target: Path) -> tuple[dict | None, dict | Non
     _target(str(target))
     if action == "install":
         if target.exists():
-            raise SkillError("目标已存在；不覆盖旧目录，受管安装请使用 skills update")
+            raise SkillError("目标已存在；受管安装请使用 skills update")
         return None, None
     return _installed(target)
 

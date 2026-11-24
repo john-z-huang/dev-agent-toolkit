@@ -28,7 +28,7 @@
 
 Skill 的安装、更新和查看均使用上述显式入口，定位到 `uv tool` 安装的完整发行包，避免裸命令被 `PATH` 中的其他同名入口、别名或命令缓存影响。路径外的双引号用于保留目录中的空格。
 
-默认目标为 `~/.agents/skills/dev-workflow-standards-skill`；`--target` 可指定仓库外的独立目标目录。旧项目路径 `~/.agents/skills/dev-workflow-standards` 及会覆盖它的目标受到保护，即使显式指定或已有受管清单也不能作为安装/更新目标；指向同一位置的链接不能绕过保护。首次安装仍拒绝所有已有目标，不会自动迁移、覆盖或删除旧项目。`~/.codex/skills` 不作为默认自定义安装位置，显式选择兼容路径时也执行同样的保护检查。
+默认目标为 `~/.agents/skills/dev-workflow-standards`，与 Skill 名称一致。`--target` 可指定仓库外的独立目标目录。首次安装要求目标目录尚不存在。
 
 源码或文档变更后，在仓库根目录重新构建并安装 wheel，再显式更新已安装指令；安装软件包本身不会更新 Skill 快照：
 
@@ -39,7 +39,7 @@ Skill 的安装、更新和查看均使用上述显式入口，定位到 `uv too
 "$(uv tool dir --bin)/dev-workflow-standards" skills update
 ```
 
-显式目标安装的，查看和更新也要传同一 `--target`。更新只接受本工具管理且未修改的完整安装；用户修改、额外内容、链接或特殊文件都会阻止覆盖。macOS/Linux 通过原子目录发布保全原安装，不支持的文件系统/平台不降级执行。预览不写文件，独立 Skill 安装离线且不注册 MCP、不读取 OpenAI 凭据、不安装 Hook。旧版共存、中断残留和人工迁移边界见 [完整安装说明](skills/dev-workflow-standards/references/installation.md)。
+显式目标安装的，查看和更新也要传同一 `--target`。更新只接受本工具管理且未修改的完整安装；用户修改、额外内容、链接或特殊文件都会阻止覆盖。macOS/Linux 通过原子目录发布保全原安装，不支持的文件系统/平台不降级执行。预览不写文件，独立 Skill 安装离线且不注册 MCP、不读取 OpenAI 凭据、不安装 Hook。中断残留的处理见 [完整安装说明](skills/dev-workflow-standards/references/installation.md#安装与更新中断处理)。
 
 `dev-workflow-standards` 是独立管理入口；原 `dev-workflow-standards-tools` 仍直接启动 stdio MCP。需要 MCP 功能时，按 [Codex](#codex-中安装) 或 [Pi Code Agent](#给-pi-code-agent-注册-mcp) 的说明注册服务。
 

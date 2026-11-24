@@ -63,7 +63,7 @@ Skill 支持 `--target` 和 `--dry-run`。全局指令支持 `--source`、`--dry
 
 安装、更新和查看 Skill 时均通过 `uv tool dir --bin` 定位工具入口，明确使用从完整 wheel 安装的版本，避免依赖 Shell 对裸命令的解析。保留完整路径外的双引号，以支持包含空格的目录。
 
-默认目标为 `~/.agents/skills/dev-workflow-standards-skill`。`--target` 可指定仓库外的独立目标目录；支持显式选择兼容目录，但不默认写入 `~/.codex/skills`，也不覆盖任何已有目标。路径不得含 `..`、符号链接祖先或位于 Git checkout 内。父目录可由正式安装创建；预览和查看不创建目录或锁文件。目录后缀不改变 `SKILL.md` 中的技能名称，源码指令目录也保持不变。
+默认目标为 `~/.agents/skills/dev-workflow-standards`，与 `SKILL.md` 中的 Skill 名称一致。`--target` 可指定仓库外的独立目标目录。首次安装要求目标目录尚不存在。路径不得含 `..` 或符号链接，也不得位于 Git checkout 内。正式安装可创建父目录，预览和查看不创建目录或锁文件。
 
 命令离线读取包资源，不读取 OpenAI 凭据、不调用 OpenAI、不注册 MCP、不修改 Codex 配置，也不复制或启用 Hook。安装器写入资源、受管清单及同目标的持久锁文件。macOS/Linux 使用原子目录发布；其他平台或不支持原子操作的文件系统拒绝写入，不退回非原子覆盖。
 
@@ -81,7 +81,7 @@ Skill 支持 `--target` 和 `--dry-run`。全局指令支持 `--source`、`--dry
 
 使用显式目标安装的，更新和查看时继续传入同一 `--target`。查看输出包含包版本及已安装版本。重复 `install` 会拒绝已有目标；重复 `update` 在内容相同时返回 `unchanged`。源码文档变化不会影响已安装快照；相同包版本也会比较内容校验和。
 
-更新要求原清单归属正确，且全部文件与清单一致。用户修改、缺失文件、额外文件或目录、硬链接、符号链接和特殊文件均会阻止更新。未知旧目录没有受管清单，不会被自动接管。完整性清单用于检测损坏和修改，不是来源签名或授权凭证；安装包来源仍需用户核验。
+更新要求原清单归属正确，且全部文件与清单一致。缺少受管清单、用户修改、缺失文件、额外文件或目录、硬链接、符号链接和特殊文件均会阻止更新。完整性清单用于检测损坏和修改，安装包来源仍需用户核验。
 
 ## 包资源缺失与命令入口排查
 
@@ -105,9 +105,7 @@ uv tool dir --bin
 
 若明确的 uv 工具入口也失败，再检查该工具的安装来源和包内资源，按已核验的完整 wheel 重新安装。不要通过删除目标 Skill、手动复制资源或改动受管清单来跳过检查。
 
-## 现有 Skill 和中断处理
-
-已有 `~/.agents/skills/dev-workflow-standards` 是受保护的旧项目路径，不会被自动迁移、覆盖或删除。即使显式传入该路径、它的子路径或会覆盖它的父目录，或目录中已有受管清单，也会拒绝操作；解析到同一旧项目位置的目标同样受保护。使用新的默认目录 `~/.agents/skills/dev-workflow-standards-skill` 安装独立快照。避免同时让 Codex 加载两份同名 Skill；现有绝对路径引用不会自动调整。人工迁移和全局指令变更需另行确认。
+## 安装与更新中断处理
 
 安装/更新使用同目标的合作进程锁，竞争时失败而非排队覆盖。原子交换前后正式目录均为完整快照；强制终止可能留下 `.名称.skill-stage-*` 副本。先用 `"$(uv tool dir --bin)/dev-workflow-standards" skills show` 检查正式安装并人工核对副本，再决定如何处理；工具不自动清理未知残留。锁文件保留以维持同一锁身份，不应在安装进程运行时删除。
 
@@ -115,7 +113,7 @@ uv tool dir --bin
 
 ## Pi Code Agent 使用范围
 
-默认 Skill 目录 `~/.agents/skills/dev-workflow-standards-skill` 可被 Pi 发现；更新已安装快照后用 `/reload` 重新加载。Skill 更新不等于 MCP 更新或重连。
+默认 Skill 目录 `~/.agents/skills/dev-workflow-standards` 可被 Pi 发现；更新已安装快照后用 `/reload` 重新加载。Skill 更新不等于 MCP 更新或重连。
 
 MCP 可通过源码的 `scripts/setup-pi-mcp.py` 注册已安装的 uv tool（可选 `--install` 安装）；此脚本不包含在 Skill Markdown 快照中。详见 [Pi 安装说明](https://github.com/john-z-huang/dev-workflow-standards/blob/main/INSTALL.md#给-pi-code-agent-注册-mcp)。Pi 原生配置为用户级 `~/.pi/agent/mcp.json` 或已信任项目的 `.pi/mcp.json`；stdio 继承启动环境，调用时限字段为 `timeout`（秒），不照搬 Codex `env_vars` 或 `tool_timeout_sec`。注册会写配置，需要对应授权；替换同名服务前保留自定义设置。连接状态、实际工具发现及只读调用才是验证证据，注册成功不等于可用。
 
