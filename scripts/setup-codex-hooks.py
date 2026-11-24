@@ -51,7 +51,7 @@ def registration_arguments(args: argparse.Namespace) -> list[str]:
 
 
 def install_tool(command: list[str]) -> Path:
-    """执行 uv 安装并验证实际入口；失败时尚未开始配置注册。"""
+    """从源码构建、安装并验证实际入口；失败时尚未开始配置注册。"""
     subprocess.run(command, check=True, capture_output=True, timeout=120)
     result = subprocess.run(
         ["uv", "tool", "dir", "--bin"],
@@ -98,11 +98,11 @@ def main() -> int:
         parser.error("--project-root 必须是已存在的绝对目录")
     install_command = ["uv", "tool", "install", "--python", sys.executable]
     if args.update:
-        install_command.extend(["--force", "--reinstall"])
-    install_command.append(str(ROOT / "codex-hooks"))
+        install_command.append("--force")
+    install_command.extend(["--reinstall-package", TOOL, str(ROOT / "codex-hooks")])
     configure = registration_arguments(args)
     if args.dry_run or not (args.install or args.update):
-        print("预览：不安装软件包、不注册配置；以下为执行计划，未验证目标冲突。")
+        print("预览：不构建或安装软件包、不注册配置；以下为执行计划，未验证目标冲突。")
         print(shlex.join(install_command))
         print(f'"$(uv tool dir --bin)/{TOOL}" ' + shlex.join(configure))
         return 0

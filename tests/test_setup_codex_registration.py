@@ -375,6 +375,14 @@ class RegistrationTests(unittest.TestCase):
         add_index = next(i for i, (call, _) in enumerate(self.calls) if "add" in call)
         self.assertLess(install_index, add_index)
         self.assertIn("--force", self.calls[install_index][0])
+        self.assertEqual(
+            self.calls[install_index][0][-3:],
+            [
+                "--reinstall-package",
+                setup.DEFAULT_SERVER,
+                str(Path(setup.__file__).resolve().parents[1] / "mcp-server"),
+            ],
+        )
 
     def test_registration_dry_run_has_no_config_reads_or_subprocesses(self) -> None:
         with (

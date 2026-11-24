@@ -102,7 +102,7 @@ class SetupLauncherTests(unittest.TestCase):
             cli.write_text("#!/bin/bash\nexit 99\n", encoding="utf-8")
             cli.chmod(0o755)
             result = subprocess.run(
-                [str(LAUNCHER), "--skills-update"],
+                [str(LAUNCHER), "--skills-update", "--dry-run"],
                 env={**os.environ, "PATH": f"{root}:/usr/bin:/bin"},
                 capture_output=True,
                 check=False,
@@ -147,6 +147,66 @@ class SetupLauncherTests(unittest.TestCase):
                         result.stdout.decode().split("\0")[:-1],
                         [*expected, *options, "--dry-run"],
                     )
+
+    def test_resource_write_refreshes_tool_before_running_installed_cli(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="refresh tools ") as directory:
+            root = Path(directory)
+            uv = root / "uv"
+            uv.write_text(
+                '#!/bin/bash\n'
+                'printf "%s\\0" "$@" >> "$CALL_LOG"\n'
+                'if [[ "$2" == install ]]; then\n'
+                '    printf "build output\\n"\n'
+                '    exit "$INSTALL_STATUS"\n'
+                'fi\n'
+                'printf "%s\\n" "${0%/*}"\n',
+                encoding="utf-8",
+            )
+            cli = root / "dev-workflow-standards"
+            cli.write_text('#!/bin/bash\nprintf "%s\\0" "$@"\n', encoding="utf-8")
+            for executable in (uv, cli):
+                executable.chmod(0o755)
+            log = root / "calls"
+            environment = {
+                **os.environ,
+                "PATH": f"{root}:/usr/bin:/bin",
+                "CALL_LOG": str(log),
+            }
+            refresh = [
+                "tool",
+                "install",
+                "--managed-python",
+                "--reinstall-package",
+                "dev-workflow-standards-tools",
+                str(LAUNCHER.parent / "mcp-server"),
+            ]
+            lookup = ["tool", "dir", "--bin"]
+            skills = ["skills", "update"]
+            agents = [
+                "agents",
+                "update",
+                "--source",
+                str(LAUNCHER.parent / "instructions" / "codex-global.md"),
+            ]
+            for operation, options, status, uv_args, cli_args in (
+                ("--skills-update", [], 0, [*refresh, *lookup], skills),
+                ("--agents-update", [], 0, [*refresh, *lookup], agents),
+                ("--skills-update", [], 19, refresh, []),
+                ("--skills-update", ["--dry"], 0, lookup, [*skills, "--dry"]),
+                ("--skills-update", ["--help"], 0, lookup, [*skills, "--help"]),
+            ):
+                with self.subTest(operation=operation, options=options, status=status):
+                    log.write_bytes(b"")
+                    result = subprocess.run(
+                        [str(LAUNCHER), operation, *options],
+                        cwd=root,
+                        env={**environment, "INSTALL_STATUS": str(status)},
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, status, result.stderr)
+                    self.assertEqual(log.read_bytes().decode().split("\0")[:-1], uv_args)
+                    self.assertEqual(result.stdout.decode().split("\0")[:-1], cli_args)
 
     def test_explicit_mcp_operations_select_install_or_update(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

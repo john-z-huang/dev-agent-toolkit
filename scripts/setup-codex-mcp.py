@@ -480,20 +480,26 @@ def _preview_setup(args: argparse.Namespace) -> None:
     """仅输出安装、注册及变量转发计划，不读取配置或运行外部命令。"""
     if args.install:
         source = Path(__file__).resolve().parents[1] / "mcp-server"
-        print(f"Would install MCP tool from {source}")
+        print(f"Would build and install MCP tool from {source}")
     print(f"Would register or reuse Codex server {args.server}")
     print(f"Would merge env_vars {list(DEFAULT_ENV_NAMES)!r}")
 
 
 def _install_mcp_tool(force: bool) -> None:
-    """显式安装源码对应的 uv tool，并安全报告安装未完成的状态。"""
+    """从当前源码重新构建并安装 uv tool，包括版本号未变化的情况。"""
     uv = shutil.which("uv")
     if uv is None:
         raise SetupError("uv was not found on PATH")
     install_argv = [str(Path(uv).resolve()), "tool", "install", "--managed-python"]
     if force:
         install_argv.append("--force")
-    install_argv.append(str(Path(__file__).resolve().parents[1] / "mcp-server"))
+    install_argv.extend(
+        [
+            "--reinstall-package",
+            DEFAULT_SERVER,
+            str(Path(__file__).resolve().parents[1] / "mcp-server"),
+        ]
+    )
     try:
         _run(install_argv, stage="uv tool install", timeout=INSTALL_TIMEOUT)
     except SetupError as exc:

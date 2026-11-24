@@ -36,7 +36,7 @@ Hooks 作为独立的 `dev-workflow-standards-hooks` Python 发行包发布，�
 ./dws --hooks-install --project-root /absolute/path/to/project
 ```
 
-`dws` 调用带 PEP 723 声明的安装脚本，依次执行 `uv tool install ./codex-hooks`（使用安装器实际解释器；更新另加 `--force --reinstall`）、`uv tool dir --bin`、已安装入口版本核验，最后通过该入口的 `configure` 子命令管理配置。软件包安装与配置注册是两个阶段；注册失败不回滚已安装包，错误或超时不会自动批准或盲重试。不需要 MCP 软件包，也不依赖 `mcp-server/.venv`。
+`dws` 调用带 PEP 723 声明的安装脚本，使用安装器的 Python 执行 `uv tool install --reinstall-package dev-workflow-standards-hooks ./codex-hooks`，更新另加 `--force`。即使包版本相同，也会从本地源码重新构建。安装脚本随后定位并核验已安装 CLI，再用 `configure` 注册配置。注册失败时会保留已安装的包。Hooks 使用独立的 uv tool 环境。
 
 也可分别执行安装和注册：
 

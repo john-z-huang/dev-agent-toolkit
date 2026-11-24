@@ -56,9 +56,15 @@ class HooksSetupTests(unittest.TestCase):
                 self.assertEqual(setup.main(), 17)
             commands = [call.args[0] for call in run.call_args_list]
             self.assertEqual(commands[0][:3], ["uv", "tool", "install"])
-            self.assertIn("--reinstall", commands[0])
             self.assertIn("--force", commands[0])
-            self.assertEqual(commands[0][-1], str(SETUP.parent.parent / "codex-hooks"))
+            self.assertEqual(
+                commands[0][-3:],
+                [
+                    "--reinstall-package",
+                    setup.TOOL,
+                    str(SETUP.parent.parent / "codex-hooks"),
+                ],
+            )
             self.assertEqual(commands[2], [str(executable), "--version"])
             self.assertEqual(
                 commands[3], [str(executable), "configure", "--global", "--update"]
@@ -74,6 +80,7 @@ class HooksSetupTests(unittest.TestCase):
         ):
             self.assertEqual(setup.main(), 1)
             self.assertEqual(run.call_count, 1)
+            self.assertIn("--reinstall-package", run.call_args.args[0])
             self.assertNotIn("SENSITIVE", output.getvalue())
 
     def test_registration_timeout_reports_installed_package_and_uncertain_config(
