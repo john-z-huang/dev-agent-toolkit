@@ -1,8 +1,8 @@
-# Python 与 Shell 环境
+# Python、JavaScript 与 Shell 环境
 
 ## 进入条件
 
-准备选择 Python 解释器/依赖环境、安装或调整 Python 依赖，或执行 Python 脚本、模块、一次性命令时适用 Python 条件。准备生成、执行或验证 Shell 脚本或可直接在终端运行的命令块时适用 Shell 条件。无相关动作时不加载环境资料，也不增加 Git 工作。
+准备选择 Python 解释器/依赖环境、安装或调整 Python 依赖，或执行 Python 脚本、模块、一次性命令时适用 Python 条件。准备生成、执行或验证 Shell 脚本，或可直接在终端运行的 JavaScript、Python 等命令块时适用 Shell 条件。无相关动作时不加载环境资料，也不增加 Git 工作。
 
 ## 执行条件
 
@@ -11,6 +11,8 @@ Python 使用 [环境参考](../references/python-environment.md) 中用户/项�
 安装、添加、升级或修复 Modal 依赖，且本地环境需通过网络代理访问 Modal 平台时，同时遵循 [Modal 代理依赖规则](../references/python-environment.md#modal-代理依赖)。不将此规则套用于无关 Python 包或仅远端运行的环境。
 
 按 [Shell 参考](../references/shell-environment.md) 确认目标运行时。本机 macOS 命令用 Bash 绝对路径显式执行。使用 `-c` 或 Bash here-document 时，有业务参数必须传入 `_` 作为 `$0`，没有业务参数可省略 `_`。正文实际依赖 `$0` 时使用它所需的值。以脚本文件交付时核对 shebang，沿用已有脚本的运行环境约定。容器和远端的 Shell 能力按实际环境确认。
+
+直接在终端运行 JavaScript 或 Python 时，按 [内联和多行脚本规则](../references/shell-environment.md#在终端运行-javascript-和-python) 选择运行时和传参方式。JavaScript 先核对项目的运行时、版本及模块类型，Python 继续遵循本 Hook 的环境选择规则。
 
 ## 离开条件
 

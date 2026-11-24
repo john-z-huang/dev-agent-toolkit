@@ -62,3 +62,38 @@ BASH
 **重复执行、保存或分发的命令和脚本必须兼容 Bash 3.2。本机验证必须用系统 `/bin/bash` 实际运行验证对象。** 即使当前会话已探测到 Homebrew Bash，或刚用它执行过临时命令，验证可复用命令时也必须显式使用 `/bin/bash -c` 或相应的 here-document 写法，并按上文规则传入业务参数，验证脚本文件时用 `/bin/bash script.sh`。脚本文件用 Bash shebang 声明解释器，保持可移植性。
 
 读取文件等临时辅助命令按实际所需特性选择解释器。可复用的验证对象仍须用 `/bin/bash` 执行。
+
+### 在终端运行 JavaScript 和 Python
+
+本机 macOS 的 JavaScript 和 Python 命令也通过选定的 Bash 绝对路径启动。先核对项目根目录、运行时版本和依赖环境。JavaScript 示例使用 Node.js，项目指定运行时、版本或模块类型时沿用项目配置。Python 项目使用已确认的项目解释器或项目约定的 `uv run -- python`，独立任务无其他环境要求且兼容 Python 3.14 时使用下方的 uv 托管环境。
+
+将业务参数逐项加引号传给 Bash，再用 `"$@"` 原样传给语言解释器。向 Bash 传入参数时按 Bash 的 `$0` 规则先提供 `_`，解释器按各自的参数约定读取业务参数。代码正文使用固定内容。源码中的 `$`、反引号或多层引号容易被 Shell 展开时，优先用带单引号分隔符的 here-document 保留原文。
+
+#### JavaScript
+
+短代码用 `node -e`，在业务参数前加 `--`，从 `process.argv[1]` 起读取。多行代码用 `node -` 读取带引号的 here-document，此时 `process.argv[1]` 是 `-`，业务参数从 `process.argv[2]` 开始，直接放在 `-` 后。
+
+```bash
+/bin/bash -c 'exec node -e "console.log(JSON.stringify(process.argv.slice(1)))" -- "$@"' _ '-name' 'path with spaces'
+
+/bin/bash -c 'exec node - "$@"' _ '-name' 'path with spaces' <<'JS'
+const args = process.argv.slice(2);
+console.log(JSON.stringify(args));
+JS
+```
+
+#### Python
+
+短代码用 `python -c`，多行代码用 `python -` 读取带引号的 here-document。两种写法都从 `sys.argv[1]` 起读取业务参数。示例中的 `--` 用于结束 `uv run` 的选项，业务参数直接放在 Python 代码字符串或 `-` 后。
+
+```bash
+/bin/bash -c 'exec uv run --no-project --managed-python --python 3.14 -- python -c "import sys; print(sys.argv[1:])" "$@"' _ '-name' 'path with spaces'
+
+/bin/bash -c 'exec uv run --no-project --managed-python --python 3.14 -- python - "$@"' _ '-name' 'path with spaces' <<'PY'
+import sys
+
+print(sys.argv[1:])
+PY
+```
+
+here-document 通过标准输入提供源码。脚本还需要从标准输入读取数据时，用内联代码或脚本文件执行。需要保存、分发或重复运行时，优先交付 `.js`、`.mjs`、`.cjs` 或 `.py` 文件，按目标项目的模块及环境约定选择。用实际目标解释器运行示例，验证参数和输出。
