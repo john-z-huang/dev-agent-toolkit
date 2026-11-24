@@ -5,7 +5,7 @@ import json
 import sys
 
 from .services.global_agents import GlobalAgentsError, manage_global_agents
-from .services.skill_installation import DEFAULT_DIRECTORY, SkillError, manage_skill
+from .services.skill_installation import SKILL, SkillError, manage_skill
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -23,7 +23,7 @@ def _parser() -> argparse.ArgumentParser:
     ):
         command = commands.add_parser(action, help=help_text)
         command.add_argument(
-            "--target", help=f"完整目标目录；默认 ~/.agents/skills/{DEFAULT_DIRECTORY}"
+            "--target", help=f"完整目标目录；默认 ~/.agents/skills/{SKILL}"
         )
         if action != "show":
             command.add_argument(

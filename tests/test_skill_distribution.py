@@ -231,19 +231,20 @@ class SkillDistributionTests(unittest.TestCase):
                 ]
             )
             # 该环境没有 OpenAI/MCP 依赖，管理命令仍应独立工作。
-            target = (
-                root
-                / "new-home"
-                / ".agents"
-                / "skills"
-                / "dev-workflow-standards-skill"
-            )
+            skill_home = root / "skill-home"
+            environment["HOME"] = str(skill_home)
+            target = skill_home / ".agents" / "skills" / "dev-workflow-standards"
             args = [str(cli), "skills"]
-            run([*args, "install", "--target", str(target), "--dry-run"])
+            self.assertIn(
+                "~/.agents/skills/dev-workflow-standards\n",
+                run([*args, "install", "--help"]).stdout,
+            )
+            run([*args, "install", "--dry-run"])
             self.assertFalse(target.parent.exists())
-            run([*args, "install", "--target", str(target)])
+            run([*args, "install"])
             before = (target / "SKILL.md").read_bytes()
-            show = json.loads(run([*args, "show", "--target", str(target)]).stdout)
+            show = json.loads(run([*args, "show"]).stdout)
+            self.assertEqual(show["target"], str(target))
             self.assertEqual(show["installed_version"], "0.2.0")
             run([*args, "install", "--target", str(target)], expected=1)
             run(
@@ -260,14 +261,12 @@ class SkillDistributionTests(unittest.TestCase):
                 ]
             )
             self.assertEqual((target / "SKILL.md").read_bytes(), before)
-            run([*args, "update", "--target", str(target), "--dry-run"])
+            run([*args, "update", "--dry-run"])
             self.assertEqual((target / "SKILL.md").read_bytes(), before)
-            run([*args, "update", "--target", str(target)])
+            run([*args, "update"])
             self.assertIn("测试第二个发布快照。", (target / "SKILL.md").read_text())
             self.assertEqual(
-                json.loads(run([*args, "update", "--target", str(target)]).stdout)[
-                    "status"
-                ],
+                json.loads(run([*args, "update"]).stdout)["status"],
                 "unchanged",
             )
             (target / "user-notes.md").write_text("keep this")
@@ -275,6 +274,7 @@ class SkillDistributionTests(unittest.TestCase):
             self.assertEqual((target / "user-notes.md").read_text(), "keep this")
 
             # 在未安装 Skill 的临时主目录中验证 wheel 自带的全局模板。
+            environment["HOME"] = str(global_home)
             global_home.mkdir(parents=True, exist_ok=True)
             self.assertFalse((global_home / ".agents" / "skills").exists())
             agent_args = [str(cli), "agents"]
