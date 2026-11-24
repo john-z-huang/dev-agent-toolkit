@@ -13,9 +13,9 @@ GitLab 按 [GitLab 兼容规则](gitlab.md) 选择对应工具及字段。Issue�
 
 ### 多账号核验
 
-1. 先从准确的本地仓库根目录和本次操作对应的 remote 核实目标 `HOST/OWNER/REPO`。Fork 的源仓库和目标仓库分别核对。运行任何 `gh` 命令或调用访问 GitHub 的 MCP/Connector 工具前，先运行 `ghwho` 查看当前账号。命令不可用或无法确认身份时，暂停相关 GitHub 操作并报告具体原因。
+1. 先从准确的本地仓库根目录和本次操作对应的 remote 核实目标 `HOST/OWNER/REPO`。Fork 的源仓库和目标仓库分别核对。使用 `gh` 执行 GitHub 操作或调用访问 GitHub 的 MCP/Connector 工具前，先运行 `gh auth status --active` 查看当前账号。命令不可用或无法确认身份时，暂停相关 GitHub 操作并报告具体原因。
 2. 确认当前账号是目标仓库所属账号，或具备本次操作所需的访问权限。需要进一步核实时，按准确仓库只读查询，例如 `gh repo view HOST/OWNER/REPO --json nameWithOwner,viewerPermission`。公开仓库可读取只说明能读取。写操作还须核对所需权限与动作条件。使用独立凭据的 MCP/Connector 还须核实该连接实际使用的账号及权限。本地账号切换只影响使用该本地登录配置的入口。
-3. 运行 `ghwho` 后，可用 `gh auth status` 查看本地所有已登录的 GitHub 账号及其认证状态，输出按主机分组并标记活动账号。仅核对目标主机的候选账号时，可用 `gh auth status --hostname HOST --no-refresh`。当前账号不适用时，按需使用 `gh auth switch --hostname HOST --user LOGIN` 切换。每次切换后重新运行 `ghwho`，再核验目标仓库和所需权限。切换会改变该主机的本地活动账号，须遵守宿主写入审批。若环境凭据覆盖了本地选择，或工具运行环境不同，须确认实际生效的身份后再继续。
+3. 运行 `gh auth status --active` 后，可用 `gh auth status` 查看本地所有已登录的 GitHub 账号及其认证状态，输出按主机分组并标记活动账号。仅核对目标主机的候选账号时，可用 `gh auth status --hostname HOST --no-refresh`。当前账号不适用时，按需使用 `gh auth switch --hostname HOST --user LOGIN` 切换。每次切换后重新运行 `gh auth status --active`，再核验目标仓库和所需权限。切换会改变该主机的本地活动账号，须遵守宿主写入审批。若环境凭据覆盖了本地选择，或工具运行环境不同，须确认实际生效的身份后再继续。
 4. 该主机已登录的账号均缺少所需权限时，停止目标 GitHub 操作，向用户报告目标仓库、所需操作、已核验账号及非敏感结果，请用户介入。网络故障、认证状态不明或权限核验失败时，按实际原因报告，避免把未知状态归为所有账号均无权限。
 
 命令参数见 [GitHub CLI 账号状态](https://cli.github.com/manual/gh_auth_status)、[账号切换](https://cli.github.com/manual/gh_auth_switch)和[仓库查询](https://cli.github.com/manual/gh_repo_view)。

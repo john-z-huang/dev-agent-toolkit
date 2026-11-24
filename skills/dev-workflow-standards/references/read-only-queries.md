@@ -6,7 +6,7 @@ GitLab 查询适用同样的副作用、授权和失败关闭条件；显式主�
 
 ## 入口选择与失败处理
 
-- GitHub 查询同样先运行 `ghwho`，按 [多账号核验](github.md#多账号核验) 确认实际身份及仓库读取权限。`gh auth switch` 会改变本地活动账号，适用写操作条件。
+- GitHub 查询同样先运行 `gh auth status --active`，按 [多账号核验](github.md#多账号核验) 确认实际身份及仓库读取权限。`gh auth switch` 会改变本地活动账号，适用写操作条件。
 - 专用 MCP 或当前已授权的 GitHub Connector/App 能满足查询时，优先使用。repo-bound MCP 调用仍须传入准确的绝对 `repo_path`。
 - 工具未覆盖所需的信息查询时，允许按本文执行只读 CLI；先核实本地根目录或远端 `owner/repo`，限定字段、路径和输出数量。CLI 用 `git -C` 或 `gh --repo` 等明确目标，不依赖偶然的启动目录。
 - 当前动作要求的 `audit_repository_state`、`check_branch_names`、`check_commit_message`、`check_staged_changes`、`audit_issue_pr_policy` 等门禁优先用规定工具；未暴露或功能未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 保留必要事实与通过条件。补充查询不等于完整门禁，也不把未执行或失败的 API 校验视为通过。
