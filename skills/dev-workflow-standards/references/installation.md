@@ -26,8 +26,8 @@ Skill 指令从发布包复制为普通文件快照。开发仓库可以放在�
 | 资源 | 安装参数 | 更新参数 | 执行范围 |
 | --- | --- | --- | --- |
 | MCP Server | `--mcp-install` | `--mcp-update` | 安装或更新软件包、注册服务并配置环境变量转发。 |
-| Skill | `--skills-install` | `--skills-update` | 仅管理 Skill 快照，不安装软件包或注册 MCP。 |
-| 全局 `AGENTS.md` | `--agents-install` | `--agents-update` | 仅管理全局指令，不安装软件包或注册 MCP。 |
+| Skill | `--skills-install` | `--skills-update` | 刷新共享工具包，再管理 Skill 快照。 |
+| 全局 `AGENTS.md` | `--agents-install` | `--agents-update` | 刷新共享工具包，再管理全局指令。 |
 | 原生 Codex Hooks | `--hooks-install` | `--hooks-update` | 从源码管理项目级或用户全局 Hooks，不修改宿主信任。 |
 
 ```bash
@@ -45,9 +45,9 @@ Hooks 操作通过 `uv tool` 安装或重装独立的 `dev-workflow-standards-ho
 
 若目标仅有其他工具的 `hooks.json`，安装时可显式加 `--merge`，先预览合并结果，再去掉 `--dry-run` 执行；正式合并先备份原字节到目标目录的 `hooks.json.backup-*`，保留原事件和字段。后续更新保留原 Hooks，但手工修改配置仍会阻止更新。已有本工具脚本或清单时拒绝合并，不覆盖未知旧安装。
 
-Skill 和全局指令操作通过 `uv tool dir --bin` 定位已安装完整发行包的 `dev-workflow-standards` 入口，不从源码开发环境读取资源。先按下文构建并安装完整 wheel，再选择所需的资源操作；更新软件包不会自动刷新指令快照。不在源码仓库中时，仍可使用下文的完整发行包 CLI 命令。
+四类正式安装和更新命令都会重新构建当前 checkout 中的对应包并刷新 `uv tool`。版本号未变化时也会重新构建。MCP、Skill 和全局指令共用工具包，Hooks 使用独立工具包。Skill 和全局指令操作通过 `uv tool dir --bin` 定位刷新后的 CLI。源码入口构建和安装时可能下载依赖。在源码仓库之外，可以使用下文的完整发行包 CLI 命令。
 
-Skill 支持 `--target` 和 `--dry-run`。全局指令支持 `--source`、`--dry-run`、`--adopt` 和 `--replace-local`；`--agents-install` 与 `--agents-update` 均转交 `agents update`，目标不存在时创建，已有未知文件仍需显式接管，备份与本地修改保护保持有效。预览后去掉 `--dry-run` 才执行对应写入，预览成功不表示已安装或更新。
+Skill 支持 `--target` 和 `--dry-run`。全局指令支持 `--source`、`--dry-run`、`--adopt` 和 `--replace-local`。`--agents-install` 与 `--agents-update` 均转交 `agents update`，目标不存在时创建，已有未知文件仍需显式接管，备份与本地修改保护保持有效。`--dry-run` 和 `--help` 跳过工具刷新。Skill 和全局指令的预览使用已安装的 CLI，预览结果反映该安装的默认值及包资源。
 
 ## 安装发布包
 
@@ -69,11 +69,9 @@ Skill 支持 `--target` 和 `--dry-run`。全局指令支持 `--source`、`--dry
 
 ## 显式更新
 
-源码或文档变更后，在仓库根目录重新构建并更新工具。先按实际构建产物更新 wheel，再显式更新已安装 Skill；软件包安装不会自动更新 Skill 快照：
+源码或文档变更后，从仓库根目录执行 `./dws --skills-update`。入口先刷新工具包，再更新 Skill。只使用发行包时，先安装最新 wheel，再通过已安装 CLI 更新 Skill。
 
 ```bash
-./dws --uv-build
-./dws --uv-tool-install --force
 "$(uv tool dir --bin)/dev-workflow-standards" skills update --dry-run
 "$(uv tool dir --bin)/dev-workflow-standards" skills update
 "$(uv tool dir --bin)/dev-workflow-standards" skills show

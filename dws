@@ -3,6 +3,21 @@
 # 从项目根目录定位实现，使入口不依赖调用者的工作目录。
 script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
 
+refresh_management_tool() {
+    local argument
+    for argument in "$@"; do
+        [[ "$argument" == -- ]] && break
+        # argparse 也接受无歧义的长选项缩写。
+        if [[ "$argument" == -h || ( "$argument" == --?* &&
+              ( --help == "$argument"* || --dry-run == "$argument"* ) ) ]]; then
+            return 0
+        fi
+    done
+    # 版本号未变化时也重新构建本地包。
+    uv tool install --managed-python --reinstall-package dev-workflow-standards-tools \
+        "$script_dir/mcp-server" >&2
+}
+
 case "${1:-}" in
     --uv-build)
         shift
@@ -34,6 +49,7 @@ case "${1:-}" in
         operation="$1"
         shift
         # 管理资源必须使用完整发行包入口，不能从可编辑源码环境导入。
+        refresh_management_tool "$@" || exit $?
         tool_bin="$(uv tool dir --bin)" || exit $?
         case "$operation" in
             --skills-install) set -- skills install "$@" ;;
@@ -61,13 +77,15 @@ case "${1:-}" in
   --uv-tool-install [uv 选项] <wheel 路径>  安装指定 wheel
   --mcp-install     安装 MCP 服务，并在 Codex 中注册和配置
   --mcp-update      更新 MCP 服务，并在 Codex 中注册和配置
-  --skills-install  从已安装的完整发行包安装技能（Skill）
-  --skills-update   从已安装的完整发行包更新技能（Skill）
+  --skills-install  安装技能（Skill）
+  --skills-update   更新技能（Skill）
   --agents-install  从仓库模板创建全局 AGENTS.md；已有文件须显式接管
   --agents-update   从仓库模板更新全局 AGENTS.md，保留备份与冲突校验
   --hooks-install   安装原生 Codex Hooks（--global 或 --project-root）
   --hooks-update    更新受管 Hooks，拒绝覆盖本地修改
-技能和 AGENTS.md 操作不安装或更新 MCP 服务，也不修改 MCP 注册。
+正式安装和更新先从当前源码重建并刷新相应的 uv tool。
+Skill 和 AGENTS.md 与 MCP 共用发行包。每次只更新选定资源。
+预览和帮助跳过构建与工具刷新。Skill 和 AGENTS.md 的预览使用已安装工具。
 在操作参数后加 --help 查看对应选项。MCP、Skill、AGENTS.md 和 Hooks 操作支持 --dry-run。
 兼容原 MCP 参数，例如 --install --force 或 --env-only。
 HELP

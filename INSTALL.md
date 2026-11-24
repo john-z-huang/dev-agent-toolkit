@@ -18,28 +18,24 @@
 
 仓库可以位于任意开发目录。Skill 的唯一指令源在 [`skills/dev-workflow-standards/`](skills/dev-workflow-standards/)，构建时封装进发布包，安装后为普通文件快照，不引用开发仓库。
 
-先[安装完整发行包](#构建与安装发行包)，再执行以下命令。
+在源码仓库中直接安装。入口会从当前 checkout 构建完整发行包并刷新 `uv tool`，随后复制 Skill 快照。
 
 ```bash
-"$(uv tool dir --bin)/dev-workflow-standards" skills install --dry-run
-"$(uv tool dir --bin)/dev-workflow-standards" skills install
+./dws --skills-install
 "$(uv tool dir --bin)/dev-workflow-standards" skills show
 ```
 
-Skill 的安装、更新和查看均使用上述显式入口，定位到 `uv tool` 安装的完整发行包，避免裸命令被 `PATH` 中的其他同名入口、别名或命令缓存影响。路径外的双引号用于保留目录中的空格。
+安装和更新通过 `uv tool dir --bin` 定位刷新后的管理 CLI。已单独安装完整 wheel 时，也可以直接使用该目录中的 CLI 管理 Skill。
 
 默认目标为 `~/.agents/skills/dev-workflow-standards`，与 Skill 名称一致。`--target` 可指定仓库外的独立目标目录。首次安装要求目标目录尚不存在。
 
-源码或文档变更后，在仓库根目录重新构建并安装 wheel，再显式更新已安装指令；安装软件包本身不会更新 Skill 快照：
+源码或文档变更后，在仓库根目录运行更新命令。即使包版本相同，入口也会重新构建并安装包，然后比较并更新快照。
 
 ```bash
-./dws --uv-build
-./dws --uv-tool-install --force
-"$(uv tool dir --bin)/dev-workflow-standards" skills update --dry-run
-"$(uv tool dir --bin)/dev-workflow-standards" skills update
+./dws --skills-update
 ```
 
-显式目标安装的，查看和更新也要传同一 `--target`。更新只接受本工具管理且未修改的完整安装；用户修改、额外内容、链接或特殊文件都会阻止覆盖。macOS/Linux 通过原子目录发布保全原安装，不支持的文件系统/平台不降级执行。预览不写文件，独立 Skill 安装离线且不注册 MCP、不读取 OpenAI 凭据、不安装 Hook。中断残留的处理见 [完整安装说明](skills/dev-workflow-standards/references/installation.md#安装与更新中断处理)。
+显式目标安装的，查看和更新也要传同一 `--target`。更新只接受本工具管理且未修改的完整安装。用户修改、额外内容、链接或特殊文件都会阻止覆盖。macOS/Linux 通过原子目录发布保全原安装，不支持的文件系统或平台会拒绝写入。已安装管理 CLI 离线管理 Skill 快照。源码入口的包构建和安装可能需要下载依赖。中断残留的处理见 [完整安装说明](skills/dev-workflow-standards/references/installation.md#安装与更新中断处理)。
 
 `dev-workflow-standards` 是独立管理入口；原 `dev-workflow-standards-tools` 仍直接启动 stdio MCP。需要 MCP 功能时，按 [Codex](#codex-中安装) 或 [Pi Code Agent](#给-pi-code-agent-注册-mcp) 的说明注册服务。
 
@@ -47,7 +43,7 @@ Skill 的安装、更新和查看均使用上述显式入口，定位到 `uv too
 
 全局指令的唯一源文件是 [`instructions/codex-global.md`](instructions/codex-global.md)，与仓库根目录的项目 `AGENTS.md` 分开维护。模板可使用 `{{HOME}}` 引用当前用户的绝对主目录。全局指令可以独立于 Skill 安装和更新。
 
-仓库中的 `./dws --agents-update` 通过已安装的管理 CLI 读取当前 checkout 的模板。安装管理 CLI 后，可在仓库根目录预览并更新：
+仓库中的 `./dws --agents-update` 刷新管理 CLI 后读取当前 checkout 的模板。可直接执行更新，已有管理 CLI 时也可先预览。
 
 ```bash
 ./dws --agents-update --dry-run
@@ -60,7 +56,7 @@ Skill 的安装、更新和查看均使用上述显式入口，定位到 `uv too
 
 更新使用同目录临时文件原子替换目标，通过 `~/.codex/.AGENTS.md.global-agents.lock` 合作进程锁避免两个 CLI 同时更新，并以 `~/.codex/.AGENTS.md.dev-workflow-standards.json` 记录受管指纹。锁文件会保留以维持锁身份，不应在更新进程运行时删除。锁不阻止外部编辑器写入；更新期间应暂停其他写入者。目标与受管记录不能作为一个原子事务提交，发生中断或记录写入失败时应核对目标、受管记录和备份，不将失败视为成功。工具拒绝符号链接、硬链接和特殊文件，不修改其他 Codex 配置。
 
-安装软件包、更新 Skill 和更新全局指令是三个显式动作。更新全局指令不会注册 MCP 或启用 Hook，也不宣称当前运行会话已加载新规则；后续会话应使用更新后的指令。
+安装软件包后，入口只更新选定的资源。后续会话使用更新后的全局指令。
 
 ## Codex 中安装
 
@@ -89,8 +85,8 @@ Skill 的安装、更新和查看均使用上述显式入口，定位到 `uv too
 | 安装参数 | 更新参数 | 范围 |
 | --- | --- | --- |
 | `--mcp-install` | `--mcp-update` | 安装或更新软件包，注册 MCP 并配置变量转发；不更新 Skill 或全局指令。 |
-| `--skills-install` | `--skills-update` | 从已安装完整发行包复制或更新 Skill；不安装软件包、不注册 MCP。 |
-| `--agents-install` | `--agents-update` | 创建或更新全局 `AGENTS.md`；不安装软件包、不注册 MCP。 |
+| `--skills-install` | `--skills-update` | 刷新共享工具包，再安装或更新 Skill 快照。 |
+| `--agents-install` | `--agents-update` | 刷新共享工具包，再创建或更新全局 `AGENTS.md`。 |
 | `--hooks-install` | `--hooks-update` | 从源码安装或更新项目级或用户全局 Codex Hooks；不修改宿主信任。 |
 
 ```bash
@@ -100,7 +96,9 @@ Skill 的安装、更新和查看均使用上述显式入口，定位到 `uv too
 ./dws --agents-update --dry-run
 ```
 
-Skill 选项包括 `--target`、`--dry-run`；全局指令选项包括 `--source`、`--dry-run`、`--adopt`、`--replace-local`。`--agents-install` 和 `--agents-update` 均复用管理 CLI 的 `agents update`：目标不存在时创建，已有未知文件仍需显式 `--adopt`，备份和本地修改保护仍然生效。全局指令默认使用当前 checkout 的模板。Skill 操作使用已安装发行包内的快照，更新快照前先更新发行包。各操作后加 `--help` 查看选项；原 MCP 参数 `--install`、`--install --force`、`--env-only` 仍兼容。
+正式安装和更新均从当前源码重新构建对应的本地包并替换 `uv tool` 中的版本，包括版本号未变化的情况。MCP、Skill 和全局指令共用工具包，Hooks 使用独立工具包。构建或工具安装失败时停止对应资源操作。`--dry-run` 和 `--help` 跳过工具刷新。Skill 和全局指令的预览使用已安装的管理 CLI，因此预览中的默认值和包资源取决于该安装。
+
+Skill 选项包括 `--target` 和 `--dry-run`。全局指令选项包括 `--source`、`--dry-run`、`--adopt` 和 `--replace-local`。`--agents-install` 和 `--agents-update` 均复用管理 CLI 的 `agents update`，目标不存在时创建，已有未知文件仍需显式 `--adopt`。全局指令默认使用当前 checkout 的模板。原 MCP 参数 `--install`、`--install --force` 和 `--env-only` 仍可用。
 
 更新已有安装：
 
@@ -152,7 +150,7 @@ default_tools_approval_mode = "writes"
 
 `writes` 会要求 Codex 确认未标记为只读的工具。Skill 的用户授权规则仍然适用；MCP 注解和 Codex 确认都不能替代任务语境中的授权。Codex 桌面端、CLI 和 IDE 共享该配置。修改配置后，重新加载 MCP 服务；若客户端未提供重载入口，退出后重新打开客户端，确保重新创建服务进程。已有 MCP 进程不会自动获得新配置或环境变量。
 
-安装为普通本机 uv tool 后，工具从本机安装位置运行，不依赖仓库 worktree 路径。注册已有时，可用 `--uv-build` 和 `--uv-tool-install --force` 更新软件包，再按需要分别运行 `--skills-update`、`--agents-update`。同时需要管理 MCP 注册和变量转发时，使用 `./dws --mcp-update`。
+安装后的工具从本机安装位置运行。使用 `./dws --mcp-update` 同时刷新工具包和 MCP 注册。只更新包时，使用 `--uv-build` 和 `--uv-tool-install --force`。
 
 ## 安装与更新原生 Codex Hooks
 
