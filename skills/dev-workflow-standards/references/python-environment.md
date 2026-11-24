@@ -143,6 +143,8 @@ uv run --no-project --managed-python --python 3.14 -- python -c 'print("ok")'
 
 此处的 `python` 是 `uv run` 的命令参数，不是直接调用全局解释器。
 
+直接粘贴到本机终端的内联命令和多行脚本，参照 [通过 Bash 执行和传参](shell-environment.md#在终端运行-javascript-和-python)。
+
 ## 选择案例
 
 | 已观察事实 | 处理 |

@@ -6,7 +6,7 @@
 |---|---|---|
 | 准备修改项目内容 | [项目修改](project-change.md) | [工具目录](../references/mcp-tools.md) |
 | 结论依赖代码逻辑、符号、调用关系 | [代码理解](code-understanding.md) | [Serena](../references/code-understanding.md) |
-| 准备生成或运行 Python/Shell | [执行环境](environment.md) | [Python](../references/python-environment.md)、[Shell](../references/shell-environment.md) |
+| 准备生成或运行 Python、JavaScript 命令或 Shell 脚本 | [执行环境](environment.md) | [Python](../references/python-environment.md)、[Shell 与终端脚本](../references/shell-environment.md) |
 | 准备创建、同步、恢复或移除 worktree | [Worktree](worktree.md) | [基线同步](../references/worktree-base-sync.md)、[受限恢复](../references/worktree-recovery.md) |
 | 准备暂存或提交 | [暂存与提交](git-commit.md) | [暂存检查](../references/check-staged-changes.md)、[Git Hook](../references/git-hooks.md) |
 | 准备调用 gh 或访问 GitHub 的 MCP/Connector，或准备创建 Issue、推送、创建 PR/MR、合并 | [托管资源](github-delivery.md) | [GitHub 策略](../references/github.md)、[GitLab 兼容](../references/gitlab.md)、[Fork](../references/fork-maintenance.md)、[堆叠 PR](../references/stacked-pr.md) |
