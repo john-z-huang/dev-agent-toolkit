@@ -10,7 +10,7 @@ Python 使用 [环境参考](../references/python-environment.md) 中用户/项�
 
 安装、添加、升级或修复 Modal 依赖，且本地环境需通过网络代理访问 Modal 平台时，同时遵循 [Modal 代理依赖规则](../references/python-environment.md#modal-代理依赖)。不将此规则套用于无关 Python 包或仅远端运行的环境。
 
-按 [Shell 参考](../references/shell-environment.md) 确认目标运行时。为 macOS 终端生成可直接运行的 Bash 命令时，推荐使用 `bash -c '...'` 或 `bash <<'EOF'`。以脚本文件交付时核对 shebang，沿用已有脚本的运行环境约定。容器和远端的 Shell 能力按实际环境确认。
+按 [Shell 参考](../references/shell-environment.md) 确认目标运行时。本机 macOS 命令用 Bash 绝对路径显式执行。使用 `-c` 或 Bash here-document 时，有业务参数必须传入 `_` 作为 `$0`，没有业务参数可省略 `_`。正文实际依赖 `$0` 时使用它所需的值。以脚本文件交付时核对 shebang，沿用已有脚本的运行环境约定。容器和远端的 Shell 能力按实际环境确认。
 
 ## 离开条件
 
