@@ -23,10 +23,21 @@
 
 ### Bash命令写法
 
-内联命令用选定的 Bash 绝对路径配合 `-c`，多行命令也可用带引号的 here-document。将管道、重定向和展开留在 Bash 正文中。动态值可通过位置参数传入，并用 `"$1"` 等引用。用户明确指定其他 Shell，或正文明确在容器或远端执行时，按对应目标环境选择解释器。
+内联命令用选定的 Bash 绝对路径配合 `-c`，多行命令也可用带引号的 here-document。将管道、重定向和展开留在 Bash 正文中。业务参数通过位置参数传入，并用 `"$1"` 等引用。用户明确指定其他 Shell，或正文明确在容器或远端执行时，按对应目标环境选择解释器。
+
+**使用 `-c` 或 Bash here-document 时，只要向 Bash 正文传入一个或多个业务参数，就必须显式传入 `_` 作为 `$0`。** 把 `_` 放在 `-c` 的命令字符串之后，业务参数随后从 `$1` 开始。没有业务参数时可以省略 `_`。正文实际依赖 `$0` 时，可以用它所需的值替代 `_`。
 
 ```bash
-/bin/bash -c 'printf "%s\n" "$1"' bash 'path with spaces'
+/bin/bash -c 'pwd'
+/bin/bash -c 'printf "%s\n" "$1"' _ 'path with spaces'
+```
+
+多行正文可用 `-c '. /dev/stdin'` 读取 here-document，以相同方式传入 `$0` 和业务参数。
+
+```bash
+/bin/bash -c '. /dev/stdin' _ 'path with spaces' <<'BASH'
+printf '%s\n' "$1"
+BASH
 ```
 
 ### 高版本bash环境
@@ -48,6 +59,6 @@
 
 ### 重复执行或分发
 
-**重复执行、保存或分发的命令和脚本必须兼容 Bash 3.2。本机验证必须用系统 `/bin/bash` 实际运行验证对象。** 即使当前会话已探测到 Homebrew Bash，或刚用它执行过临时命令，验证可复用命令时也必须显式调用 `/bin/bash -c`，验证脚本文件时用 `/bin/bash script.sh`。脚本文件用 Bash shebang 声明解释器，保持可移植性。
+**重复执行、保存或分发的命令和脚本必须兼容 Bash 3.2。本机验证必须用系统 `/bin/bash` 实际运行验证对象。** 即使当前会话已探测到 Homebrew Bash，或刚用它执行过临时命令，验证可复用命令时也必须显式使用 `/bin/bash -c` 或相应的 here-document 写法，并按上文规则传入业务参数，验证脚本文件时用 `/bin/bash script.sh`。脚本文件用 Bash shebang 声明解释器，保持可移植性。
 
 读取文件等临时辅助命令按实际所需特性选择解释器。可复用的验证对象仍须用 `/bin/bash` 执行。

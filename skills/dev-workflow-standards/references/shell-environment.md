@@ -15,24 +15,24 @@
 
 ### 直接在终端运行
 
-Code Agent 为 macOS 本地终端生成可直接粘贴运行的 Bash 命令时，推荐使用 `bash -c '...'` 或 `bash <<'EOF'`。给 `-c` 的命令字符串或 here-document 的分隔符加单引号，正文中的变量和命令替换就会由 Bash 在执行时展开。
+Code Agent 为 macOS 本地终端生成可直接粘贴运行的 Bash 命令时，使用选定的 Bash 绝对路径，默认是 `/bin/bash`。给 `-c` 的命令字符串或 here-document 的分隔符加单引号，让 Bash 在执行时展开正文中的变量和命令替换。
 
-简短且便于用单引号整体包裹的命令适合用 `bash -c '...'`。
+**使用 `-c` 或 Bash here-document 时，只要向 Bash 正文传入一个或多个业务参数，就必须显式传入 `_` 作为 `$0`。** 把 `_` 放在 `-c` 的命令字符串之后，业务参数随后从 `$1` 开始。没有业务参数时可以省略 `_`。正文实际依赖 `$0` 时，可以用它所需的值替代 `_`。
 
-```bash
-bash -c 'values=(alpha beta); printf "%s\n" "${values[0]}"'
-```
-
-多行脚本或含单引号的正文适合用 `bash <<'EOF'`。结束行的 `EOF` 顶格单独书写。
+简短且便于用单引号整体包裹的命令使用 `-c`。
 
 ```bash
-bash <<'EOF'
-values=(alpha beta)
-printf '%s\n' "${values[0]}"
-EOF
+/bin/bash -c 'pwd'
+/bin/bash -c 'printf "%s\n" "$1"' _ 'path with spaces'
 ```
 
-`bash` 按当前 `PATH` 解析。需要明确使用 macOS 自带的 Bash 3.2 时，使用 `/bin/bash -c '...'` 或 `/bin/bash <<'EOF'`。
+多行脚本或含单引号的正文可用 `-c '. /dev/stdin'` 读取 here-document，使 `_` 和后续参数分别成为正文中的 `$0` 和 `$1` 等。结束行的 `BASH` 顶格单独书写。
+
+```bash
+/bin/bash -c '. /dev/stdin' _ 'path with spaces' <<'BASH'
+printf '%s\n' "$1"
+BASH
+```
 
 ## 已有脚本
 
@@ -48,7 +48,7 @@ EOF
 
 | 场景 | 处理 |
 |---|---|
-| 在本机 Zsh 终端直接运行 Bash 命令 | 简短命令推荐用 `bash -c '...'`，多行脚本推荐用 `bash <<'EOF'`，正文兼容 Bash 3.2。 |
+| 在本机 Zsh 终端直接运行 Bash 命令 | 简短命令使用 `/bin/bash -c '...'`，多行脚本可用 `/bin/bash -c '. /dev/stdin' <<'BASH'`。传入业务参数时在命令字符串后先加 `_`，正文实际依赖 `$0` 时用所需的值。默认兼容 Bash 3.2。 |
 | 新建本地 Bash 脚本文件 | 生成带 Bash shebang 的 Bash 3.2 兼容脚本。 |
 | 本地已有 Zsh 脚本 | 检查 Zsh 5.9 兼容性，按已有 shebang 或显式 Zsh 执行。 |
 | 容器或远端尚未确认 Bash/Zsh 可用 | 优先编写可由 `sh` 执行的脚本，不使用 Bash 专属语法。 |
