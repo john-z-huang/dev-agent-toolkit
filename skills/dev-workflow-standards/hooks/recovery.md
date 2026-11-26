@@ -6,9 +6,9 @@
 
 ## 执行条件
 
-暂停依赖失败条件的动作，保留现场并记录安全分类、影响和最小证据；独立工作继续。能力缺口可按 [CLI 边界](../references/cli-fallback.md) 在既有授权内补足，实际失败不能换 CLI、旧结果或兼容脚本绕过。写入不明以真实状态回读确认，不盲目重试、重复创建或假定无效果。
+暂停受影响动作，保留现场并记录错误分类、影响与必要证据。独立工作可继续。工具能力缺口按 [CLI 边界](../references/cli-fallback.md) 处理，实际失败不得通过更换工具或复用旧结果绕过。写入结果不明时先回读实际状态，再判断能否重试。
 
-修复限于当前范围，不增加删除、reset/clean/stash、强推或泄露凭据。冲突需新业务决定时暂停该动作；受管理 merge/rebase 的 continue/abort 条件见 [受限恢复](../references/worktree-recovery.md)，不得自动接管复杂/手工操作。API 超时预算已耗尽时不自动重复整个工具。
+修复限于当前授权范围。需新业务决定时暂停。权限、环境及凭据处理见 [执行环境与权限](../references/environment.md)。受管理 merge/rebase 的恢复见 [Worktree Hook](worktree.md)。API 失败见 [外部 API Hook](external-api.md)。
 
 ## 离开条件
 

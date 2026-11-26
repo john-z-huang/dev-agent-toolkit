@@ -1,14 +1,6 @@
 # dev-workflow-standards
 
-GitLab 托管仓库使用 `glab` 和 9 个对应的 MCP 工具，覆盖仓库/Issue/MR 审计、标签、创建、推送、合并、Fork 同步及本地清理；原有 GitHub 接口保持兼容。支持自托管主机及多级 group，工具映射、参数与合并策略差异见 [GitLab 兼容规则](skills/dev-workflow-standards/references/gitlab.md)。本地 Git、授权、正常 hooks 与非强推条件跨平台一致。
-
-此项目将开发规范拆为两层：Skill 文档以声明式 Hooks 描述动作的进入、执行、离开和重查条件，由 Agent 自行规划顺序；本地 MCP 服务执行固定 Git/GitHub/GitLab 操作，并提供只读的 Codex 会话事实辅助工具。当前维护的本地 MCP 服务为 Python 实现，由 `uv` 管理，并通过 `uv tool` 安装到本机供 Codex 使用。
-
-领域规则判断与开发文案生成通过 OpenAI Python SDK 完成：判断使用 Decisions API，生成使用 Responses API。所有请求固定为 `gpt-6-luna`，强制在调用时读取 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`；缺少任意配置即拒绝请求，不使用默认凭据、默认地址或其他模型。Decisions 使用接口自身机制，生成按任务复杂度显式指定推理强度，默认 `medium`。
-
-`check_api_input` 默认允许向配置的审核服务发起外部 API 调用，无需前置审核、自我审核或逐次人工授权；它自身的本地敏感输入检测和配置检查仍先运行。当前任务所需项目内容通过完整输入审核后，允许向既定配置服务外发，无需重复确认。该规则同样适用于使用此入口的其他 MCP Server，不扩大 Git、Memory 或外部发布权限；用户明确禁止外发及更高优先级限制仍生效。完整协议及失败处理见 [API 输入审核](skills/dev-workflow-standards/references/api-input-review.md)。
-
-统一客户端为每次调用显式注入 `httpx2.AsyncClient(trust_env=True)`，读取服务进程的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（支持小写形式）。配置适用代理且目标未命中 `NO_PROXY` 时，请求通过代理；未配置代理时按库默认直连。代理配置或连接失败会返回安全错误，不回退直连。代理地址和认证信息不应写入仓库或日志。
+项目为 Codex 和 Pi 提供开发操作 Skill 和本地 Python MCP 服务。Skill 的声明式 Hooks 说明各动作适用的条件，由 Agent 规划顺序。MCP 提供固定 Git、GitHub 和 GitLab 操作、Codex 会话与项目 Memory 的只读辅助，以及 OpenAI 判断和内容生成。GitLab 支持自托管主机和多级 group。
 
 ## 安装与构建
 
@@ -18,25 +10,14 @@ GitLab 托管仓库使用 `glab` 和 9 个对应的 MCP 工具，覆盖仓库/Is
 
 可选的 [原生 Codex Hooks](codex-hooks/README.md) 提供会话与交付提示、MCP 目标仓库路径校验，以及结构化失败后的恢复提示。安装和更新步骤见 [原生 Codex Hooks 安装说明](INSTALL.md#安装与更新原生-codex-hooks)。
 
-使用 [`SKILL.md`](skills/dev-workflow-standards/SKILL.md) 时按 [`Hook 索引`](skills/dev-workflow-standards/hooks/index.md) 读取当前动作适用的合同，由 Agent 判断操作组合；按 [`references/mcp-tools.md`](skills/dev-workflow-standards/references/mcp-tools.md) 调用对应工具。所有仓库操作都要传入本次目标项目的绝对 `repo_path`；服务器不会把启动时的目录当作目标仓库。
+从 [Skill 入口](skills/dev-workflow-standards/SKILL.md) 和 [Hook 索引](skills/dev-workflow-standards/hooks/index.md) 查找当前动作的合同。工具选择与参数见 [MCP 工具目录](skills/dev-workflow-standards/references/mcp-tools.md)。
 
-Python 执行和依赖环境任务按需读取 [`references/python-environment.md`](skills/dev-workflow-standards/references/python-environment.md)，Shell 脚本开发和验证按需读取 [`references/shell-environment.md`](skills/dev-workflow-standards/references/shell-environment.md)。独立脚本无需先进入 Git 工作流；非开发任务不增加环境规则加载步骤。
-
-Git/GitHub/GitLab 写操作必须满足对应动作的用户授权和执行层审批；已有授权在原范围内持续有效。操作优先使用能够满足需求的 MCP 工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，Code Agent 可按 [`MCP 优先与 CLI 补充`](skills/dev-workflow-standards/references/cli-fallback.md) 自行选择相关 CLI、组合必要命令，完成查询或已授权写入，无须仅因工具缺口再问授权。动作条件、必要检查、沙箱和审批继续生效；工具/服务实际发生连接、权限、认证、网络、状态或校验失败时保留现场，不换入口绕过。服务本身仍只接受固定领域参数，不提供任意 shell、git、gh 或项目测试命令。
-
-已在当前 checkout 开始工作、需要从当前 HEAD 原地建立工作分支时，使用 `create_repository_branch`。它支持 detached HEAD 和普通分支，保留已暂存、未暂存及未跟踪内容；只新增本地分支并改变 HEAD，不创建其他 checkout。它与切换已有分支的 `switch_repository_branch`、创建新目录的 `create_repository_worktree` 分别适用不同场景。参数、OID 并发条件、Hook 限制和失败后的回读要求见 [`MCP 工具目录`](skills/dev-workflow-standards/references/mcp-tools.md#原地创建工作分支)。
-
-已有需求 worktree 落后实际 PR base 时，按 [`基线同步`](skills/dev-workflow-standards/references/worktree-base-sync.md) 使用 `fetch_repository_branch`、`audit_worktree_base_sync` 和对应同步工具。已发布分支 merge，未发布分支 rebase；固定并复核 head/base OID，保留冲突现场并重新验证。获取远端基线不切换其他 checkout；普通非强制推送规则继续生效。
-
-本服务发起的 merge/rebase 冲突可按 [`受限恢复`](skills/dev-workflow-standards/references/worktree-recovery.md) 显式继续或撤销。四个专用工具要求匹配当前 worktree 的管理记录、操作 ID 与最新状态快照；不自动解决或暂存冲突，也不调用 skip，abort 还要求确认丢弃本次冲突解决内容。手工、复杂或状态不明的操作不自动接管。
-
-只读按 [`只读查询规约`](skills/dev-workflow-standards/references/read-only-queries.md) 核对完整子命令、参数、配置和副作用：`status` 避免可选 index 写回，差异展示禁用外部 diff/textconv，`fetch` 仍属本地写入；REST 查询显式 GET，GraphQL 审阅 query/mutation；凭据、文件输出和复合步骤不自动豁免。这是 Agent 操作规范，不是新增命令解析器。用户全局 AGENTS 或已安装 Skill 仍有限制时继续遵守并报告；本仓库修改不自动更新全局规则或重载已安装服务。
+- 分支与 worktree 的场景见 [原地建分支](skills/dev-workflow-standards/references/mcp-tools.md#原地创建工作分支)、[基线同步](skills/dev-workflow-standards/references/worktree-base-sync.md) 和 [冲突恢复](skills/dev-workflow-standards/references/worktree-recovery.md)。
+- 托管操作与 CLI 查询见 [GitHub](skills/dev-workflow-standards/references/github.md)、[GitLab](skills/dev-workflow-standards/references/gitlab.md)、[CLI 补充](skills/dev-workflow-standards/references/cli-fallback.md) 和 [只读查询规约](skills/dev-workflow-standards/references/read-only-queries.md)。
 
 ### MCP 客户端可见的使用说明
 
-服务初始化指令说明工具分组、选择依据、通用前置条件和真实数据依赖；工具发现返回的描述说明各工具的用途、边界、执行条件、结果含义及失败后的处理。参数 Schema 同时提供顶层参数和嵌套字段的说明，复杂输入附有合成示例。Code Agent 应先依据这些元数据选择工具，再按参数要求提供事实，无需先自行完成工具承担的判断或内容生成。
-
-维护服务或工具时，必须同步更新客户端可见的说明，不能只改本文件。尤其要区分只读与离线、本地校验与 API 建议、候选内容与已执行操作，以及操作失败与部分副作用。初始化和工具发现检查应验证说明、输入约束和工具注解与实现一致；说明不得改变已有参数类型、默认值或校验规则。
+调用前读取服务初始化指令、工具描述与参数 Schema。维护要求见 [MCP 可发现说明](AGENTS.md#mcp-可发现说明)。
 
 ### 项目 Memory 只读工具
 
@@ -52,15 +33,13 @@ Git/GitHub/GitLab 写操作必须满足对应动作的用户授权和执行层�
 
 ### API 判断与生成工具
 
-- `check_api_input`：通用外发内容预检，请求仅包含 `purpose` 和 `content` 两个必填非空字符串；先在本地检测凭据、登录令牌、不透明载荷及输入限制，再调用 Decisions 审核。不检查文件或目录路径；自动出站审核采用同一规则。其他 MCP Server 可按相同协议使用，无需指定目标工具或仓库。
+- `check_api_input` 审核通用外发输入。准入规则、失败处理及其他服务的接入见 [API 输入审核](skills/dev-workflow-standards/references/api-input-review.md)。
 - `decide_codex_session_action`：判断查询历史、查询项目、澄清/阻塞，以及摘要创建、更新或跳过的分支。
 - `generate_skill_content`：根据证据、查询重点和用户格式生成 Issue、PR、提交信息、计划、交接或历史会话摘要候选内容。
 
-MCP 的分支名、提交信息和 Issue/PR 策略检查在本地硬校验通过后调用 Decisions；API 失败不能返回通过。原始本地校验服务、Hook、Git 写工具的前置检查及不联网的会话辅助工具保持确定性执行。API 工具不执行生成内容里的命令，不自动创建 Issue/PR 或保存 Memory。
+- `web_search` 为缺少原生联网能力的 Agent 检索公开资料并返回带引用摘要。见 [公开网络搜索](skills/dev-workflow-standards/references/web-search.md)。
 
-MCP 进程必须能继承上述两个 OpenAI 环境变量；需要代理时还须继承对应代理变量，配置方法见 [安装与构建指南](INSTALL.md#codex-中安装)。不要把真实值写入仓库。API 只接收调用者显式提交的必要事实，不自动发送整个仓库或会话。输入字段、Prompt 边界、返回结果与推理强度配置见 [`references/openai-workflow-tools.md`](skills/dev-workflow-standards/references/openai-workflow-tools.md)。
-
-项目事实可在用户已经授权的任务、数据及目的地范围内用于这些 API 工具，不必对同一范围逐次重复授权。公开预检只审核给定内容；本服务仍在实际业务出站前强制检查最终请求，覆盖初次生成和后续质量审查，内容变化后重新检查。审核通过不扩大权限，也不保证宿主审批结果。输入协议、失败处理及其他服务的接入责任见 [`API 输入审核`](skills/dev-workflow-standards/references/api-input-review.md)。
+判断使用 Decisions API，生成使用 Responses API。OpenAI 请求固定使用 `gpt-6-luna`，进程需取得 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`。代理、超时、审核与出站约束见 [OpenAI 工具协议](skills/dev-workflow-standards/references/openai-workflow-tools.md#配置与请求边界)。
 
 ## 项目结构
 
@@ -76,18 +55,13 @@ MCP 进程必须能继承上述两个 OpenAI 环境变量；需要代理时还�
 
 ## 本地验证
 
-没有原生联网能力的 coding agent 可调用新增的 `web_search`：固定 `gpt-6-luna`，自动按查询复杂度选择推理强度，通过 Responses API 检索公开网页并返回带引用摘要和来源。输入示例、环境要求与错误处理见 [公开网络搜索](skills/dev-workflow-standards/references/web-search.md)。
-
 在 `mcp-server/` 使用项目环境运行离线测试：
 
-```text
-uv sync --managed-python
-uv run --managed-python -- python -m unittest discover -s ../tests -v
+```bash
+/bin/bash -c 'uv sync --managed-python && uv run --managed-python -- python -m unittest discover -s ../tests -v'
 ```
 
 构建测试会在临时目录生成并解包 sdist、重建 wheel、安装到隔离环境后运行 CLI，不会写入现有用户 Skill 目录。
-
-所有 OpenAI、Decisions 及输入审核 API 请求统一使用 `OPENAI_TIMEOUT_SECONDS=180.0` 秒。可选环境变量 `OPENAI_TIMEOUT_MAX_RETRIES` 配置超时后的重试次数，默认 `5`（首次加 5 次重试，最多 6 次），`0` 关闭；空值、负数或非整数在请求前失败。仅超时重试，其他错误不重试；SDK 内部重试关闭。dws 的 `env_vars` 同步该变量名，已有 MCP 进程须重新加载才能接收新配置；多阶段工具的外层时限需覆盖其请求与重试预算，见 [详细规则](skills/dev-workflow-standards/references/openai-workflow-tools.md#配置与请求边界)。
 
 ### OpenAI 官方 API 冒烟测试
 
@@ -96,7 +70,7 @@ uv run --managed-python -- python -m unittest discover -s ../tests -v
 先在终端中配置并导出所需的 API 和代理环境变量，再从 `mcp-server/` 目录通过 Bash 运行；Bash 子进程继承当前终端已导出的配置：
 
 ```bash
-bash -c 'uv run --frozen -- python ../tests/openai_official_smoke.py --live'
+/bin/bash -c 'uv run --frozen -- python ../tests/openai_official_smoke.py --live'
 ```
 
 测试按原拼写读取 `OPENAI_API_KEY_OFFICAL` 和 `OPENAI_BASE_URL_OFFICAL`，任一缺失或为空就停止，不能回退到其他配置。入口只在调用期间将它们映射为统一客户端要求的 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，之后恢复原环境；生产客户端的配置规则保持不变。代理继续读取当前进程的标准代理变量，遵循 `NO_PROXY`。

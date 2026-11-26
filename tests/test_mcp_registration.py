@@ -32,6 +32,7 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
         )
         from dev_workflow_standards_tools.tools._descriptions import (
             CLI_FALLBACK_DESCRIPTION,
+            OPENAI_NETWORK_DESCRIPTION,
         )
 
         params = StdioServerParameters(
@@ -41,8 +42,10 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             env={},
         )
         async with asyncio.timeout(20), Client(params) as client:
+            instructions = client.instructions
             self.assertEqual(client.server_info.name, "dev-workflow-standards-tools")
-            self.assertIn(CLI_FALLBACK_DESCRIPTION, client.instructions)
+            self.assertIn(CLI_FALLBACK_DESCRIPTION, instructions)
+            self.assertEqual(instructions.count(OPENAI_NETWORK_DESCRIPTION), 1)
             for phrase in (
                 "Pi Code Agent",
                 "searchTools",
@@ -51,19 +54,18 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                 "不提供 read_thread",
                 "timeout",
             ):
-                self.assertIn(phrase, client.instructions)
+                self.assertIn(phrase, instructions)
             for phrase in (
                 "Issue",
                 "PR",
                 "最小充分",
                 "所有待交付的 git commit patch",
-                "不仅是最后一个 commit patch",
                 "默认中文",
                 "language_override",
                 "needs_revision",
                 "两次",
             ):
-                self.assertIn(phrase, client.instructions)
+                self.assertIn(phrase, instructions)
             for phrase in (
                 "httpx2.AsyncClient(trust_env=True)",
                 "HTTPS_PROXY",
@@ -71,21 +73,21 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                 "NO_PROXY",
                 "重新加载",
             ):
-                self.assertIn(phrase, client.instructions)
+                self.assertIn(phrase, instructions)
             for phrase in (
                 "OPENAI_TIMEOUT_SECONDS=180",
                 "OPENAI_TIMEOUT_MAX_RETRIES",
                 "最多6次",
                 "api_timeout",
             ):
-                self.assertIn(phrase, client.instructions)
+                self.assertIn(phrase, instructions)
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
-            self.assertIn("host/group[/subgroup]/project", client.instructions)
-            self.assertIn("GitLab", client.instructions)
-            self.assertIn("GitHub→GitLab 仓库迁移", client.instructions)
-            self.assertIn("git push --mirror", client.instructions)
-            self.assertIn("不得修改源 checkout 的 Git 配置", client.instructions)
-            self.assertNotIn("GitLab 切到 origin", client.instructions)
+            self.assertIn("host/group[/subgroup]/project", instructions)
+            self.assertIn("GitLab", instructions)
+            self.assertIn("GitHub→GitLab 仓库迁移", instructions)
+            self.assertIn("git push --mirror", instructions)
+            self.assertIn("不得修改源 checkout 的 Git 配置", instructions)
+            self.assertNotIn("GitLab 切到 origin", instructions)
             for name in (
                 "audit_gitlab_repository_state",
                 "list_gitlab_issue_labels",
@@ -121,23 +123,29 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             "audit_issue_pr_policy",
             "decide_codex_session_action",
             "generate_skill_content",
+            "check_api_input",
+            "start_issue_pr_draft",
+            "revise_issue_pr_draft",
+            "generate_git_commit_message",
+            "web_search",
         ):
             for phrase in (
-                "httpx2.AsyncClient(trust_env=True)",
-                "HTTP_PROXY",
-                "HTTPS_PROXY",
-                "ALL_PROXY",
-                "NO_PROXY",
+                "gpt-6-luna",
+                "OPENAI_API_KEY",
+                "OPENAI_BASE_URL",
+                "OpenAI 请求配置",
+                "api_timeout",
             ):
                 self.assertIn(phrase, tools[name].description, name)
+            self.assertNotIn(OPENAI_NETWORK_DESCRIPTION, tools[name].description, name)
             self.assertNotIn("proxy", tools[name].input_schema.get("properties", {}))
-            for phrase in (
-                "OPENAI_TIMEOUT_MAX_RETRIES",
-                "180",
-                "invalid_timeout_max_retries",
-                "SDK内部重试关闭",
-            ):
-                self.assertIn(phrase, tools[name].description, name)
+        for name, detail in (
+            ("revise_issue_pr_draft", "draft_revision_conflict"),
+            ("generate_git_commit_message", "validation_scope=local_format_and_attribution"),
+            ("web_search", "search_evidence_missing"),
+        ):
+            self.assertIn(detail, tools[name].description, name)
+            self.assertNotIn(detail, instructions)
         for name, tool_metadata in tools.items():
             description = tool_metadata.description
             self.assertNotIn("需要明确用户授权和 Codex writes approval", description)

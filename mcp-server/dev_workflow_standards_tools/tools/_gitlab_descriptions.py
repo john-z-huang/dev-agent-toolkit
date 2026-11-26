@@ -1,24 +1,13 @@
 """GitLab 工具的客户端可见合同与参数说明。"""
 
 GITLAB_INSTRUCTIONS = """
-Git 托管平台必须依据当前任务、已核实 remote 和项目事实选择，不能按域名中是否含 github/gitlab 猜测自托管平台。
-GitHub 使用 gh 与原有 *_github_* / Issue-PR 工具；GitLab 使用 glab 与 GitLab / Issue-MR 工具。
-GitLab repo 必填 host/group[/subgroup]/project（例 gitlab.example.com/team/sub/project），不含协议、凭据、.git 后缀；
-host 不含端口（glab --hostname 不接受端口）；自定义 API 地址/端口使用预先核实的 glab api_host 配置。
-显式 --hostname 绑定主机，完整项目路径 URL 编码后进入 API endpoint，不沿用 GitHub owner/repo 校验或猜默认主机。
-Issue 的 #N 与 MR 的 !N 均为项目内 iid，不是全局 id；GitLab state=opened/merged、target_branch/source_branch 对应 PR 的 open/merged、base/head。
-本地 Git、worktree、提交、授权、快进和非强推条件跨平台不变；纯 Git 动作不要求 gh/GitHub 登录。
-GitLab 提供仓库审计、标签、Issue 创建、Issue 关联推送、MR 创建/合并、Issue-MR 审计、Fork main 推送与合并后本地清理。
-GitLab 工具通过固定 glab api 联网，不接收任意命令/endpoint，不调用 OpenAI、不读取会话、不写 Memory或配置；
-不收集/回显 GITLAB_TOKEN、OAUTH_TOKEN 或 CLI 原始错误。只读不是离线；写入仍须明确用户授权及实际宿主审批。
-audit_issue_mr_policy 是确定性审计，不返回或冒充 GitHub audit_issue_pr_policy 的 OpenAI Decisions；passed 仅覆盖明确请求的本地规则与远端字段。
-GitLab MR 正文生成可复用 generate_skill_content 的 kind=pr，事实中显式声明 GitLab/MR、实际 source/target 和 #Issue 关闭关联；输出须复核 GitLab 术语。
-用户明确要求推送时，既有策略涵盖补齐缺失 Issue 和创建关联开放 MR，不涵盖合并、关闭或清理。
-合并必须单独授权；pipeline、审批、冲突与保护必须满足，不以 GitHub required checks API 代替 GitLab 状态。
-created=null 或 merged=null 且 write_attempted=true 表示写入结果不明；先回读实际资源，禁止自动重试。
-GitLab 跨项目 Fork MR 的创建与本地清理未被这些封装覆盖；先核实 source/target 项目及分支拓扑，按能力缺口规则补足，不能绕过失败。
+**GitLab**
 
-GitHub→GitLab 仓库迁移没有单一 MCP 工具，是多阶段 Git/gh/glab 操作；命令不能传入 MCP。先确认迁移范围：Git commits/全部所需 branches/tags、Git LFS 与本地未推送 refs，和 Issues/PRs、Releases、Wiki、Actions、保护规则等 hosted data 是不同类别；范围未明时先问，不能把普通 push 说成平台数据迁移。核实绝对 repo_path、GitHub 源 owner/repo、GitLab 当前身份、完整 gitlab.com namespace/project、源默认分支及精确 refs/OID；同名不证明目标身份。目标存在时核对是否空/refs 是否兼容；非空或有冲突即停，不覆盖、不强推。不存在时只有用户明确授权且可见性/default branch 已确认才创建空项目。迁移期间不得修改源 checkout 的 Git 配置：禁止在源 checkout 执行 git remote add/remove/rename/set-url 或 git config 写入，不改 remote URL/fetch/push URL、分支 upstream、push 默认值或 .git/config，现有 origin 及全部 remote 保持不变。GitLab 操作应使用经核实且不含凭据的目标 URL 作为单次命令参数；若 Git 或 LFS 工具要求在源 checkout 配置 remote，只能改用原项目之外的隔离临时 clone/copy，否则停止，绝不切换 origin。未授权前不创建项目、不推 refs/LFS。不要用 git push --mirror、--force 或 --prune；从当前 GitHub refs 清单迁移全部获准的 branches/tags，并逐项比较 GitLab 回读 OID。浅历史、local-only 同名分叉、LFS 缺失、保护分支拒绝或写入不明均失败关闭，先回读/问用户。LFS 若存在须独立迁移与验收；submodule 是独立仓库，不修改父项目 .gitmodules URL。GitLab 项目配置、GitHub hosted data、CI/secrets/权限设置等均按用户范围分别确认和验证；GitHub 源项目保持原状。服务/权限/网络实际失败不是 CLI 能力缺口，不能换入口绕过。完整步骤见 Skill 的 references/github-to-gitlab-migration.md。
+依据项目事实和已核实 remote 选择托管平台。GitHub 使用 gh 和 Issue/PR 工具；GitLab 使用 glab 和 Issue/MR 工具。GitLab repo 为 host/group[/subgroup]/project，Issue #N 与 MR !N 使用项目内 iid。纯 Git 动作无需托管平台登录。
+
+GitLab 工具提供本地与远端审计、标签、Issue、分支推送、MR、Fork main 同步和本地清理。通过固定 glab api 联网；`audit_issue_mr_policy` 是确定性审计。MR 可用 `generate_skill_content(kind=pr)` 起草，提供实际 source/target 和 #Issue 关闭关联并复核 GitLab 术语。明确授权推送时可按适用策略补齐关联 Issue 和开放 MR；合并、关闭及清理需独立授权。跨项目 Fork MR 的创建与本地清理按 CLI 能力缺口处理。
+
+GitHub→GitLab 仓库迁移需组合 Git/gh/glab。分别确认 branches/tags、LFS、本地未推送 refs 和各类托管数据的迁移范围。核实源仓库、默认分支、refs/OID、目标 GitLab 身份和完整项目路径。非空或冲突目标须暂停；只有明确授权并确认可见性、默认分支后才创建空项目。迁移不得修改源 checkout 的 Git 配置；以不含凭据的目标 URL 单次执行，必须配置 remote 时改用隔离临时 clone。未经授权不推 refs/LFS，禁止 git push --mirror、--force 或 --prune。逐项回读获准的 refs/OID，独立验收 LFS；submodule 单独迁移，不改父项目 .gitmodules。浅历史、本地同名分叉、LFS 缺失、保护拒绝或写入不明时停止并回查。完整流程见 Skill 的 references/github-to-gitlab-migration.md。
 """.strip()
 
 COMMON = (

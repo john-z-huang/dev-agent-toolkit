@@ -1,16 +1,16 @@
 # GitHub / GitLab 资源操作
 
-先核实托管平台。以下 Issue、推送、PR 拓扑与授权规则也适用于 GitLab MR；GitLab 使用对应 glab 工具，主机/多级 group、字段及合并差异见 [GitLab 兼容规则](../references/gitlab.md)。GitHub 专属参数与 checks 不直接套用 GitLab。
+按核实的 remote 和项目事实识别托管平台。自托管平台须核实实际类型。Issue、推送、PR 拓扑与授权规则适用于 GitLab MR，GitLab 使用对应 `glab` 工具及检查。见 [GitLab 兼容规则](../references/gitlab.md)。
 
 ## 进入条件
 
-准备使用 `gh` 或调用访问 GitHub 的 MCP/Connector 时，适用 GitHub 账号核验条件。准备创建/修改 Issue、推送分支、创建/修改 PR 或合并时，适用各自动作条件。本地存在 remote 不触发发布。Git Hook 配置和历史重写另需相应明确授权，见 [Git Hook](../references/git-hooks.md)、[历史维护](../references/rewrite-weather-commit-subjects.md)。
+准备访问 GitHub 资源或创建、修改 Issue，推送分支，创建、修改或合并 PR/MR 时适用。Git Hook 配置和历史重写分别按 [Git Hook](../references/git-hooks.md) 与 [历史维护](../references/rewrite-weather-commit-subjects.md) 核对授权。
 
 ## 执行条件
 
-共用：准确平台、主机/仓库（GitHub owner/repo；GitLab host/group[/subgroup]/project）、账号、目标资源、相关分支及授权已核实；网络/认证失败不改用浏览器绕过。真实 Fork 才适用 [Fork 拓扑](../references/fork-maintenance.md)。
+核实主机、仓库、账号、目标资源、分支和授权。涉及真实 Fork 时核对 [Fork 拓扑](../references/fork-maintenance.md)。
 
-GitHub：先运行 `gh auth status --active`，再按 [多账号核验](../references/github.md#多账号核验) 确认实际执行身份及目标仓库权限。切换账号后重新核验。所有已登录账号均缺少所需权限时停止相关操作并请用户介入。
+使用 `gh` 或访问 GitHub 的 MCP/Connector 前，运行 `gh auth status --active`，按 [多账号核验](../references/github.md#多账号核验) 确认实际身份和目标仓库权限。切换账号后重新核验，所有账号均缺少权限时请用户介入。
 
 Issue：正文说明具体问题/目标、范围和验收；至少一个已核实工作类型标签，按策略指派本人。文案可用 `generate_skill_content`，候选须核对事实和质量再发布。
 

@@ -18,15 +18,11 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 
 ### 项目数据使用与发送前审核
 
-本 Skill 明确默认允许 `check_api_input` 向配置的审核服务发起外部 API 调用，无需前置审核、自我审核或逐次人工授权。完成当前用户任务所需的项目内容，通过完整输入审核后，允许发送到既定配置服务，无需再单独确认数据外发；此规则覆盖本服务及使用此审核入口的其他 MCP Server。该许可来自明确指令，不由配置存在、待审用途声明、模型判断或工具注解推断；用户明确禁止外发、更高优先级限制及宿主实际拒绝仍须遵守。用途、内容、策略或目的地变化时重新核对范围并按需重审；通过结果不扩大到 Git、Memory 或外部发布权限。只提交必要事实，移除凭据、认证材料和无关日志。审核器不检查文件或目录路径，所需路径可按任务事实提供；独立的隐私、机密和不透明载荷仍受审核。`repo_path` 等本地操作参数仍按其工具 Schema 传入，实际文件操作的路径限制继续生效。
-
-`check_api_input` 只接收用途 `purpose` 和完整指令 `content`，两者均审核；先运行本地静态检测，失败时不会创建 HTTP/SDK 客户端或发送审核请求，通过后按默认许可直接调用 Decisions。本服务也对真实业务请求的最终内容执行门禁，覆盖业务 Decisions、首次生成和二次质量审查，不依赖调用者是否先执行公开预检。检查与发送保持同一内容快照；内容变化后重新检查，不复用旧的通过结果。外发内容校验逻辑集中在本地输入策略与固定语义审核规则中，并以实际案例累积回归。
-
-审核调用本身免于重复语义审核以避免递归，但仍受统一客户端的配置、本地检测和脱敏规则约束。审核拒绝、异常或结果不完整不能进入业务请求。新门禁会增加 API 调用，普通离线测试应分别模拟审核与业务请求。详细协议、状态及跨 MCP 服务边界见 [`API 输入审核`](api-input-review.md)。
+`check_api_input` 按 [API 输入审核](api-input-review.md) 的默认许可先本地检查，再联网审核。业务 Decisions、生成和质量审查均有自己的最终出站门禁，仅在实际发送的内容快照通过后继续。离线测试分别模拟审核与业务请求。
 
 ### Codex stdio 环境传递与排查
 
-安装为 uv tool 后，服务仍只读取自身进程的环境变量。Codex 主进程需要持有非空的 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，并在 `[mcp_servers.dev-workflow-standards-tools]` 中通过 `env_vars` 显式允许转发这两个名称。需要网络代理时，还应转发 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及其小写名称，使已配置的值进入 MCP 子进程。使用更新后的源码 dws 脚本时，这些名称会自动合并；已有注册可用下述 `--env-only` 补齐。脚本入口与独立 Skill 安装的区别见 [安装说明](installation.md#mcp-与源码辅助脚本)，字段语义见 [Codex MCP 官方说明](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)。终端中手动运行成功，只能证明该次进程拿到了配置，不能证明 Codex 启动的 MCP 子进程也收到了配置。
+安装为 uv tool 后，服务仍只读取自身进程的环境变量。Codex 启动环境须持有非空的 `OPENAI_API_KEY`、`OPENAI_BASE_URL`，并在 `[mcp_servers.dev-workflow-standards-tools]` 的 `env_vars` 中转发这两个名称及所需标准代理变量。自定义重试次数时，也转发 `OPENAI_TIMEOUT_MAX_RETRIES`。源码 `dws` 会合并这些名称。终端中手动运行成功只验证了该次进程的配置。脚本入口见 [安装说明](installation.md#mcp-与源码辅助脚本)，字段语义见 [Codex MCP 官方说明](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)。
 
 需要用源码辅助脚本修复已有注册时，在源码仓库根目录运行 `./dws --env-only`；可添加 `--dry-run` 只检查不写入，或用 `--server NAME`、`--config PATH` 指定目标。无参数执行入口仅打印使用帮助；安装或更新 MCP 须显式使用 `--mcp-install` 或 `--mcp-update`。`--env-only` 只合并变量名，保留其他配置，不读取凭据或代理值，也不发起 API 请求。它不会替调用进程加载凭据、配置代理服务、启用额外授权或修改 MCP 的请求配置规则。
 
@@ -56,8 +52,6 @@ Pi 的服务级 `timeout` 单位为秒，默认 60，不能覆盖单次最长 18
 原检查工具保留本地检查结果，并补充 API 判断信息。本地失败无需发送 API；API 拒绝、超时、错误、返回未知选项或缺少答案时均不能通过。判断返回固定枚举，不使用自由文本猜测分支，也不把置信度当作授权或验证证据。
 
 路径、精确名称和格式规则、创建时间排序、Git 写操作前置条件仍由本地代码执行。`get_codex_session_summary_guidance`、`order_codex_session_sources` 和 `prepare_codex_session_memory` 继续作为不联网的确定性助手；固定 Git 写工具及 Hook 不会因为模型的肯定结果而跳过自身检查。
-
-自定义重试次数时，向 MCP 子进程转发 `OPENAI_TIMEOUT_MAX_RETRIES`；dws 和 `--env-only` 会合并该变量名而不读取或写入其值。未设置时仍默认重试 5 次。
 
 ### 会话事实输入
 
@@ -106,9 +100,9 @@ Code Agent 必须从真实读取结果填写这些条件。工具只判断提供
 调用前收集相关的最小充分材料，无需先写整篇正文，不传整个仓库、完整会话或敏感配置。通用事实包括目标、受众、背景、组件、路径/符号指针、范围与非目标、约束及关联项；标注来源，区分已核实事实、未验证反馈、推测和建议，缺失或矛盾如实说明。
 
 - Issue：区分缺陷与功能/变更请求。缺陷提供实际行为、期望行为和影响，环境/复现只填已有证据；需求提供目标能力和有依据的动机。建议的验收条件要标为建议。
-Issue/PR 若用于交付已有 Git 改动，必须参考所有待交付的 git commit patch，而不仅是最后一个 commit patch。调用方先核实目标 base/head、比较基点（通常为 merge-base）及完整提交列表，逐个读取该范围内的 patch（含已推送但尚未进入目标 base 的提交，不以未推送范围替代 PR 范围），再提供覆盖每个提交的有界事实摘要和可追溯 SHA/路径；结合整个范围的最终净 diff 归纳重要变更，后续修正或回退不得描述为仍生效。不得仅用 git show HEAD、最后一次提交或工作区 diff 代表全部改动；无需向模型发送所有原始 patch，可分批收集但不得静默截断或遗漏提交。范围未知、patch 未读全或摘要仅覆盖部分提交时，在 missing_facts 标明缺口，不得声称完整。纯需求/缺陷 Issue 尚无对应提交时此规则不适用，不得编造提交或强制索要 patch。
-
 - PR：提供具体前后行为、已完成改动与原因、真实 diff 摘要或文件证据、实际验证命令及结果、未运行项、已知兼容风险和关联 Issue。计划不能当成完成，验证未知不能当成通过。
+
+交付已有改动时，按 [Issue/PR 文案的提交证据范围](github.md#issuepr-文案的提交证据范围) 核对全部待交付提交与最终净 diff，再提供可追溯的有界摘要。
 
 Issue/PR 标题和自然语言正文默认中文。英文材料、模板和 Agent 自拟英文请求不构成语言授权；技术标识、路径、代码、命令、错误原文与必要引用保留。真实用户要求其他语言时，将原文放入 `user_provided` 证据并设置覆盖，例如：
 
@@ -135,7 +129,7 @@ Agent 准备本次选定提交全部 patch/hunk 的有界摘要、准确路径�
 
 以上路径和事实为合成示例。输入不含kind/source/language_override；focus_questions/output_format可选，重点/结构优先默认但不覆盖固定规则。返回candidate、used_evidence_refs、missing_facts、review_notes及完整message；正文为空时message只有标题，否则标题后空行加正文。ok=true与validation_scope=local_format_and_attribution只说明本地引用/格式/署名通过，不代表语义或Git范围已校验。adoptable=false或缺口存在不可直接采用；Agent审阅后调用check_commit_message检查最终完整文本，暂存范围变更需重新核对生成依据。生成失败不默认为通过，不自动转手写绕过。
 
-工具联网但不读Git/文件、写Memory、提交或发布；一次性无会话，仅commit_message，不运行Issue/PR质量审查；固定gpt-6-luna、显式OPENAI_API_KEY/OPENAI_BASE_URL、store=False、统一错误脱敏保持不变。生成成功不授权stage/commit，提交仍需用户授权及分支、暂存等适用检查。
+工具仅联网生成单次提交候选，不读取 Git 或文件，也不保存或发布候选。提交仍需用户授权及分支、暂存等适用检查。
 
 ## Issue/PR 多轮修订草稿
 
@@ -158,7 +152,7 @@ Agent 准备本次选定提交全部 patch/hunk 的有界摘要、准确路径�
 
 首个完成候选版本为1，失败保留0；ok=true含needs_revision推进版本但不代表可采用，adoptable仍须检查。审查异常/取消不推进或覆盖旧稿。expected_revision不匹配返回draft_revision_conflict，先get；运行中draft_in_progress。相同request_id+内容返回原尝试结果（可能为旧版本），不同内容request_id_conflict。失败后新尝试用新ID；取消后的首轮重放可能返回draft_attempt_incomplete，可从其ID用expected_revision=0修订或close。缓存重放不延长TTL。
 
-每轮生成与独立审查经统一客户端和完整出站审核，固定gpt-6-luna，显式读取OPENAI_API_KEY、OPENAI_BASE_URL，store=False、不静默截断；Token/延迟收益未经实测。会话ID和请求ID不应含凭据。新工具修改进程状态，仍不读取Git、不写仓库、不发布GitHub；调用授权不扩展为提交/推送/Memory写入授权。Pi无需Codex专属审批，但仍遵守实际宿主权限。
+每轮生成和独立审查各自执行出站审核并遵守统一请求边界。会话 ID 和请求 ID 不应含凭据。草稿工具只修改进程状态，提交、推送或发布需独立授权。宿主审批见 [Skill 宿主规则](../SKILL.md#宿主审批兼容)。
 
 ## Instruction Prompt 与返回内容
 
@@ -181,7 +175,7 @@ Agent 准备本次选定提交全部 patch/hunk 的有界摘要、准确路径�
 
 `used_evidence_refs` 只列实际支撑候选内容的输入引用，不能不加区分地列出所有证据；`missing_facts` 只列完成当前请求必要但未提供或有冲突的事实，不能为填满默认章节虚构缺口；`review_notes` 用于简短的事实边界和采纳前检查，不返回中间推理或整份输入。
 
-Issue/PR 在本地硬校验后，通过同一统一客户端进行第二次有界 `Responses.parse` 语义审查，固定 `gpt-6-luna`、`medium`，无工具执行；两次请求各自重新读取并显式使用配置，均检查预算、拒绝、不完整与解析错误。仅底层请求超时按统一预算重试，审查不自动修复候选或因拒绝、无效结果重新生成。`quality_review` 的 `language_compliant`、`evidence_supported`、`coverage_sufficient` 是模型建议，分别检查语言授权、事实支撑、针对当前请求的关键事实覆盖与冲突；不按字数、中文比例或默认章节数量判质量。`quality_review_usage` 单独列审查用量，`usage` 仍为生成请求用量。
+Issue/PR 在本地硬校验后，另用 `Responses.parse` 和 `medium` 强度作有界语义审查。审查不自动修复候选，也不在拒绝或无效结果后重新生成。`quality_review` 的 `language_compliant`、`evidence_supported`、`coverage_sufficient` 分别判断语言授权、事实支撑、关键事实覆盖与冲突，不按字数、中文比例或默认章节数量判质量。`quality_review_usage` 单列审查用量，`usage` 为生成用量。
 
 生成与审查的缺失事实和审阅提示合并去重。`ok=true` 仅代表有效草稿与有效审查，不保证适合发布；仅所有审查项为真且合并 `missing_facts` 为空时 `adoptable=true`、`quality_status=ready_for_agent_review`。其余返回 `adoptable=false`、`quality_status=needs_revision`，须修订或补证后重新审阅。审查异常返回 `ok=false`、安全 `error_code`、`adoptable=false`，不返回可采纳候选；超出发现项上限同样失败关闭。模型审查不证明实际事实正确，通过仍需人工核对且不授予写入权限。离线 mock 仅验证流程、规则和结构，不证明真实语言质量；真实生成验证须另行授权最小脱敏数据。
 
