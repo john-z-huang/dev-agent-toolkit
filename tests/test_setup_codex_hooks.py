@@ -35,6 +35,26 @@ class HooksSetupTests(unittest.TestCase):
             self.assertIn("uv tool install", output.getvalue())
             self.assertIn("configure --global --install --merge", output.getvalue())
 
+    def test_project_preview_does_not_require_an_existing_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "not-created"
+            argv = [str(SETUP), "--project-root", str(target), "--update"]
+            with (
+                patch.object(sys, "argv", [*argv, "--dry-run"]),
+                patch.object(setup.subprocess, "run") as run,
+                contextlib.redirect_stdout(io.StringIO()) as output,
+            ):
+                self.assertEqual(setup.main(), 0)
+                self.assertIn(str(target), output.getvalue())
+                with (
+                    patch.object(sys, "argv", argv),
+                    contextlib.redirect_stderr(io.StringIO()),
+                    self.assertRaises(SystemExit),
+                ):
+                    setup.main()
+                run.assert_not_called()
+            self.assertFalse(target.exists())
+
     def test_update_installs_package_then_verifies_and_registers_exact_entry(
         self,
     ) -> None:
@@ -49,7 +69,9 @@ class HooksSetupTests(unittest.TestCase):
                 subprocess.CompletedProcess([], 17),
             ]
             with (
-                patch.object(sys, "argv", [str(SETUP), "--global", "--update"]),
+                patch.object(
+                    sys, "argv", [str(SETUP), "--global", "--update", "--reconcile"]
+                ),
                 patch.object(setup.subprocess, "run", side_effect=results) as run,
                 contextlib.redirect_stderr(io.StringIO()) as output,
             ):
@@ -67,7 +89,8 @@ class HooksSetupTests(unittest.TestCase):
             )
             self.assertEqual(commands[2], [str(executable), "--version"])
             self.assertEqual(
-                commands[3], [str(executable), "configure", "--global", "--update"]
+                commands[3],
+                [str(executable), "configure", "--global", "--update", "--reconcile"],
             )
             self.assertIn("软件包已安装", output.getvalue())
 

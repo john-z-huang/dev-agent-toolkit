@@ -49,42 +49,44 @@ def file_hashes(files: dict[Path, bytes]) -> dict[str, str]:
     return {path.name: hashlib.sha256(data).hexdigest() for path, data in files.items()}
 
 
-def validate_target(
-    files: dict[Path, bytes], manifest: Path, update: bool
-) -> HookManifest | None:
-    """首次注册拒绝已有资源，更新核对清单及旧脚本；失败不写入。"""
-    paths = [*files, manifest]
-    if not update:
-        paths.append(manifest.parent / "dev_workflow.py")
-        if any(path.exists() or path.is_symlink() for path in paths):
-            raise HookSetupError(
-                "目标已有 Hooks 资源。受管安装请用 --update；仅有 hooks.json 时，"
-                "可先加 --merge --dry-run 审阅合并计划。"
-            )
-        return None
+def validate_install_target(paths: list[Path], manifest: Path) -> None:
+    """首次注册拒绝已有受管资源或待写配置。"""
     if any(
-        path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1
-        for path in paths
+        path.exists() or path.is_symlink()
+        for path in [*paths, manifest, manifest.parent / "dev_workflow.py"]
     ):
         raise HookSetupError(
-            "更新要求完整的受管普通文件；请检查脚本、配置和清单是否缺失或为链接"
+            "目标已有 Hooks 资源。受管安装请用 dws --hooks-update 或 configure --update；"
+            "仅有 hooks.json 时，可用 configure --install --merge --dry-run 审阅合并计划。"
         )
-    record = json.loads(manifest.read_bytes())
+
+
+def read_update_file(path: Path) -> bytes:
+    """读取已存在的独立普通文件，保留原始字节供指纹校验与备份。"""
+    if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
+        raise HookSetupError("更新要求完整的受管普通文件；请检查配置、清单或旧脚本是否缺失或为链接")
+    return path.read_bytes()
+
+
+def read_update_snapshot(
+    config: Path, manifest: Path
+) -> tuple[dict[Path, bytes], object]:
+    """更新前读取当前配置、清单及旧版清单声明的脚本。"""
+    snapshot = {config: read_update_file(config), manifest: read_update_file(manifest)}
+    record = json.loads(snapshot[manifest])
     if isinstance(record, dict) and record.get("format") in (1, 2):
         legacy = manifest.parent / "dev_workflow.py"
-        if legacy.is_symlink() or not legacy.is_file() or legacy.stat().st_nlink != 1:
-            raise HookSetupError("旧版受管脚本缺失或不是独立普通文件，无法迁移")
-        paths.append(legacy)
-    observed = file_hashes(
-        {path: path.read_bytes() for path in paths if path != manifest}
-    )
-    return validate_manifest(record, observed)
+        snapshot[legacy] = read_update_file(legacy)
+    return snapshot, record
 
 
 def validate_manifest(record: object, observed: dict[str, str]) -> HookManifest:
     """核对受管指纹及版本结构，将外部 JSON 转为明确的清单类型。"""
     if not isinstance(record, dict) or record.get("files") != observed:
-        raise HookSetupError("受管文件已修改或清单不匹配；不会覆盖本地修改")
+        raise HookSetupError(
+            "受管文件已修改或清单不匹配；不会覆盖本地修改。"
+            "格式 3 的安装若只改了其他 Hooks，可用 configure --update --reconcile --dry-run 审阅。"
+        )
     schema = record.get("format")
     expected = {"format", "files"}
     if schema == 2 or (schema == 3 and "base_configuration" in record):
@@ -99,6 +101,54 @@ def validate_manifest(record: object, observed: dict[str, str]) -> HookManifest:
     return validated
 
 
+def unique_json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """恢复时拒绝会被普通 JSON 解码静默丢弃的重复字段。"""
+    result = dict(pairs)
+    if len(result) != len(pairs):
+        raise HookSetupError("Hooks 配置包含重复 JSON 字段，无法恢复")
+    return result
+
+
+def reconcile_base(
+    config: Path,
+    original: bytes,
+    record: object,
+    managed: HookConfiguration,
+) -> HookConfiguration:
+    """证明原配置归属，再从当前配置中完整扣除受管组。"""
+    if not isinstance(record, dict) or record.get("format") != 3:
+        raise HookSetupError("--reconcile 要求格式 3 的受管清单")
+    previous = managed
+    if "base_configuration" in record:
+        old_base = validate_configuration(record["base_configuration"])
+        if any(
+            group in old_base["hooks"].get(event, [])
+            for event, groups in managed["hooks"].items()
+            for group in groups
+        ):
+            raise HookSetupError("清单的原配置与受管组重叠；无法区分各组归属")
+        previous = merge_configuration(old_base, managed)
+    expected = file_hashes(managed_files(config.parent, previous))
+    if record.get("files") != expected:
+        raise HookSetupError("无法重建清单记录的原始 Hooks 指纹；请核对原工具版本和配置")
+    validate_manifest(record, expected)
+
+    current = validate_configuration(json.loads(original, object_pairs_hook=unique_json_object))
+    hooks = dict(current["hooks"])
+    for event, groups in managed["hooks"].items():
+        observed = hooks.get(event, [])
+        start = len(observed) - len(groups)
+        if start < 0 or json.dumps(observed[start:], sort_keys=True) != json.dumps(
+            groups, sort_keys=True
+        ):
+            raise HookSetupError("当前受管 Hooks 组有缺失、修改或顺序变化；请人工核对")
+        hooks[event] = observed[:start]
+    base = {**current, "hooks": hooks}
+    if merge_configuration(base, managed) != current:
+        raise HookSetupError("当前配置包含重复受管 Hooks 组；请人工核对")
+    return base
+
+
 def merge_base(
     directory: Path, files: dict[Path, bytes], manifest: Path
 ) -> HookConfiguration:
@@ -109,17 +159,15 @@ def merge_base(
         raise HookSetupError(
             "--merge 要求已有普通 hooks.json 文件，拒绝符号链接和硬链接"
         )
-    validate_target(
-        {path: data for path, data in files.items() if path != config}, manifest, False
-    )
+    validate_install_target([path for path in files if path != config], manifest)
     return validate_configuration(json.loads(config.read_bytes()))
 
 
-def backup_configuration(path: Path) -> None:
+def backup_configuration(path: Path, original: bytes) -> None:
     """独占保存原始配置字节并报告备份位置，失败时由调用者停止注册。"""
     descriptor, name = tempfile.mkstemp(prefix="hooks.json.backup-", dir=path.parent)
     with os.fdopen(descriptor, "wb") as stream:
-        stream.write(path.read_bytes())
+        stream.write(original)
     print(f"原配置备份：{name}", file=sys.stderr)
 
 
@@ -158,17 +206,32 @@ def install(
     update: bool,
     dry_run: bool,
     merge: bool = False,
+    reconcile: bool = False,
 ) -> HookConfiguration:
     """校验后注册配置并发布清单；预览不写入，显式合并先保存备份。
 
     多文件发布不保证整体原子性；中断后需先核对实际配置和清单。
     """
     files = managed_files(directory, configuration)
+    config = directory / "hooks.json"
     manifest = directory / "hooks/dev_workflow.manifest.json"
-    previous = None if merge else validate_target(files, manifest, update)
-    base = previous.get("base_configuration") if previous is not None else None
-    if merge:
+    snapshot: dict[Path, bytes] = {}
+    reconciled = False
+    base = None
+    if update:
+        snapshot, previous = read_update_snapshot(config, manifest)
+        observed = file_hashes(
+            {path: data for path, data in snapshot.items() if path != manifest}
+        )
+        if reconcile and isinstance(previous, dict) and previous.get("files") != observed:
+            base = reconcile_base(config, snapshot[config], previous, configuration)
+            reconciled = True
+        else:
+            base = validate_manifest(previous, observed).get("base_configuration")
+    elif merge:
         base = merge_base(directory, files, manifest)
+    else:
+        validate_install_target(list(files), manifest)
     if base is not None:
         configuration = merge_configuration(base, configuration)
         files = managed_files(directory, configuration)
@@ -178,8 +241,12 @@ def install(
     files[manifest] = (json.dumps(record, indent=2) + "\n").encode("utf-8")
     if dry_run:
         return configuration
-    if merge:
-        backup_configuration(directory / "hooks.json")
+    if reconciled:
+        if any(read_update_file(path) != data for path, data in snapshot.items()):
+            raise HookSetupError("Hooks 文件在恢复校验后已变化；请重新审阅")
+        backup_configuration(config, snapshot[config])
+    elif merge:
+        backup_configuration(config, config.read_bytes())
     publish_files(files, update=update, merge=merge)
     return configuration
 
@@ -221,6 +288,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--merge", action="store_true", help="首次安装时备份并保留已有 hooks.json"
     )
+    parser.add_argument(
+        "--reconcile", action="store_true", help="更新时核验受管组，备份并保留当前其他 Hooks"
+    )
     return parser
 
 
@@ -230,6 +300,8 @@ def main(executable: Path, arguments: list[str]) -> int:
     args = parser.parse_args(arguments)
     if args.merge and not args.install:
         parser.error("--merge 只能与 --install 一起使用")
+    if args.reconcile and not args.update:
+        parser.error("--reconcile 只能与 --update 一起使用")
     directory = target_directory(args, parser)
     configuration = build_config(executable)
     if args.install or args.update:
@@ -240,6 +312,7 @@ def main(executable: Path, arguments: list[str]) -> int:
                 update=args.update,
                 dry_run=args.dry_run,
                 merge=args.merge,
+                reconcile=args.reconcile,
             )
         except HookSetupError as error:
             print(f"操作未完成：{error}", file=sys.stderr)
