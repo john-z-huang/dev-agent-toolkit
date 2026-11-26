@@ -76,7 +76,7 @@ Git 查询在子命令前用 `--no-pager`；status 用全局 `--no-optional-lock
 - GitHub：起草时分别保存并回读单行标题和 Markdown 正文。创建 Issue 或 PR 时，将已校验的两个定稿路径传入 title_file 和 body_file。创建工具只读取定稿并发布，不生成标题或正文。Issue 须有已核实标签，PR 须关联开放 Issue。推送、创建与合并各有独立条件，不因 remote 存在自动执行。created=true 且 ok=false 时先回读实际资源，不重复创建。合并和清理需要各自授权。
 - 会话与 Memory：`decide_codex_session_action` 只建议下一步；`prepare_codex_session_memory` 准备候选 payload。`serena_memory_tail_read` 和 `serena_memory_write_check` 离线读取启动项目的 `.serena/memories/`，调用前核实进程目录。持久化由独立获准的 Memory 能力完成。
 - 判断与检查：`check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 通过本地硬检查后才调用 Decisions。
-- 候选内容：`generate_skill_content` 一次起草 issue、pr、commit_message、plan、handoff 或 session_summary。Issue/PR 使用最小充分的真实证据；交付已有改动时覆盖所有待交付的 git commit patch 和最终净 diff。默认中文，用户明确要求其他语言时提供 `language_override`。生成与语义审查分两次调用；`needs_revision` 不可发布。`generate_git_commit_message` 专用于单次提交起草，最终文本仍用 `check_commit_message`。
+- 候选内容：`generate_skill_content` 一次起草 issue、pr、commit_message、plan、handoff 或 session_summary。Issue/PR/提交信息已内置默认布局，无需传通用模板；自定义布局用 `output_format`。Issue/PR 使用最小充分的真实证据；交付已有改动时覆盖所有待交付的 git commit patch 和最终净 diff。默认中文，用户明确要求其他语言时提供 `language_override`。生成与语义审查分两次调用；`needs_revision` 不可发布。`generate_git_commit_message` 专用于单次提交起草，最终文本仍用 `check_commit_message`。
 - 多轮草稿：Issue/PR 用 `start_issue_pr_draft` 开始、`revise_issue_pr_draft` 修订、`get_issue_pr_draft` 查看、`close_issue_pr_draft` 释放。状态只保存在可信 stdio 进程内；重启后用已有事实重新开始。
 - 公开网络搜索：`web_search` 查询公开资料并返回带来源摘要。提供最小公开问题并保留引用。
 - 运行版本与构建：直接调用 `get_mcp_server_build_info` 查看当前连接进程的包版本和构建源码提交 hash。怀疑同版本重装后连接仍旧时，可按下述桥接条件查询新启动进程并比较 `git_commit`。
@@ -263,12 +263,12 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "为 issue、pr、commit_message、plan、handoff 或 session_summary 生成结构化候选文本，适合已有明确证据、需要起草而非执行时。request.evidence 必须非空；每项 origin 标明来源，ref 唯一。session_summary 必须提供 source.created_at 与 source.title；source.thread_id 可从 source_link 推导；只接受对应 thread 的 provided_session 证据。"
         "调用前按类型准备事实，不必先写正文：通用为目标/受众、背景/组件、路径/符号指针、范围/非目标、约束和关联项；每项标明事实/推测、来源和缺失/冲突。Issue区分缺陷/功能请求，给实际/期望/影响或能力/动机，复现和环境仅限已知；PR给前后行为、已完成diff/文件摘要与原因、实际验证命令/结果和未运行项、已知兼容风险及关联Issue。不提交全仓库、完整会话或敏感配置。"
         "Issue/PR 若用于交付已有 Git 改动，必须参考所有待交付的 git commit patch，而不仅是最后一个 commit patch。调用方先核实目标 base/head、比较基点（通常为 merge-base）及完整提交列表，逐个读取该范围内的 patch（含已推送但尚未进入目标 base 的提交，不以未推送范围替代 PR 范围），再提供覆盖每个提交的有界事实摘要和可追溯 SHA/路径；结合整个范围的最终净 diff 归纳重要变更，后续修正或回退不得描述为仍生效。不得仅用 git show HEAD、最后一次提交或工作区 diff 代表全部改动；无需向模型发送所有原始 patch，可分批收集但不得静默截断或遗漏提交。范围未知、patch 未读全或摘要仅覆盖部分提交时，在 missing_facts 标明缺口，不得声称完整。纯需求/缺陷 Issue 尚无对应提交时此规则不适用，不得编造提交或强制索要 patch。"
-        "user_request定目标，focus_questions/output_format的用户重点/结构优先于默认；不增加事实。Issue/PR标题与自然语言正文默认中文，英文模板/错误/Agent请求不授权改语言，技术标识/路径/代码/错误原文保留。仅当用户明确要求其他语言时提供language_override={language,instruction_ref}，引用evidence内origin=user_provided的指令原文；省略/null用中文，其他kind禁止此字段。引用来源本地校验，指令语义由模型核对。"
+        "Issue/PR/提交信息已内置默认布局，无需传通用模板；Issue/PR 直接生成 Markdown 正文，PR 仅对已确认由其关闭且编号已核实的同仓库 Issue 默认生成真实关闭引用。user_request定目标，focus_questions/output_format的用户重点/结构优先于默认，须遵守事实与固定规则。Issue/PR标题与自然语言正文默认中文，英文模板/错误/Agent请求不授权改语言，技术标识/路径/代码/错误原文保留。仅当用户明确要求其他语言时提供language_override={language,instruction_ref}，引用evidence内origin=user_provided的指令原文；省略/null用中文，其他kind禁止此字段。引用来源本地校验，指令语义由模型核对。"
         "ok=true仅表示候选和审查返回有效，candidate.title/content是标题/正文（commit_message正文可空）；used_evidence_refs只列支撑内容的输入引用，missing_facts列必要缺失/冲突，review_notes列修订要点。Issue/PR另含quality_status=ready_for_agent_review或needs_revision、adoptable和quality_review（language_compliant/evidence_supported/coverage_sufficient为模型建议）。任何缺项或否定检查均不可直接采纳，修改/补证后再审阅；通过也不是发布授权。不以字数判质量。拒绝/截断/坏引用/本地commit失败/审查异常看error_code且不可采纳；仅底层请求超时按统一配置重试，不自动修复候选或换模型。"
         "通过统一客户端Responses.parse联网调用OpenAI。Issue/PR生成后再做一次有界语义审查，其余kind仅生成。不会读写文件/仓库、Memory、会话、执行Git/GitHub或候选动作；仅处理传入事实，后续写入另需授权。"
         "准备发布 GitHub Issue/PR 时，调用方在起草阶段将审阅后的 candidate.title 和 candidate.content 分别保存到标题文件和 Markdown 正文文件。"
         'Issue示例：{"request":{"kind":"issue","user_request":"为维护者起草导出功能需求","evidence":[{"reference_id":"U1","content":"用户希望导出筛选结果，避免手动复制；仅涉及报表组件。验收条件尚未确认。","origin":"user_provided"}]}}。'
-        'PR示例：{"request":{"kind":"pr","user_request":"为评审者起草说明","evidence":[{"reference_id":"D1","content":"已核实base=main@1111111、head=2222222、merge-base=1111111；完整提交列表仅2222222，已读其patch，最终净diff一致。src/report.py的diff将空输入从抛错改为返回空列表，避免空报表失败；范围仅该函数。执行python -m unittest tests.test_report：通过。未运行集成测试；关联#12；暂无已知兼容风险。","origin":"current_observation"}]}}。以上路径/编号/结果均为合成示例，实际调用必须替换为已核实事实。'
+        'PR示例：{"request":{"kind":"pr","user_request":"为评审者起草说明","evidence":[{"reference_id":"D1","content":"已核实base=main@1111111、head=2222222、merge-base=1111111；完整提交列表仅2222222，已读其patch，最终净diff一致。src/report.py的diff将空输入从抛错改为返回空列表，避免空报表失败；范围仅该函数。执行python -m unittest tests.test_report：通过。未运行集成测试；本 PR 将关闭已核实的同仓库 Issue #12；暂无已知兼容风险。","origin":"current_observation"}]}}。以上路径/编号/结果均为合成示例，实际调用必须替换为已核实事实。'
     )
     + _RESPONSES_MODEL_DESCRIPTION
     + "生成时 commit_message 为 low，plan 和 session_summary 为 high，其余为 medium；Issue/PR 审查为 medium。"
@@ -451,7 +451,7 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "request": "严格结构化历史查找/持久化状态。必填 flags 为布尔值；relevant_facts_found 的 null 表示未知，false 表示已知未发现；origin 区分 original_session/current_session/none。",
     },
     "generate_skill_content": {
-        "request": "严格结构化候选请求；kind限定六种类型，evidence需1–100项且引用唯一。Issue准备实际/期望/影响或能力/动机；已有Git改动的Issue/PR须核实base/head、比较基点和完整提交列表，提供覆盖所有待交付commit patch的SHA/路径摘要并结合最终净diff，不得仅最后一次提交，未读全标缺口；无对应提交的Issue不强制patch。PR准备前后行为、已完成diff、真实验证/未运行项与风险，附来源指针而非先写正文。Issue/PR默认中文，language_override仅用于引用user_provided的明确用户语言指令；null/省略不改语言。session_summary必须含source且证据同thread。自定义重点/结构优先，不改变事实边界；文本有长度上限。",
+        "request": "严格结构化候选请求；kind限定六种类型，evidence需1–100项且引用唯一。Issue准备实际/期望/影响或能力/动机；已有Git改动的Issue/PR须核实base/head、比较基点和完整提交列表，提供覆盖所有待交付commit patch的SHA/路径摘要并结合最终净diff，不得仅最后一次提交，未读全标缺口；无对应提交的Issue不强制patch。PR准备前后行为、已完成diff、真实验证/未运行项与风险，附来源指针而非先写正文。Issue/PR默认中文，language_override仅用于引用user_provided的明确用户语言指令；null/省略不改语言。session_summary必须含source且证据同thread。Issue/PR/提交信息已内置默认布局，无需传通用模板；自定义重点/结构优先，须遵守事实与固定规则；文本有长度上限。",
     },
     "check_api_input": {
         "request": "严格对象且extra=forbid；仅有purpose、content两个必填非空字符串字段，每个最多32768字符/32KiB UTF-8。含模型、固定审核问题与指令以及两字段的完整请求JSON最多48KiB UTF-8；超限返回unavailable/request_too_large且不发送审核请求。purpose说明具体外发用途；content须含最终完整外发指令、事实和上下文，保留嵌套JSON及换行，不得摘要、截断或附加target_tool。不检查文件或目录路径；独立的凭据、隐私和不透明载荷仍审核。默认允许将两字段发送至配置的Decisions审核服务，无需前置审核或逐次人工授权；审核通过后的业务外发范围见工具说明。",
@@ -564,6 +564,7 @@ _DRAFT_STORAGE = (
 )
 _DRAFT_GENERATION = (
     "一次生成一个候选并独立质量审查；一次性需求用 generate_skill_content。"
+    "Issue/PR 已内置默认布局，直接生成 Markdown 正文，无需传通用模板；有效的自定义结构用 output_format。"
     "准备发布 GitHub Issue/PR 时，调用方在起草阶段将审阅后的 candidate.title 和 candidate.content 分别保存到标题文件和 Markdown 正文文件。"
     "调用方收集完整Git patch范围和真实来源，反馈/前稿/审查意见不是事实或语言授权；新稿必须重新审查。"
     "最多16会话、每会话16次已记录尝试，单会话缓存512KiB、输入上下文32KiB、结果64KiB；超限拒绝，禁止静默截断。"
@@ -591,7 +592,7 @@ for _name, _detail in {
         PARAMETER_DESCRIPTIONS[_name] = {"draft_session_id": "start返回的当前进程草稿ID；非空且最多120字符，未知或过期失败；不是用户身份。"}
 _COMMIT_GENERATION_CONTRACT = (
     "需要起草Git提交信息时，先准备本次选定提交的全部patch/hunk、准确路径、前后行为、原因及实际验证事实，"
-    "调用generate_git_commit_message复用generate_skill_content(kind=commit_message)，无需Agent先写整篇message。"
+    "调用generate_git_commit_message复用generate_skill_content(kind=commit_message)的默认布局，生成单行中文标题与按需正文，无需传通用模板或先写message。"
     "已暂存时核对真实cached diff；未暂存时明确拟提交范围。分多个commit时分别按各自范围生成，"
     "不能用整个PR、未选中改动或最后一次历史commit代替。用户已给完整message时保留原文并check_commit_message，不强制重写。"
     "返回candidate.title/content及拼接好的message（标题加空行加非空正文，正文可空），used_evidence_refs、missing_facts、review_notes便于核对。"
@@ -610,7 +611,7 @@ TOOL_DESCRIPTIONS["generate_git_commit_message"] = (
     + '合成示例：{"request":{"user_request":"概述本次空输入修复","evidence":[{"reference_id":"D1","origin":"current_observation","content":"拟提交范围仅src/report.py空输入分支：原抛错，现返回空列表；测试未运行。"}]}}。'
 )
 PARAMETER_DESCRIPTIONS["generate_git_commit_message"] = {
-    "request": "严格提交信息生成请求；user_request定目标，evidence为本次选定提交全部改动的事实和来源，focus_questions/output_format可选且优先默认；字段大小和来源约束见嵌套Schema。不是提交授权，不接受kind或模型覆盖。"
+    "request": "严格提交信息生成请求；user_request定目标，evidence为本次选定提交全部改动的事实和来源，默认用内置布局，无需传通用模板。focus_questions/output_format可选且优先默认，须遵守事实与固定规则；字段大小和来源约束见嵌套Schema。不是提交授权，不接受kind或模型覆盖。"
 }
 _WEB_SEARCH_CONTRACT = (
     "web_search 为缺少原生联网能力的 coding agent 检索公开资料、当前版本和官方文档。"

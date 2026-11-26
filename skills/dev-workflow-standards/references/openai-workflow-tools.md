@@ -69,28 +69,26 @@ Code Agent 必须从真实读取结果填写这些条件。工具只判断提供
 | `user_request` | 当前要生成的内容、受众和约束；不要混入凭据或无关日志。 |
 | `evidence` | 有界证据列表，每项包含唯一 `reference_id`、非空 `content`、`origin` 和可选 `source_thread_id`。 |
 | `focus_questions` | 用户明确要求查询或总结的问题；优先于默认问题清单。 |
-| `output_format` | 用户明确要求的输出结构或模板；优先于默认章节。Issue/PR 的英文模板不构成语言覆盖。 |
+| `output_format` | 可选。省略或传 `null` 使用工具的默认布局。用户指定或目标仓库要求自定义结构时传入，仍须遵守事实与格式规则。Issue/PR 的英文模板不构成语言覆盖。 |
 | `language_override` | 仅 Issue/PR 可用。省略/null 默认中文；其他语言须提供 `{language, instruction_ref}`，后者引用本次 evidence 中 `origin=user_provided` 的用户语言指令原文。本地检查引用来源，模型核对其是否确为用户的明确语言要求；其他 kind 禁止此字段。 |
 | `source` | 历史会话摘要必须提供相应的 `CodexSessionSource` 元数据；其他类型可省略。 |
 
 `origin` 为 `provided_session`、`current_observation` 或 `user_provided`。历史摘要只接收 `provided_session` 证据，且每项 `source_thread_id` 必须与 `source` 相同；禁止将当前观察或其他会话的事实混入历史摘要。普通开发文案可以使用当前观察，但必须如实区分已验证、未验证和待决定事项。
 
+Issue 和 PR 的生成指令内置 [Issue 模板](../assets/issue.md)和 [PR 模板](../assets/pr.md)的默认章节，提交信息默认使用 `<type>: 中文说明` 和可选正文。调用方提供本次任务的目标和证据即可。候选仅填写有依据的内容，发布所需的重要缺口应补证后再修订。
+
 ```json
 {
   "request": {
     "kind": "issue",
-    "user_request": "根据证据编写中文功能 Issue，不编造验证结果",
+    "user_request": "为维护者起草会话摘要功能 Issue",
     "evidence": [
       {
         "reference_id": "E1",
         "content": "需求是提供带来源引用的会话摘要候选内容；实际保存继续使用 Serena。",
-        "origin": "user_provided",
-        "source_thread_id": null
+        "origin": "user_provided"
       }
-    ],
-    "focus_questions": ["功能边界是什么？", "如何验收？"],
-    "output_format": "按需求、范围、验收标准三个中文章节输出正文",
-    "source": null
+    ]
   }
 }
 ```
@@ -100,7 +98,7 @@ Code Agent 必须从真实读取结果填写这些条件。工具只判断提供
 调用前收集相关的最小充分材料，无需先写整篇正文，不传整个仓库、完整会话或敏感配置。通用事实包括目标、受众、背景、组件、路径/符号指针、范围与非目标、约束及关联项；标注来源，区分已核实事实、未验证反馈、推测和建议，缺失或矛盾如实说明。
 
 - Issue：区分缺陷与功能/变更请求。缺陷提供实际行为、期望行为和影响，环境/复现只填已有证据；需求提供目标能力和有依据的动机。建议的验收条件要标为建议。
-- PR：提供具体前后行为、已完成改动与原因、真实 diff 摘要或文件证据、实际验证命令及结果、未运行项、已知兼容风险和关联 Issue。计划不能当成完成，验证未知不能当成通过。
+- PR：提供具体前后行为、已完成改动与原因、真实 diff 摘要或文件证据、实际验证命令及结果、未运行项、已知兼容风险和关联 Issue。默认模板的关闭引用需要同仓库归属、Issue 编号和关闭意图均已核实。计划不能当成完成，验证未知不能当成通过。
 
 交付已有改动时，按 [Issue/PR 文案的提交证据范围](github.md#issuepr-文案的提交证据范围) 核对全部待交付提交与最终净 diff，再提供可追溯的有界摘要。
 
@@ -113,7 +111,7 @@ Issue/PR 标题和自然语言正文默认中文。英文材料、模板和 Agen
 PR 最小合成示例（路径、编号和验证须替换为真实事实）：
 
 ```json
-{"request":{"kind":"pr","user_request":"为评审者起草中文说明","evidence":[{"reference_id":"D1","origin":"current_observation","content":"已核实 base=main@1111111、head=2222222、merge-base=1111111；完整提交列表仅2222222，已读其patch，最终净diff一致。src/report.py 的 diff 将空输入从抛错改为返回空列表，避免空报表失败；范围仅此函数。执行 python -m unittest tests.test_report：通过。未运行集成测试；关联 #12；暂无已知兼容风险。"}]}}
+{"request":{"kind":"pr","user_request":"为评审者起草中文说明","evidence":[{"reference_id":"D1","origin":"current_observation","content":"已核实 base=main@1111111、head=2222222、merge-base=1111111；完整提交列表仅2222222，已读其patch，最终净diff一致。src/report.py 的 diff 将空输入从抛错改为返回空列表，避免空报表失败；范围仅此函数。执行 python -m unittest tests.test_report：通过。未运行集成测试；本 PR 将关闭本仓库已核实的 #12；暂无已知兼容风险。"}]}}
 ```
 
 
@@ -127,7 +125,7 @@ Agent 准备本次选定提交全部 patch/hunk 的有界摘要、准确路径�
 {"request":{"user_request":"概述本次空输入修复","evidence":[{"reference_id":"D1","origin":"current_observation","content":"拟提交范围仅src/report.py空输入分支：原抛错，现返回空列表；测试未运行。"}]}}
 ```
 
-以上路径和事实为合成示例。输入不含kind/source/language_override；focus_questions/output_format可选，重点/结构优先默认但不覆盖固定规则。返回candidate、used_evidence_refs、missing_facts、review_notes及完整message；正文为空时message只有标题，否则标题后空行加正文。ok=true与validation_scope=local_format_and_attribution只说明本地引用/格式/署名通过，不代表语义或Git范围已校验。adoptable=false或缺口存在不可直接采用；Agent审阅后调用check_commit_message检查最终完整文本，暂存范围变更需重新核对生成依据。生成失败不默认为通过，不自动转手写绕过。
+以上路径和事实为合成示例。输入不含kind/source/language_override；focus_questions/output_format可选，重点/结构优先默认但不覆盖固定规则。默认正文仅在需要补充动机或重要改动时填写。返回candidate、used_evidence_refs、missing_facts、review_notes及完整message；正文为空时message只有标题，否则标题后空行加正文。ok=true与validation_scope=local_format_and_attribution只说明本地引用/格式/署名通过，不代表语义或Git范围已校验。adoptable=false或缺口存在不可直接采用；Agent审阅后调用check_commit_message检查最终完整文本，暂存范围变更需重新核对生成依据。生成失败不默认为通过，不自动转手写绕过。
 
 工具仅联网生成单次提交候选，不读取 Git 或文件，也不保存或发布候选。提交仍需用户授权及分支、暂存等适用检查。
 
@@ -137,7 +135,7 @@ Agent 准备本次选定提交全部 patch/hunk 的有界摘要、准确路径�
 
 准备发布 GitHub Issue 或 PR 时，在起草阶段把审阅后的 `candidate.title` 和 `candidate.content` 分别保存为标题和 Markdown 正文定稿，并检查两个文件。发布工具使用定稿路径。见[草稿流程](github.md#正文草稿)。
 
-1. `start_issue_pr_draft(request={request_id,draft})`：draft沿用生成请求，只允许issue/pr，给完整目标、来源及所有待交付commit patch证据。
+1. `start_issue_pr_draft(request={request_id,draft})` 沿用生成请求及内置模板，只接受 `issue` 或 `pr`，需提供完整目标、来源及所有待交付 commit patch 的证据。
 2. `revise_issue_pr_draft(request={draft_session_id,expected_revision,request_id,feedback,evidence_changes,output_format})`：每次只生成并审查一个新候选。feedback为表达/重点要求，不是事实、用户语言授权或绕过规则的命令。evidence_changes的add必须新ID，replace/remove必须已有且三组不重叠。默认空操作；output_format省略/null保留，非空字符串替换。语言授权引用必须持续有效。
 3. `get_issue_pr_draft(draft_session_id)`：离线回读最后完成候选和当前版本，result不包含最后失败尝试；status区分idle/in_progress。
 4. `close_issue_pr_draft(draft_session_id)`：离线释放状态；运行中拒绝，不取消网络请求，不发布或删除Git资源。
