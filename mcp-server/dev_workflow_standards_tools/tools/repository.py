@@ -41,7 +41,6 @@ def register_repository_tools(server: MCPServer) -> None:
         open_world_hint=True,
     )
     tools = (
-        (workflows.list_repository_worktrees, read_only),
         (
             workflows.audit_worktree_base_sync,
             ToolAnnotations(
@@ -82,5 +81,6 @@ def register_repository_tools(server: MCPServer) -> None:
         (workflows.copy_untracked_files_to_worktree, local_write),
         (workflows.configure_project_hooks_path, idempotent_write),
     )
+    _register_adapter(server, workflows.list_repository_worktrees, read_only, local_stdio=True)
     for service, annotations in tools:
         _register_adapter(server, service, annotations)

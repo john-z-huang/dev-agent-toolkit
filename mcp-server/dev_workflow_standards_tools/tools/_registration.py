@@ -9,11 +9,16 @@ from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 from pydantic import Field
 
+from ..services.local_mcp import BRIDGE_METADATA_KEY
 from ._descriptions import PARAMETER_DESCRIPTIONS, TOOL_DESCRIPTIONS
 
 
 def _register_adapter(
-    server: MCPServer, service: Callable[..., Any], annotations: ToolAnnotations
+    server: MCPServer,
+    service: Callable[..., Any],
+    annotations: ToolAnnotations,
+    *,
+    local_stdio: bool = False,
 ) -> None:
     """合并领域参数说明，并保留 MCP 对协程函数的识别和等待能力。"""
     service_name = service.__name__
@@ -50,6 +55,8 @@ def _register_adapter(
         parameters=parameters,
         return_annotation=type_hints.get("return", signature.return_annotation),
     )
-    server.tool(description=TOOL_DESCRIPTIONS[service_name], annotations=annotations)(
-        adapter
-    )
+    server.tool(
+        description=TOOL_DESCRIPTIONS[service_name],
+        annotations=annotations,
+        meta={BRIDGE_METADATA_KEY: True} if local_stdio else None,
+    )(adapter)

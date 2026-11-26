@@ -12,6 +12,7 @@
 | 使用 `gh` 或访问 GitHub 的 MCP/Connector，或操作 Issue、推送分支、创建、修改或合并 PR/MR | [托管资源](github-delivery.md) |
 | 引用历史会话事实或保存摘要 | [会话事实](session-facts.md) |
 | 发送外部 API 请求 | [外部 API](external-api.md) |
+| Codex 当前连接仍旧，需要使用已更新 uv tool 的离线只读方法 | [更新后临时本地 MCP](updated-local-mcp.md) |
 | 失败、拒绝、冲突或结果不明 | [恢复](recovery.md) |
 | 报告完成、交接或阻塞 | [完成交付](completion.md) |
 

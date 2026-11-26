@@ -4,6 +4,25 @@ Python MCP 服务 `dev-workflow-standards-tools` 支持 Codex 和 Pi Code Agent�
 
 只读工具带 `read_only_hint`，写入及破坏性由工具注解标识。Codex 服务配置为 `default_tools_approval_mode="writes"`。用户授权、Codex 写入审批和 Pi 适用条件见 [宿主审批兼容](../SKILL.md#宿主审批兼容)；Pi 的工具发现见 [Pi 工具发现与能力边界](../SKILL.md#pi-工具发现与能力边界)。`gh` 工具使用本机已授权的 GitHub CLI，令牌不进入参数或结果。
 
+## 正在运行的 MCP 构建信息
+
+直接调用 `get_mcp_server_build_info`，参数为 `{}`。返回 `server_version`（包版本）和 `git_commit`（构建时源码 HEAD 的完整 Git hash）。无法取得相应记录时返回 `null`。从 sdist 重建 wheel 时沿用 sdist 封装的源码 hash。同一提交上的未提交改动不会反映在 hash 中。
+
+结果取自处理该请求的 MCP 进程启动时读取的包元数据。需要比较新旧进程时，直接调用查询当前连接，再按下节使用 `{"tool_name":"get_mcp_server_build_info"}` 查询新进程。若两次来自同一提交，需要结合发行包来源或实际工具发现核对更新。
+
+## 更新后临时本地 MCP
+
+`call_updated_local_mcp` 用于当前 Codex 连接仍旧、同一 `dev-workflow-standards-tools` uv tool 已完成更新时。也可从已更新的 `dev-workflow-standards mcp` 管理入口通过 stdin 提交同形 JSON。适用条件及命令见 [更新后临时本地 MCP Hook](../hooks/updated-local-mcp.md)。
+
+| 请求 | 结果 |
+|---|---|
+| `{}`，或 `tool_name` 和 `arguments` 均为 `null` | `ok=true`、`status=listed`、`server_version`、`tools`。每项包含短名及最新 `inputSchema`。 |
+| `tool_name` 为发现的 MCP 短名，`arguments` 为目标工具 JSON 对象 | `status=called` 时返回 `server_version`、`tool_name` 和标准 MCP `result`。`arguments` 省略或 `null` 传空对象。按目标工具文档检查 `result.content` 或其提供的 `result.structuredContent`。 |
+| 目标 `structuredContent.ok=false` | `ok=false`、`status=target_failed`，保留目标的业务结果。 |
+| 其他错误 | `ok=false` 加安全状态 `invalid_request`、`installation_unavailable`、`server_mismatch`、`incomplete_discovery`、`tool_not_available`、`tool_error`、`timeout` 或 `stdio_failed`。停止受影响请求，避免盲重试。 |
+
+CLI 退出码 `0` 表示 `ok=true`，`1` 表示请求失败。每次使用固定的已安装 uv tool 入口初始化新进程，设置 20 秒请求预算，结束后关闭。桥接不转发 Codex/OpenAI 凭据或代理、不读宿主会话、不写 Memory、不注册或重载 MCP。当前支持 `list_repository_worktrees`、`get_codex_session_summary_guidance` 和 `get_mcp_server_build_info`。新增工具须经审阅确认离线、只读且可在新进程独立运行，再用 `local_stdio=True` 声明开放；桥接同时校验只读/离线注解，禁止递归调用。
+
 ## GitLab 对应工具
 
 GitLab 工具使用本机已认证的 `glab`，均需 `repo_path` 和 `repo=host/group[/subgroup]/project`。平台前置条件、编号及副作用见 [GitLab 兼容规则](gitlab.md)，整仓迁移另见 [GitHub→GitLab 迁移](github-to-gitlab-migration.md)。
