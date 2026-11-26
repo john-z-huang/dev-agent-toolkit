@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from ..infrastructure.openai_client import DECISIONS_MODEL_NAME, RESPONSES_MODEL_NAME
-from . import _gitlab_descriptions
 
 SERVER_DESCRIPTION = (
     "本地开发工作流 MCP 服务，提供固定范围的 Git 仓库、worktree 和托管资源操作，"
@@ -613,8 +612,6 @@ TOOL_DESCRIPTIONS["generate_git_commit_message"] = (
 PARAMETER_DESCRIPTIONS["generate_git_commit_message"] = {
     "request": "严格提交信息生成请求；user_request定目标，evidence为本次选定提交全部改动的事实和来源，focus_questions/output_format可选且优先默认；字段大小和来源约束见嵌套Schema。不是提交授权，不接受kind或模型覆盖。"
 }
-TOOL_DESCRIPTIONS.update(_gitlab_descriptions.TOOL_DESCRIPTIONS)
-PARAMETER_DESCRIPTIONS.update(_gitlab_descriptions.PARAMETER_DESCRIPTIONS)
 _WEB_SEARCH_CONTRACT = (
     "web_search 为缺少原生联网能力的 coding agent 检索公开资料、当前版本和官方文档。"
     "不适用于本地代码分析、私有文件搜索或无需联网的候选生成（后者用 generate_skill_content）。"
@@ -672,5 +669,5 @@ TOOL_DESCRIPTIONS["get_mcp_server_build_info"] = (
     "只读、离线，查询时不运行 Git、不读工作区或会话、不写文件。示例：{}。"
 )
 PARAMETER_DESCRIPTIONS["get_mcp_server_build_info"] = {}
-assert len(TOOL_DESCRIPTIONS) == 56
+assert len(TOOL_DESCRIPTIONS) == 47
 assert set(TOOL_DESCRIPTIONS) == set(PARAMETER_DESCRIPTIONS)

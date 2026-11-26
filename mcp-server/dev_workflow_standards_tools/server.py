@@ -17,7 +17,6 @@ from .tools.ai_workflow import register_ai_workflow_tools
 from .tools.codex_session_facts import register_codex_session_fact_tools
 from .tools.git import register_git_tools
 from .tools.github import register_github_tools
-from .tools.gitlab import register_gitlab_tools
 from .tools.repository import register_repository_tools
 from .tools.serena_memory import register_serena_memory_tools
 from .tools.web_search import register_web_search_tools
@@ -49,7 +48,6 @@ mcp = _SafeMCPServer(
 register_git_tools(mcp)
 register_repository_tools(mcp)
 register_github_tools(mcp)
-register_gitlab_tools(mcp)
 register_codex_session_fact_tools(mcp)
 register_ai_workflow_tools(mcp)
 register_web_search_tools(mcp)

@@ -158,24 +158,7 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                 "push_gitlab_fork_main_fast_forward",
                 "cleanup_merged_mr_local_branch",
             ):
-                metadata = tools[name]
-                self.assertIn("glab", metadata.description)
-                self.assertIn("不调用 OpenAI", metadata.description)
-                self.assert_described_properties(metadata.input_schema, name)
-                self.assertTrue(metadata.annotations.open_world_hint)
-                self.assertTrue(
-                    {"repo_path", "repo"}.issubset(metadata.input_schema["required"])
-                )
-                self.assertNotIn("endpoint", metadata.input_schema["properties"])
-            response = await client.call_tool(
-                "audit_issue_mr_policy",
-                {
-                    "repo_path": "/workspace/synthetic",
-                    "repo": "invalid",
-                    "mr_number": 7,
-                },
-            )
-            self.assertFalse(tool_json(response)["passed"])
+                self.assertNotIn(name, tools)
         self.assertIn(f"Decisions 固定使用 {GPT_LUNA_MODEL}", instructions)
         self.assertIn(f"Responses 固定使用 {GPT_SOL_MODEL}", instructions)
         for name, models in {
@@ -297,9 +280,9 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
     async def test_all_tools_registered_with_described_schemas(self) -> None:
         self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
         tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 58)
+        self.assertEqual(len(tools), 49)
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 58)
+        self.assertEqual(len(by_name), 49)
         self.assertNotIn("decide_skill_workflow", by_name)
         for tool in tools:
             self.assertTrue(tool.description, tool.name)
