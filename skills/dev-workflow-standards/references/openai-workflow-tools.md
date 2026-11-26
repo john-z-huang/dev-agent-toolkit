@@ -10,7 +10,7 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 - 每次实际请求均从本地环境读取 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，两者都必须非空，并显式传给 SDK。缺少任意一项即停止请求，不使用 SDK 的默认凭据或地址，不从工具参数、其他变量或配置文件补齐。
 - 所有 Decisions 和 Responses 请求共用 `httpx2.AsyncClient(trust_env=True)`，每次调用新建并显式传入 SDK，结束后释放；SDK 初始化失败也关闭已创建的 HTTP 客户端。代理从服务进程的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（含小写形式）读取，选择及绕过规则遵循 httpx2；不接受工具参数覆盖代理。未配置代理时按库默认直连，目标匹配 `NO_PROXY` 时绕过代理；代理配置或连接失败不会回退直连。
 - 代码、文档和日志不得包含真实凭据或端点值。错误只返回安全分类，不输出原始异常、请求头、响应正文或环境变量值。工具不能让调用者覆盖模型、凭据或端点。
-- 所有请求固定使用 `gpt-6-luna`。判断使用 `client.decisions.create`；候选生成使用 `client.responses.parse` 和结构化输出；公开网络搜索使用 `client.responses.create` 及内置 `web_search`，不回退到其他模型或接口。搜索的自适应强度与引用协议见 [公开网络搜索](web-search.md)。
+- 业务判断及出站审核通过 `client.decisions.create` 固定使用 `gpt-6-luna`。候选生成和质量审查通过 `client.responses.parse` 固定使用 `gpt-6.2-sol`，公开网络搜索通过 `client.responses.create` 及内置 `web_search` 使用同一 Responses 模型。请求失败时禁止回退到其他模型或接口。搜索的自适应强度与引用协议见 [公开网络搜索](web-search.md)。
 - Decisions 当前没有推理强度参数，判断使用 Decisions 自身机制，不发送不支持的 `reasoning` 参数；生成显式指定强度：提交信息为 `low`，计划和历史会话摘要为 `high`，其余为 `medium`，默认值为 `medium`。
 - 生成请求设置 `store=False`，不附加模型可执行的工具。API 不读本地仓库、原始 Codex 会话或 Serena；证据必须由调用者显式提供。输入超出预算时拒绝，不静默截断；普通测试不联网。
 

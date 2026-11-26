@@ -304,7 +304,7 @@ class OpenAIClientTests(unittest.IsolatedAsyncioTestCase):
                 [{"role": "user", "content": "{}"}], question
             )
         kwargs = fake.decisions.create.call_args.kwargs
-        self.assertEqual(kwargs["model"], "gpt-6-luna")
+        self.assertEqual(kwargs["model"], openai_client.GPT_LUNA_MODEL)
         self.assertEqual(kwargs["questions"], question)
         self.assertEqual(set(kwargs), {"model", "input", "questions"})
 
@@ -330,7 +330,7 @@ class OpenAIClientTests(unittest.IsolatedAsyncioTestCase):
                 max_output_tokens=400,
             )
         kwargs = fake.responses.parse.call_args.kwargs
-        self.assertEqual(kwargs["model"], "gpt-6-luna")
+        self.assertEqual(kwargs["model"], openai_client.GPT_SOL_MODEL)
         self.assertEqual(kwargs["reasoning"], {"effort": "medium"})
         self.assertFalse(kwargs["store"])
         self.assertEqual(kwargs["truncation"], "disabled")

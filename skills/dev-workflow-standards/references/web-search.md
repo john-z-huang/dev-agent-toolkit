@@ -14,9 +14,9 @@
 
 `query` 必填，1–8000 字符且不能全为空白，可直接写版本、时间范围、关注点和格式；不要提交凭据或私有内容。`allowed_domains` 可省略，默认 `[]` 不限制，最多100项，仅域名（包含其子域），禁止协议、路径、端口、IP 和通配符。每项最多253字符，国际化域名会转换为 IDNA 并去重。`response_language` 可省略，默认简体中文，1–80字符且非空白。可选字段不接受 `null`，不接受额外字段或模型/推理强度/端点覆盖。
 
-所有请求固定 `gpt-6-luna`。Decisions 按固定规约自动分类，不发送其接口不支持的推理参数：优先 `high`（复杂研究、冲突证据、因果分析、迁移取舍、高风险决策），其次 `medium`（比较、排障、多来源整合，或问题含糊），最后 `low`（单一事实或链接查证）。时效性、查询长度和域名数量本身不触发升级。分类失败即停止，不静默回退。
+强度分类与出站审核使用 Decisions 和 `gpt-6-luna`，不发送推理参数。分类按固定规约为搜索选择强度，优先 `high`（复杂研究、冲突证据、因果分析、迁移取舍、高风险决策），其次 `medium`（比较、排障、多来源整合，或问题含糊），最后 `low`（单一事实或链接查证）。时效性、查询长度和域名数量本身不触发升级。分类失败即停止，不静默回退。
 
-实际搜索走 Responses API 的 `web_search`，设置 `tool_choice="required"`、`external_web_access=true`、`include=["web_search_call.action.sources"]`、`store=false`；搜索上下文为 `medium`，输出预算随推理强度为4096/8192/16384 token（包含推理 token，不代表正文长度）。不使用旧搜索模型或 `web_search_preview`。通常有分类审核、分类、搜索审核、搜索四个 API 请求阶段；复用统一配置、脱敏、代理、180秒超时和仅超时重试规则，见 [请求边界](openai-workflow-tools.md#配置与请求边界)。外层 MCP 时限应覆盖所有阶段；`api_timeout` 已耗尽内部预算，不自动重跑整工具。
+实际搜索用 `gpt-6.2-sol` 和 Responses API 的 `web_search`，设置 `tool_choice="required"`、`external_web_access=true`、`include=["web_search_call.action.sources"]`、`store=false`；搜索上下文为 `medium`，输出预算随推理强度为4096/8192/16384 token（包含推理 token，不代表正文长度）。不使用旧搜索模型或 `web_search_preview`。通常有分类审核、分类、搜索审核、搜索四个 API 请求阶段；复用统一配置、脱敏、代理、180秒超时和仅超时重试规则，见 [请求边界](openai-workflow-tools.md#配置与请求边界)。外层 MCP 时限应覆盖所有阶段；`api_timeout` 已耗尽内部预算，不自动重跑整工具。
 
 每次实际请求从环境读取非空 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 并显式传 SDK；不加载凭据文件或回退地址。Codex/Pi 环境传递遵循现有服务配置，不自动安装或重启 MCP，不要求 Pi 具备 Codex 专属审批。
 

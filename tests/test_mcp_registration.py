@@ -13,6 +13,7 @@ from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
 
 from codex_session_fixtures import ROOT, tool_json
+from dev_workflow_standards_tools.infrastructure.openai_client import GPT_LUNA_MODEL, GPT_SOL_MODEL
 from dev_workflow_standards_tools.server import mcp as complete_server
 from dev_workflow_standards_tools.services import codex_session_facts as service
 from dev_workflow_standards_tools.services import validation, workflows
@@ -117,20 +118,22 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                 },
             )
             self.assertFalse(tool_json(response)["passed"])
-        for name in (
-            "check_branch_names",
-            "check_commit_message",
-            "audit_issue_pr_policy",
-            "decide_codex_session_action",
-            "generate_skill_content",
-            "check_api_input",
-            "start_issue_pr_draft",
-            "revise_issue_pr_draft",
-            "generate_git_commit_message",
-            "web_search",
-        ):
+        self.assertIn(f"Decisions 固定使用 {GPT_LUNA_MODEL}", instructions)
+        self.assertIn(f"Responses 固定使用 {GPT_SOL_MODEL}", instructions)
+        for name, models in {
+            "check_branch_names": (GPT_LUNA_MODEL,),
+            "check_commit_message": (GPT_LUNA_MODEL,),
+            "audit_issue_pr_policy": (GPT_LUNA_MODEL,),
+            "decide_codex_session_action": (GPT_LUNA_MODEL,),
+            "generate_skill_content": (GPT_SOL_MODEL,),
+            "check_api_input": (GPT_LUNA_MODEL,),
+            "start_issue_pr_draft": (GPT_SOL_MODEL,),
+            "revise_issue_pr_draft": (GPT_SOL_MODEL,),
+            "generate_git_commit_message": (GPT_SOL_MODEL,),
+            "web_search": (GPT_LUNA_MODEL, GPT_SOL_MODEL),
+        }.items():
             for phrase in (
-                "gpt-6-luna",
+                *models,
                 "OPENAI_API_KEY",
                 "OPENAI_BASE_URL",
                 "OpenAI 请求配置",

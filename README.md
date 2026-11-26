@@ -39,7 +39,7 @@
 
 - `web_search` 为缺少原生联网能力的 Agent 检索公开资料并返回带引用摘要。见 [公开网络搜索](skills/dev-workflow-standards/references/web-search.md)。
 
-判断使用 Decisions API，生成使用 Responses API。OpenAI 请求固定使用 `gpt-6-luna`，进程需取得 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`。代理、超时、审核与出站约束见 [OpenAI 工具协议](skills/dev-workflow-standards/references/openai-workflow-tools.md#配置与请求边界)。
+Decisions API（含出站审核）固定用 `gpt-6-luna`。Responses API 的生成、质量审查和公开网络搜索固定用 `gpt-6.2-sol`。进程需取得 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`。代理、超时、审核与出站约束见 [OpenAI 工具协议](skills/dev-workflow-standards/references/openai-workflow-tools.md#配置与请求边界)。
 
 ## 项目结构
 
@@ -65,7 +65,7 @@
 
 ### OpenAI 官方 API 冒烟测试
 
-`tests/openai_official_smoke.py` 使用统一的 httpx2 OpenAI 客户端发起一次最小 Responses 请求，固定 `gpt-6-luna`、`medium` 推理强度和 512 token 输出上限。只有显式传入 `--live` 才联网并产生实际 API 用量；不传参数输出 `skipped`，退出码为 2。常规离线测试只测试该入口的行为，不调用真实 API。
+`tests/openai_official_smoke.py` 使用统一客户端发起最小 Responses 请求，固定 `gpt-6.2-sol`、`medium` 推理强度和 512 token 输出上限，出站审核用 `gpt-6-luna`。只有显式传入 `--live` 才联网并产生实际 API 用量。不传参数输出 `skipped`，退出码为 2。常规离线测试验证该入口的行为。
 
 先在终端中配置并导出所需的 API 和代理环境变量，再从 `mcp-server/` 目录通过 Bash 运行；Bash 子进程继承当前终端已导出的配置：
 

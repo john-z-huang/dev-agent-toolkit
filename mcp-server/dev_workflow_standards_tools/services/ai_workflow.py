@@ -265,7 +265,6 @@ class ContentQualityReview(StrictInput):
         return self
 
 
-MODEL_NAME = openai_client.MODEL_NAME
 DECISION_CHOICES = ("compliant", "requires_fix", "insufficient_evidence")
 SESSION_LOOKUP_CHOICES = ("read_history", "query_project", "clarify", "blocked")
 SESSION_PERSISTENCE_CHOICES = (
@@ -743,7 +742,7 @@ async def decide_codex_session_action(
         "ok": True,
         "lookup_action": lookup,
         "persistence_action": persistence,
-        "model": MODEL_NAME,
+        "model": openai_client.DECISIONS_MODEL_NAME,
         "input_hash": _fingerprint(facts),
         "rules_hash": _fingerprint(questions),
         "requires_agent_review": True,
@@ -1015,7 +1014,7 @@ async def generate_skill_content(
         "ok": True,
         **quality,
         "candidate": generated.model_dump(mode="json"),
-        "model": MODEL_NAME,
+        "model": openai_client.RESPONSES_MODEL_NAME,
         "api": "Responses.parse",
         "reasoning_effort": effort,
         "reasoning_effort_source": "fixed_by_content_kind",

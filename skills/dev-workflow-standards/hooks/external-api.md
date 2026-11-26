@@ -8,7 +8,7 @@
 
 `check_api_input` 可直接向既定配置服务联网审核，无需前置审核、自我审核或逐次人工授权。完整用途和内容通过 [审核](../references/api-input-review.md) 后，当前任务所需相同内容可发送至该服务。业务工具自动审核最终请求快照，无须重复公开预检。用户禁止外发及更高优先级限制仍生效。
 
-OpenAI 调用按 [工具协议](../references/openai-workflow-tools.md) 准备最小必要事实。每次请求或重试须读取非空 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，固定使用 `gpt-6-luna`。代理、脱敏、超时、重试及取消规则见同一协议。
+OpenAI 调用按 [工具协议](../references/openai-workflow-tools.md) 准备最小必要事实。每次请求或重试须读取非空 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`。Decisions（含出站审核）固定用 `gpt-6-luna`，Responses 固定用 `gpt-6.2-sol`。代理、脱敏、超时、重试及取消规则见同一协议。
 
 ## 离开条件
 

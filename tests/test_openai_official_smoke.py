@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from dev_workflow_standards_tools.infrastructure.openai_client import GPT_SOL_MODEL, GPT_TERRA_MODEL
 from pydantic import BaseModel
 
 ROOT = Path(__file__).parents[1]
@@ -28,7 +29,7 @@ TEST_PROXY = "http://proxy-user:proxy-pass@proxy.synthetic.invalid:8123"
 def parsed_response(
     *,
     status: str = "completed",
-    model: str = "gpt-6-luna",
+    model: str = GPT_SOL_MODEL,
     output_parsed: object | None = None,
     refusal: str | None = None,
 ) -> SimpleNamespace:
@@ -166,7 +167,7 @@ class OfficialSmokeTests(unittest.TestCase):
             ],
         )
         self.assertEqual(parse_mock.call_count, 2)
-        self.assertEqual(first[1]["model"], "gpt-6-luna")
+        self.assertEqual(first[1]["model"], GPT_SOL_MODEL)
         self.assertEqual(
             first[1]["usage"],
             {"input_tokens": 12, "output_tokens": 4, "total_tokens": 16},
@@ -213,7 +214,7 @@ class OfficialSmokeTests(unittest.TestCase):
         cases = (
             (parsed_response(status="incomplete"), "response_not_completed"),
             (parsed_response(refusal="synthetic refusal"), "response_refused"),
-            (parsed_response(model="gpt-6-luna-snapshot"), "unexpected_model"),
+            (parsed_response(model=GPT_TERRA_MODEL), "unexpected_model"),
             (
                 parsed_response(output_parsed=WrongSmokeOutput(ok=True)),
                 "invalid_output",
@@ -221,7 +222,7 @@ class OfficialSmokeTests(unittest.TestCase):
             (
                 SimpleNamespace(
                     status="completed",
-                    model="gpt-6-luna",
+                    model=GPT_SOL_MODEL,
                     refusal=None,
                     output=[],
                     output_parsed=None,

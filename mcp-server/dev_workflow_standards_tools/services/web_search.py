@@ -165,4 +165,4 @@ async def web_search(request: WebSearchRequest) -> dict[str, Any]:
     except openai_client.OpenAIWorkflowError as error:
         return {"ok": False, "stage": "search", "reasoning_effort": effort, **error.as_result()}
     result = _search_result(response)
-    return {"stage": "search", "model": openai_client.MODEL_NAME, "reasoning_effort": effort, **result}
+    return {"stage": "search", "model": openai_client.RESPONSES_MODEL_NAME, "reasoning_effort": effort, **result}
