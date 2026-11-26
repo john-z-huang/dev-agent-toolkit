@@ -1,7 +1,7 @@
 ---
 name: dev-workflow-standards
 description: >-
-  为代码理解、项目修改、Python/JavaScript/Shell 执行、本地 Modal 代理依赖管理及 Git/GitHub/GitLab 操作提供声明式 Hook 条件。
+  为代码理解、项目修改、Python/JavaScript/Shell 执行、本地 Modal 代理依赖管理及 Git/GitHub/GitLab 操作提供声明式 Hook 条件。也用于安装、注册和更新本项目的工具、Skill、全局指令、MCP 和原生 Codex Hooks。
 ---
 
 # 开发操作约束
@@ -24,7 +24,7 @@ Skill、MCP 服务和参考资料中的 `Codex writes approval` 均指 Codex 宿
 ## Pi 工具发现与能力边界
 
 - codemode 下用 `searchTools` 和 `describeTool` 发现实际工具名及 Schema，用 `describeNamespace` 读取完整服务指令。工具未直接声明时先查找，hidden 不可绕过。工具前缀由宿主注册名决定。
-- Pi 从 `~/.agents/skills/` 发现 Skill，独立于 Codex 全局指令和原生 Hooks。Pi stdio 继承启动环境，配置 `timeout`（秒）。变更配置后重载，必要时重启 Pi。详见 [安装说明](references/installation.md) 与 [环境传递](references/openai-workflow-tools.md#pi-stdio-环境传递与工具时限)。
+- Pi 从 `~/.agents/skills/` 发现 Skill，独立于 Codex 全局指令和原生 Hooks。Pi stdio 继承启动环境，配置 `timeout`（秒）。变更配置后重载，必要时重启 Pi。详见 [Pi MCP 合同](hooks/install-pi-mcp.md) 与 [环境传递](references/openai-workflow-tools.md#pi-stdio-环境传递与工具时限)。
 - 历史读取依赖宿主的实际能力。应使用真实 Codex 会话来源，缺少读取能力时只暂停依赖历史的部分。见 [会话事实](hooks/session-facts.md)。
 
 ## 共用边界
@@ -36,4 +36,4 @@ Skill、MCP 服务和参考资料中的 `Codex writes approval` 均指 Codex 宿
 - 涉及可运行 Web 页面、浏览器交互或页面验收时查阅 [真实浏览器验证](references/web-browser-validation.md)，再按需读取所用 CLI 的参考 Skill。
 - 禁止输出或记录凭据及添加 Agent 署名或生成声明。
 
-源码和已安装快照独立。Skill、全局指令、MCP 与 Git Hook 的安装或更新入口见 [安装说明](references/installation.md)。
+安装、注册或更新本项目资源时，从 [安装与更新索引](hooks/index.md#安装与更新) 直达所选资源的命令、写入范围与验收条件。

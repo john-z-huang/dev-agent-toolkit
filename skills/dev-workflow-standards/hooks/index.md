@@ -14,3 +14,14 @@
 | 发送外部 API 请求 | [外部 API](external-api.md) |
 | 失败、拒绝、冲突或结果不明 | [恢复](recovery.md) |
 | 报告完成、交接或阻塞 | [完成交付](completion.md) |
+
+## 安装与更新
+
+| 目标 | 合同 |
+|---|---|
+| 构建 sdist/wheel 或安装、重装项目工具包 | [项目工具](install-tooling.md) |
+| 安装或更新已安装的 Skill 快照 | [Skill](install-skill.md) |
+| 创建、接管或更新 Codex 全局 AGENTS.md | [全局指令](install-global-agents.md) |
+| 安装、更新、迁移 Codex MCP 或修复转发 | [Codex MCP](install-codex-mcp.md) |
+| 安装或更新 Pi MCP 及注册 | [Pi MCP](install-pi-mcp.md) |
+| 安装、合并或更新全局或项目级原生 Codex Hooks | [原生 Codex Hooks](install-codex-hooks.md) |

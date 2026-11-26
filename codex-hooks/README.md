@@ -21,44 +21,9 @@
 
 ## 安装、注册与更新
 
-Hooks 作为独立的 `dev-workflow-standards-hooks` Python 发行包发布，与 MCP Server 分开安装；Python 3.11+，运行时无第三方依赖，仅使用标准库和 Git。以下命令在源码仓库根目录执行：
+Hooks 作为独立的 `dev-workflow-standards-hooks` Python 发行包发布，要求 Python 3.11+，运行时使用标准库和 Git。按 [原生 Codex Hooks 合同](../skills/dev-workflow-standards/hooks/install-codex-hooks.md) 选择预览、安装、合并或更新，以及宿主审阅与信任步骤。
 
-```bash
-# 不执行安装或注册，仅显示计划；此预览不核验目标配置冲突
-./dws --hooks-install --global --dry-run
-# 安装独立 uv tool，再注册到全局 Codex 配置
-./dws --hooks-install --global
-# 已有其他 Hooks 配置时，显式备份并合并
-./dws --hooks-install --global --merge
-# 强制重装本地包以刷新同版本源码，再更新受管注册
-./dws --hooks-update --global
-# 项目级注册：用 --project-root 替代 --global
-./dws --hooks-install --project-root /absolute/path/to/project
-```
-
-`dws` 调用带 PEP 723 声明的安装脚本，使用安装器的 Python 执行 `uv tool install --reinstall-package dev-workflow-standards-hooks ./codex-hooks`，更新另加 `--force`。即使包版本相同，也会从本地源码重新构建。安装脚本随后定位并核验已安装 CLI，再用 `configure` 注册配置。注册失败时会保留已安装的包。Hooks 使用独立的 uv tool 环境。
-
-也可分别执行安装和注册：
-
-```bash
-uv tool install ./codex-hooks
-# 精确预览最终配置，读取并核验已有资源，但不写入
-"$(uv tool dir --bin)/dev-workflow-standards-hooks" configure --global --install --merge --dry-run
-# 审阅后去掉 --dry-run 正式写入；无其他配置时不加 --merge
-"$(uv tool dir --bin)/dev-workflow-standards-hooks" configure --global --install --merge
-```
-
-命令无参数时从 stdin 读取单个事件 JSON 并返回事件结果；`--version` 显示包版本，`configure --help` 显示注册选项。`configure` 无 `--install` 或 `--update` 时仅输出候选配置；`configure --dry-run` 执行相应只读校验。它不安装或更新包；包管理由 `uv tool` 完成。
-
-注册必须在 `--global` 与 `--project-root` 中二选一。用户全局目录默认 `~/.codex`，显式 `CODEX_HOME` 必须为已有绝对目录；项目级目录为 `<project>/.codex`。配置中的 `command` 是通过 `uv tool dir --bin` 定位的 `dev-workflow-standards-hooks` 可执行文件绝对路径，按 POSIX Shell 引用；不包含源码脚本或项目 Python 路径。安装后源码 checkout 与开发虚拟环境可独立变化，运行环境由 uv tool 管理。移动 uv tool 的 bin 目录后需重新注册。
-
-注册只写 `hooks.json` 和 `hooks/dev_workflow.manifest.json`，不再复制运行脚本。首次安装拒绝已有资源；已有其他工具的普通 `hooks.json` 可显式 `--merge`，原事件、匹配器、处理器与其他顶层字段全部保留，相同组不重复追加。正式合并先独占创建 `hooks.json.backup-*` 保存原始字节，并在 stderr 报告备份路径。更新依据清单保护本地修改，保留合并时的原 Hooks；手工编辑配置会阻止自动更新。未知旧文件、无效 JSON、链接或不支持的结构会被拒绝。
-
-旧版复制脚本的受管安装可通过 `--hooks-update` 迁移：先核验原配置、脚本和清单，随后把注册改为新命令；原脚本保留但不再调用，不自动删除用户文件。没有有效受管清单的旧安装仍需手工审阅。新清单格式为 3；校验和只检测完整性，不是来源签名或授权凭证。
-
-更新期间停止其他写入者。文件分别原子替换，多文件不保证整体原子性；失败时检查实际配置、清单和备份后恢复，不盲重试。安装不修改 `config.toml`、Git 配置、Skill、MCP 注册或宿主信任。
-
-新建或恢复会话后，通过 Codex `/hooks` 审阅并信任当前定义，再确认事件触发。全局、项目、内联与插件 Hooks 会累积运行，不会相互覆盖；同一套规则通常只需选择一个范围，安装器不自动清理另一范围。宿主禁用、managed-only 限制或未信任时不会执行；注册不自动启用功能或授予信任。
+已安装的 CLI 无参数时从 stdin 读取单个事件 JSON。`--version` 查看包版本，`configure --help` 查看注册选项。`configure` 无 `--install` 或 `--update` 时仅输出候选配置。配置命令使用 uv tool 的绝对入口，不依赖源码或项目虚拟环境。移动 uv tool 的 bin 目录后需重新注册。
 
 ## 协议与边界
 
