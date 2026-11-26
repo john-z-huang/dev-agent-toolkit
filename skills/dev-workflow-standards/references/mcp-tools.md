@@ -1,8 +1,12 @@
 # MCP 工具目录
 
+Python MCP 服务 `dev-workflow-standards-tools` 支持 Codex 和 Pi Code Agent。优先选择覆盖需求的工具或已授权 Connector；能力不足按 [CLI 补充边界](cli-fallback.md) 处理。工具只接收领域参数；仓库绑定工具须显式传入目标 checkout 的绝对 Git 根路径 `repo_path`。
+
+只读工具带 `read_only_hint`，写入及破坏性由工具注解标识。Codex 服务配置为 `default_tools_approval_mode="writes"`。用户授权、Codex 写入审批和 Pi 适用条件见 [宿主审批兼容](../SKILL.md#宿主审批兼容)；Pi 的工具发现见 [Pi 工具发现与能力边界](../SKILL.md#pi-工具发现与能力边界)。`gh` 工具使用本机已授权的 GitHub CLI，令牌不进入参数或结果。
+
 ## GitLab 对应工具
 
-GitLab 使用 `glab`，不使用 `gh` 或 GitHub `owner/repo` 校验。9 个对应工具及参数/副作用差异见 [GitLab 工具对应关系](gitlab.md#工具对应关系)；工具 Schema 与 MCP 初始化说明也暴露相同合同。所有 GitLab 工具必填 `repo_path` 与 `repo=host/group[/subgroup]/project`，支持自托管及多级 group；不调用 OpenAI、不读会话、不写 Memory/配置。具体写入仍需用户授权与适用宿主审批。GitHub→GitLab 仓库迁移是多阶段 CLI 操作，目前没有单一迁移 MCP 工具；迁移期间必须保持源 checkout 的 Git 配置不变，不得切换 origin 或增删 remote；范围、目标创建、refs/LFS 回读和 hosted data 边界见 [迁移指令](github-to-gitlab-migration.md)。
+GitLab 工具使用本机已认证的 `glab`，均需 `repo_path` 和 `repo=host/group[/subgroup]/project`。平台前置条件、编号及副作用见 [GitLab 兼容规则](gitlab.md)，整仓迁移另见 [GitHub→GitLab 迁移](github-to-gitlab-migration.md)。
 
 | 工具 | 其他参数 | 关键返回及副作用 |
 |---|---|---|
@@ -16,39 +20,27 @@ GitLab 使用 `glab`，不使用 `gh` 或 GitHub `owner/repo` 校验。9 个对�
 | `push_gitlab_fork_main_fast_forward` | 无 | `ok/error`，真实 Fork 镜像 main 的非强推。 |
 | `cleanup_merged_mr_local_branch` | `mr_number`；可选 `branch_name, merged_head_oid` | `completed/actions/error`，单独清理授权后切换/快进 pull/删除本地 source，保留精确 OID 强删门禁。 |
 
-可选字段默认 `null` 表示未请求；`merged_head_oid=null` 不允许强制删除。Issue/MR 编号为项目内正数 iid，不是全局 id。`created=true,ok=false` 或写入不明均先回读，不能自动重复写入。
-
-本项目支持在 Codex 或 Pi Code Agent 中注册并使用 Python MCP 服务 `dev-workflow-standards-tools`。操作优先选择本表中覆盖需求的工具或已授权 Connector；无对应工具、工具未暴露或功能/参数未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 自行用 CLI 补足查询或已授权写入，保留必要检查，不绕过实际失败。MCP 仍只接受领域参数，不传 shell、git、gh 或测试命令。所有 repo-bound 工具都要求本次目标仓库的绝对 `repo_path`，且只在该 Git 根目录/worktree 内操作；不要假设 MCP 进程启动目录就是目标项目。
-
-只读工具带 `read_only_hint`；其他工具带写入/破坏性注解，Codex 服务配置为 `default_tools_approval_mode="writes"`。`Codex writes approval` 仅指 Codex 宿主审批；Pi Code Agent 未提供该机制时，按 [Skill 宿主审批兼容](../SKILL.md#宿主审批兼容) 执行：不要求不存在的审批工具/Hook，仍须有对应用户明确授权，遵守实际宿主权限和本地校验，不得绕过实际拒绝或错误。这些确认与注解不取代 Skill 中的用户授权前置条件。`gh` 工具使用本机已授权的 GitHub CLI，不接受或输出令牌。
+可选字段默认 `null`，表示未请求。`merged_head_oid=null` 时只允许普通删除。
 
 ## OpenAI 判断与生成
 
-所有 Decisions、Responses 和输入审核请求共用 `OPENAI_TIMEOUT_SECONDS=180` 秒；仅请求超时在调用处立即串行重试，`OPENAI_TIMEOUT_MAX_RETRIES` 环境变量为非负整数，未设置默认 `5`、`0` 关闭，空值或非法值在请求前安全失败。默认最多 6 次 API 尝试，SDK 内部重试关闭；预算耗尽返回 `api_timeout`，其他错误不自动重试。Agent 不再叠加整工具重试，按恢复条件处理。MCP 外层工具时限须覆盖多阶段请求与各自重试；细则见 [请求边界](openai-workflow-tools.md#配置与请求边界)。
-
-以下工具通过 OpenAI Python SDK 调用固定的 `gpt-6-luna`，每次强制读取并显式使用 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，不提供模型或配置覆盖参数。API 工具具有 `open_world_hint=true`、`idempotent_hint=false`；只读注解表示不修改本地或 GitHub 资源，不表示没有外部 API 请求。接口失败、未知分支、拒绝或未完成的生成不能当作成功结果。
-
-所有 OpenAI 请求共用显式注入的 `httpx2.AsyncClient(trust_env=True)`，读取 MCP 进程的标准代理环境变量（`HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY` 及小写形式）。配置适用代理且未匹配 `NO_PROXY` 时通过代理；无代理配置时按库默认直连，代理失败不回退直连。Codex 启动时须转发所需变量名并重新加载服务，详见 [代理与环境传递](openai-workflow-tools.md#codex-stdio-环境传递与排查)。
+联网 API 工具使用 `open_world_hint=true` 和 `idempotent_hint=false`。固定模型、环境配置、代理、重试及宿主时限见 [OpenAI 工具协议](openai-workflow-tools.md#配置与请求边界)。
 
 | 工具 | 输入 | 返回 |
 |---|---|---|
-| `web_search` | `request`：必填公开 `query`；可选域名白名单、回答语言 | 固定 gpt-6-luna，Decisions 自适应选择 low/medium/high，Responses 强制联网；返回摘要、行内引用和真实来源，不读取本地项目。详见 [公开网络搜索](web-search.md)。 |
-| `check_api_input` | 强类型 `request`，仅必填非空字符串 `purpose`、`content`；不接受目标工具名或仓库路径参数 | 默认允许联网审核，无需前置审核或逐次人工授权；自身仍先执行本地静态检测，再进行 Decisions 审核。不检查文件或目录路径，凭据、隐私及不透明载荷等审核继续。查看 `passed`、状态及安全修订提示。通过后允许当前任务所需项目内容向既定配置服务外发，无需重复确认；不扩大其他操作权限。实际出站仍强制复检，详见 [`API 输入审核`](api-input-review.md)。 |
+| `web_search` | `request` 含必填的公开 `query`、可选的域名白名单和回答语言 | 联网返回摘要、行内引用和来源，详见 [公开网络搜索](web-search.md)。 |
+| `check_api_input` | `request` 只含必填的 `purpose` 和拟发送的完整 `content` | 先本地检查，再按默认许可联网审核。查看 `passed`、状态和安全修订提示。许可范围及实际出站复检见 [API 输入审核](api-input-review.md)。 |
 | `decide_codex_session_action` | 强类型 `request`：历史读取状态、事实覆盖、保存限制和新增事实来源 | Decisions 的查询与持久化分支；不能用当前新事实更新历史摘要。 |
 | `start_issue_pr_draft` / `revise_issue_pr_draft` | 首轮完整draft；修订携带会话ID、版本、唯一请求ID、反馈及显式证据变更 | 进程内有界修订，生成与独立审查；反馈不等于证据，重启失效。详见[多轮协议](openai-workflow-tools.md#issuepr-多轮修订草稿)。 |
 | `get_issue_pr_draft` / `close_issue_pr_draft` | 草稿会话ID | 离线回读/释放进程状态，不发布或写Memory；运行中close拒绝。 |
 | `generate_git_commit_message` | user_request、当前选定提交全部改动的evidence及可选重点/格式；不接受kind或模型覆盖 | 复用commit_message生成，返回candidate和完整message、adoptable与本地校验范围；须审阅并check_commit_message，不执行Git。详见[提交信息](check-commit-message.md)。 |
 | `generate_skill_content` | 强类型 `request`：内容种类、用户目标/受众、分类型项目事实与来源、查询重点、格式、可选会话来源；Issue/PR 其他语言须 `language_override` 引用用户原文 | Responses 结构化候选；Issue/PR 生成后另做一次有界语义审查，须检查 `quality_status`/`adoptable` 与缺失项，`ok=true` 不等于可发布。不会自行读取仓库。 |
 
-`check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 的公开参数保持不变：先执行原本地硬校验，通过后再调用 Decisions。API 结果不能放宽本地失败，API 不可用时不能默认为通过。其余精确计算、Git 写操作和 Hook 不迁移到模型。详细输入范式、Instruction Prompt、强度配置及错误边界见 [`openai-workflow-tools.md`](openai-workflow-tools.md)。
-
-Pi 工具默认可能间接暴露：先用 `searchTools` / `describeTool` 核对名称和 Schema，完整服务指令用 `describeNamespace` 获取；未直接声明不等于工具缺失，不绕过 hidden。环境与时限见 [Pi stdio](openai-workflow-tools.md#pi-stdio-环境传递与工具时限)。
+`check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 先做本地硬校验，通过后调用 Decisions。采纳条件见 [判断工具与硬校验](openai-workflow-tools.md#判断工具与硬校验)。
 
 ## Codex 会话事实辅助工具
 
-这些工具可由 Pi 调用，但来源校验仍仅支持真实 Codex 链接，不接受 Pi 原生会话路径/ID。不要伪造 Codex 来源；本服务不提供 `read_thread` 或 Pi 历史读取器。缺少原文时只暂停依赖该历史的工作。问题/模板可跨宿主使用。
-
-这三个工具均为只读，不访问 Codex 原始会话、不发起网络请求、不调用 Serena，也不保存摘要。前两个是纯输入处理，不需要 `repo_path`；第三个必须显式传入目标仓库/worktree 的绝对根路径。默认问题与模板随 Python 包发布，不依赖服务启动目录。
+三项助手均为离线只读，默认问题与模板随 Python 包发布。它们处理调用者提供的数据，不读取原会话或调用 Serena。Codex 来源与 Pi 适用范围见 [会话事实](codex-session-facts.md#宿主适用范围)。
 
 | 工具 | 输入 | 用途 |
 |---|---|---|
@@ -62,7 +54,7 @@ Pi 工具默认可能间接暴露：先用 `searchTools` / `describeTool` 核对
 
 `summary` 是 Code Agent 按默认模板或用户指定结构撰写的完整 Markdown 文档。准备工具令 `payload.content` 与其精确一致，来源元数据单独放在响应的 `metadata`；其中 `memory_project_root` 只表示当前 Serena 的目标项目，不能当作原会话的 `project_scope`。Code Agent 必须逐项核对 `evidence_refs` 与原会话，确保未混入当前会话的新事实。默认 `topic` 为 `codex-sessions`，禁止绝对路径、路径穿越和 `global` 跨项目主题；主题每段最多 100 个 UTF-8 字节，已有条目的名称须为同主题下以相同 thread ID 结尾的安全名称，并计入 Serena 自动添加的 `.md` 长度。`persistence_allowed` 只是调用参数，不能替代用户指令或实际权限。
 
-使用会话事实要求原文来源可追溯；准备摘要要求准确项目、去重及当前写入许可；保存成功以实际内容回读为准。这些是相应动作的数据条件，不规定统一调用路线。用户禁止持久化时仅只读参考；本工具不会绕过该限制。完整规约见 [`codex-session-facts.md`](codex-session-facts.md)。
+摘要的原文核对、去重、保存与回读见 [Serena Memory 位置与创建](codex-session-facts.md#serena-memory-位置与创建)。
 
 ## 项目 Memory 只读工具
 
@@ -116,7 +108,7 @@ Pi 工具默认可能间接暴露：先用 `searchTools` / `describeTool` 核对
 
 ### 已有 worktree 的基线同步工具
 
-动作条件和策略见 [`worktree-base-sync.md`](worktree-base-sync.md)：同步要求准确实际 base、有效来源、当前发布状态及匹配 OID；已发布 merge、未发布 rebase，变更后的验证绑定新状态。所有这些工具均不调用 OpenAI、不读会话、不写 Memory；fetch/merge/rebase 不包含 GitHub 推送或 PR base 更新。
+按 [基线同步策略](worktree-base-sync.md) 选择动作、核对发布状态和验证范围。同步工具不调用 OpenAI、不读会话、不写 Memory。推送及 PR base 更新是独立动作。
 
 - `base_ref` / rebase 的 `base_branch`：明确的本地分支、完整 `refs/heads/...`、`refs/remotes/...` 或完整提交 OID；不接受任意 revision 表达式或命令。使用刚获取的 `fetch_ref` 时同时传 `fetched_oid` 作为预期 base OID。直接使用 OID固定提交时，另行核对其来源引用是否已变化。
 - `remote`：已有配置的 remote 名称，不是 URL；审计默认 `null`，表示不联网而非“未发布”。rebase 的默认值为 `origin`；缺少配置、网络失败或结果未知时停止，不提供本地模式豁免。实际 live 查询仅核验该 remote 的同名分支；其他已知 PR、协作者和下游依赖仍由调用方核对。不要将 `null`、空字符串与省略混用。
@@ -144,15 +136,9 @@ Pi 工具默认可能间接暴露：先用 `searchTools` / `describeTool` 核对
 
 ### 受管理操作的 continue/abort
 
-恢复前置条件见 [`worktree-recovery.md`](worktree-recovery.md)。服务在开始 merge/rebase 前建立当前 worktree Git 目录专属记录；冲突或结果不确定时保留。恢复前用固定 `base_oid` 作为 `base_ref` 调用审计，省略 `remote` 或传 `null`，读取 `recovery_context` 和 `current_state_fingerprint`。未完成操作使顶层同步 `status=blocked`；应单独核对恢复状态，不能要求它先变成 `up_to_date`。无记录、损坏、跨 worktree、未知复杂操作或原生状态不一致时不自动接管；任何恢复上下文本身都不提供写入授权。
+按 [受限恢复](worktree-recovery.md) 核对可恢复状态、最新审计快照和用户对继续或撤销的独立授权。审计返回的操作 ID 是规范 UUID，head OID 是完整的 40/64 位十六进制值，状态指纹是 64 位小写十六进制 SHA-256，覆盖恢复记录、Git 原生状态、index 和相关工作目录内容。三项都须使用同一次最新审计的原值。
 
-- 四个工具的 `repo_path` 都是准确 checkout 绝对根目录；`operation_id` 取最新 `recovery_context.operation_id`，不是自定义名称。`expected_current_head_oid` 取同一上下文的 `current_head_oid`，为当前完整 40/64 位提交 OID；rebase 中途可能是临时 detached HEAD，不能用 `original_head_oid` 代替。
-- `expected_state_fingerprint` 是重新审计得到的当前状态指纹，覆盖恢复记录、原生Git操作状态、index和相关工作目录内容；修改文件、暂存或操作状态变化后重新审计。指纹不是密码、全局锁或业务正确性证明，不能在其他checkout或其他操作上复用。
-- 操作 ID 为记录生成的规范 UUID，状态指纹为 64 位小写十六进制 SHA-256；不要自行生成或缩短。恢复校验有界：记录 256 KiB、单个原生元数据 1 MiB、index 16 MiB、单个工作文件 8 MiB、工作文件合计 32 MiB、4096 路径、20000 待重放提交；超限或无法安全读取不视为通过。
-- `confirm_discard_resolution_work` 是两个abort工具必填的布尔值，必须明确为 `true`。`false`、`null`、省略均不表示同意丢弃；工具参数不能替代用户对撤销和丢弃范围的实际授权。abort可能丢弃本次操作的已暂存及未暂存解决内容，不能用于只读探测。
-- continue只接受已解决并暂存、无未合并index和未暂存解决内容的受支持状态；不stage、不编辑、不skip、不接收任意Git参数或编辑器命令。rebase continue仅查询记录中的remote，不允许调用时改换查询对象；发布未知、联网失败或已发布均停止。abort不联网，远端不可用不妨碍满足本地条件的撤销。
-- `recovery_context.status` 为 `managed_in_progress` 时才有可核验的恢复目标；`none` 表示没有目标，`unmanaged` 表示原生操作不受本服务管理，`needs_review` 表示记录或原生状态无法安全匹配。查看 `ok`、`action_started`、`completed`、`aborted`、`still_in_progress`、`needs_review`、冲突路径及更新后的上下文。一次 rebase continue 可能停在下一冲突，必须重新审阅和决定；动作开始或创建了提交不表示最终回读通过，Git 回读通过也不代表项目测试或推送完成。失败或结果不确定先只读回读，不自动重试或补偿。
-- 所有恢复调用均写当前checkout/index/ref，continue可能创建提交，abort具有丢弃解决内容的破坏性，均需明确用户授权及宿主写入审批。恢复记录的创建/保留/清理由本地代码负责，不调用OpenAI、Session或Memory。正常hooks继续执行；continue-rebase会联网，其余恢复入口离线。支持边界以实际Schema、描述和安全错误为准。
+恢复动作写当前 checkout、index 和引用，继续操作可能创建提交，撤销可能丢弃已暂存及未暂存的解决内容。rebase continue 仅联网查询记录中的 remote，其余恢复入口离线。恢复记录由本地代码管理，四个工具均不调用 OpenAI、不读会话、不写 Memory。
 
 `abort_repository_merge` 的参数形状（全部为合成数据，不可代替实际审计值或用户丢弃授权）：
 
@@ -160,7 +146,7 @@ Pi 工具默认可能间接暴露：先用 `searchTools` / `describeTool` 核对
 {"repo_path":"/workspace/topic","operation_id":"00000000-0000-4000-8000-000000000072","expected_current_head_oid":"0123456789012345678901234567890123456789","expected_state_fingerprint":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","confirm_discard_resolution_work":true}
 ```
 
-另一个 abort 工具使用相同参数；两个 continue 工具不接受丢弃确认参数，调用前必须完成相应的冲突解决与暂存，再重新审计。工具不提供恢复记录的自动接管、重建或跳过检查入口。
+两个 abort 工具的参数相同；两个 continue 工具省略丢弃确认参数。
 
 ### 原地创建工作分支
 
@@ -204,6 +190,6 @@ Pi 工具默认可能间接暴露：先用 `searchTools` / `describeTool` 核对
 
 ## 明确未封装的操作
 
-当前没有首次添加 `upstream` remote、完整初始化个人维护基线与 tracking、GitHub branch protection/rulesets、复制 Hook 资产、空远端 bootstrap、跨 worktree 恢复未跟踪文件、部分 hunk 暂存、revert，或检查/升级本地 Serena uv 工具的 MCP 工具。原地创建当前 HEAD 的分支不补齐这些初始化操作。上述能力缺口按 [`cli-fallback.md`](cli-fallback.md) 自行使用相关 CLI 补足，包括既有授权内的写操作，无须仅因缺工具再次索取授权。工具的安全拒绝和执行失败不属于能力缺口；换入口不省略门禁、审批或结果回读，也不增加 MCP 参数或执行能力。
+首次添加 `upstream` remote、初始化维护基线与 tracking、GitHub branch protection/rulesets、复制 Hook 资产、空远端 bootstrap、跨 worktree 恢复未跟踪文件、部分 hunk 暂存、revert 及 Serena uv 工具的检查或升级，均按 [CLI 补充边界](cli-fallback.md) 处理。
 
 同样不封装代码编辑、项目自定义测试、任意脚本和需要产品/架构判断的冲突解决。

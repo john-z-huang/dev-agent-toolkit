@@ -25,7 +25,7 @@ from dev_workflow_standards_tools.services import web_search as service
 
 def search_response():
     return {
-        "id": "resp_synthetic", "created_at": 1, "model": "gpt-6-luna",
+        "id": "resp_synthetic", "created_at": 1, "model": openai_client.GPT_SOL_MODEL,
         "object": "response", "status": "completed",
         "output": [
             {"id": "ws_synthetic", "type": "web_search_call", "status": "completed",
@@ -78,6 +78,7 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
                             "query": "查找 asyncio 官方文档", "allowed_domains": ["DOCS.python.org"]
                         }}))
                 self.assertTrue(result["ok"], result)
+                self.assertEqual(result["model"], openai_client.GPT_SOL_MODEL)
                 self.assertEqual(result["reasoning_effort"], effort)
                 self.assertEqual(result["citations"][0]["block_index"], 0)
                 self.assertEqual(result["search_call_count"], 1)
@@ -86,10 +87,11 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(requests), 2)
                 self.assertTrue(all(client.is_closed for client in clients))
                 decision, search = requests[0][1], requests[1][1]
+                self.assertEqual(decision["model"], openai_client.GPT_LUNA_MODEL)
                 self.assertNotIn("reasoning", decision)
                 self.assertEqual(decision["questions"][0]["type"], "choice")
                 self.assertEqual(json.loads(decision["input"][0]["content"]), json.loads(search["input"]))
-                self.assertEqual(search["model"], "gpt-6-luna")
+                self.assertEqual(search["model"], openai_client.GPT_SOL_MODEL)
                 self.assertEqual(search["reasoning"], {"effort": effort})
                 self.assertEqual(search["tool_choice"], "required")
                 self.assertEqual(search["include"], ["web_search_call.action.sources"])
@@ -188,7 +190,14 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("公开网络搜索", client.instructions)
             tools = {item.name: item for item in (await client.list_tools()).tools}
             tool = tools["web_search"]
-            for phrase in ("gpt-6-luna", "Decisions", "OPENAI_BASE_URL", "search_evidence_missing", "Pi"):
+            for phrase in (
+                openai_client.GPT_LUNA_MODEL,
+                openai_client.GPT_SOL_MODEL,
+                "Decisions",
+                "OPENAI_BASE_URL",
+                "search_evidence_missing",
+                "Pi",
+            ):
                 self.assertIn(phrase, tool.description)
             self.assertTrue(tool.annotations.read_only_hint)
             self.assertTrue(tool.annotations.open_world_hint)

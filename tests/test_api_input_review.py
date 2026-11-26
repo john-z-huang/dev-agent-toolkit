@@ -436,7 +436,7 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertTrue(
-            all(kwargs["model"] == "gpt-6-luna" for kwargs in decision_calls)
+            all(kwargs["model"] == openai_client.GPT_LUNA_MODEL for kwargs in decision_calls)
         )
         self.assertTrue(
             all(
@@ -578,17 +578,16 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
         second_audit = json.loads(policy_calls[1]["input"][0]["content"])
         self.assertIn("修复空列表处理", second_audit["content"])
         self.assertTrue(
-            all(
-                kwargs["model"] == "gpt-6-luna"
-                for args, kwargs in self.sdk_calls
-                if not args
-            )
+            all(kwargs["model"] == openai_client.GPT_LUNA_MODEL for kwargs in policy_calls)
         )
         response_calls = [
             kwargs
             for args, kwargs in self.sdk_calls
             if not args and "text_format" in kwargs
         ]
+        self.assertTrue(
+            all(kwargs["model"] == openai_client.GPT_SOL_MODEL for kwargs in response_calls)
+        )
         self.assertTrue(
             all(kwargs["reasoning"]["effort"] == "medium" for kwargs in response_calls)
         )
@@ -662,6 +661,8 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
         first_audit = json.loads(policy_calls[0]["input"][0]["content"])
         audited_generation = json.loads(first_audit["content"])
         self.assertEqual(json.loads(audited_generation["input"]), fixture)
+        self.assertEqual(audited_generation["model"], openai_client.GPT_SOL_MODEL)
+        self.assertEqual(audited_generation["model"], response_calls[0]["model"])
         self.assertEqual(
             audited_generation["instructions"],
             ai_workflow._generation_instruction("issue"),
@@ -671,7 +672,7 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("\n\n", audited_generation["instructions"])
 
-        # 沿用原 Issue 的指纹格式；完整提交 patch 覆盖规则改变外发指令字节，同步快照。
+        # 沿用原 Issue 的指纹格式，固定含模型的生成请求快照。
         compatibility_hash_input = json.dumps(
             {"policy_version": "2026-11-05.1", **first_audit},
             ensure_ascii=False,
@@ -680,7 +681,7 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             hashlib.sha256(compatibility_hash_input.encode("utf-8")).hexdigest(),
-            "bb68976b160ec82481a215ba2554f9be4308be7b5bb42f4e1f11de827361dbac",
+            "5d16ecaf5f6972c8502f826cdcef0a903f0191916d97421cebf9e41c66a63b48",
         )
         current_hash = api_input_review._input_hash(
             first_audit["purpose"], first_audit["content"]
@@ -693,6 +694,7 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
 
         second_audit = json.loads(policy_calls[1]["input"][0]["content"])
         quality_payload = json.loads(second_audit["content"])
+        self.assertEqual(quality_payload["model"], response_calls[1]["model"])
         self.assertEqual(
             quality_payload["instructions"], response_calls[1]["instructions"]
         )

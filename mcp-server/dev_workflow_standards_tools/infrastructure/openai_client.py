@@ -25,7 +25,12 @@ from openai import (
 
 from . import api_input_policy
 
-MODEL_NAME = "gpt-6-luna"
+GPT_SOL_MODEL = "gpt-6.2-sol"
+GPT_TERRA_MODEL = "gpt-6.1-terra"
+GPT_LUNA_MODEL = "gpt-6-luna"
+
+DECISIONS_MODEL_NAME = GPT_LUNA_MODEL
+RESPONSES_MODEL_NAME = GPT_SOL_MODEL
 OPENAI_TIMEOUT_SECONDS = 180.0
 DEFAULT_OPENAI_TIMEOUT_MAX_RETRIES = 5
 MAX_REQUEST_BYTES = 48 * 1024
@@ -404,14 +409,14 @@ async def create_decision(
     """请求 Decisions 判断；仅发送固定模型、事实和问题，不添加不支持的选项。"""
     # 首次等待前复制输入；审核、发送和超时重试均使用同一份内容快照。
     payload = {
-        "model": MODEL_NAME,
+        "model": DECISIONS_MODEL_NAME,
         "input": json.loads(_payload_text(input)),
         "questions": json.loads(_payload_text(questions)),
     }
     return await _invoke(
         payload,
         lambda client: client.decisions.create(
-            model=MODEL_NAME,
+            model=payload["model"],
             input=payload["input"],
             questions=payload["questions"],
         ),
@@ -424,14 +429,14 @@ async def _create_policy_review_decision(
 ) -> Any:
     """审核专用私有入口：保留统一配置和本地检测，仅避免再次触发语义审核。"""
     payload = {
-        "model": MODEL_NAME,
+        "model": DECISIONS_MODEL_NAME,
         "input": [{"role": "user", "content": content}],
         "questions": json.loads(_payload_text(questions)),
     }
     return await _invoke(
         payload,
         lambda client: client.decisions.create(
-            model=MODEL_NAME,
+            model=payload["model"],
             input=payload["input"],
             questions=payload["questions"],
         ),
@@ -474,7 +479,7 @@ async def parse_response(
         {"model_json_schema": classmethod(frozen_model_json_schema)},
     )
     payload = {
-        "model": MODEL_NAME,
+        "model": RESPONSES_MODEL_NAME,
         "instructions": str(instructions),
         "input": str(input),
         "text_format": schema,
@@ -486,7 +491,7 @@ async def parse_response(
     return await _invoke(
         payload,
         lambda client: client.responses.parse(
-            model=MODEL_NAME,
+            model=payload["model"],
             instructions=payload["instructions"],
             input=payload["input"],
             text_format=frozen_text_format,
@@ -514,7 +519,7 @@ async def create_web_search_response(
     if allowed_domains:
         search_tool["filters"] = {"allowed_domains": list(allowed_domains)}
     payload = {
-        "model": MODEL_NAME,
+        "model": RESPONSES_MODEL_NAME,
         "instructions": str(instructions),
         "input": str(input),
         "tools": [search_tool],

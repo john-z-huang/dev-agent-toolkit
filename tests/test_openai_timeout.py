@@ -44,6 +44,9 @@ class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
     async def test_decisions_and_responses_recover_after_timeout(self):
         for api in ("decisions", "responses"):
             requests = []
+            expected_model = (
+                openai_client.GPT_LUNA_MODEL if api == "decisions" else openai_client.GPT_SOL_MODEL
+            )
 
             def handler(request, requests=requests, api=api):
                 requests.append(request)
@@ -57,7 +60,7 @@ class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
                         "id": "resp_synthetic",
                         "object": "response",
                         "created_at": 0,
-                        "model": "gpt-6-luna",
+                        "model": openai_client.GPT_SOL_MODEL,
                         "status": "completed",
                         "output": [
                             {
@@ -110,7 +113,7 @@ class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
                         "pool": 180.0,
                     },
                 )
-                self.assertEqual(json.loads(request.content)["model"], "gpt-6-luna")
+                self.assertEqual(json.loads(request.content)["model"], expected_model)
             self.assertEqual(requests[0].content, requests[1].content)
 
     async def test_default_custom_and_disabled_retry_budgets_exhaust_safely(self):

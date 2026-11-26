@@ -208,7 +208,7 @@ class ContentGenerationTests(ContentGenerationTestCase):
                 ) as parse:
                     result = await generate_skill_content(request)
                 self.assertEqual(result["reasoning_effort"], expected_effort)
-                self.assertEqual(result["model"], "gpt-6-luna")
+                self.assertEqual(result["model"], openai_client.GPT_SOL_MODEL)
                 self.assertEqual(
                     result["usage"],
                     {"input_tokens": 10, "output_tokens": 20, "total_tokens": 30},

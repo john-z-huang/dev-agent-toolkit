@@ -1,7 +1,5 @@
 # Worktree 与基线操作
 
-GitHub 与 GitLab 托管仓库均适用；纯 Git 动作不要求 GitHub 登录，PR/MR 及平台工具差异见 [GitLab 兼容规则](../references/gitlab.md)。
-
 ## 进入条件
 
 准备新建、同步、恢复或移除 worktree/相关基线时适用。只有用户明确要求新建时才创建；remote、并行工作或已有 worktree 不触发重建。
@@ -12,7 +10,7 @@ GitHub 与 GitLab 托管仓库均适用；纯 Git 动作不要求 GitHub 登录�
 
 同步：准确实际 PR base、发布状态、预期 head/base OID 和干净状态已核验；已发布 merge，未发布 rebase，可快进时快进。不得强推；同步后的验证绑定新状态，base 变化使相关证据失效。见 [同步](../references/worktree-base-sync.md)。
 
-恢复：仅接管本服务受管理的简单操作，操作 ID、HEAD 和最新指纹匹配。continue 要求已解决且正确暂存；abort 要求明确丢弃本次解决内容的授权。见 [恢复协议](../references/worktree-recovery.md)。
+恢复：仅接管本服务受管理的简单操作，核对操作 ID、HEAD 和最新指纹。continue 须正确解决并暂存冲突，abort 须明确获准丢弃本次解决内容。见 [恢复协议](../references/worktree-recovery.md)。
 
 移除/清理：用户明确要求且资源身份和干净状态符合工具条件；默认保留已集成 worktree 和本地分支。删除目录不等于授权删除分支。见 [分支清理](../references/pr-merge-cleanup.md)。
 

@@ -10,8 +10,8 @@ import sys
 from typing import Any, Literal
 
 from dev_workflow_standards_tools.infrastructure.openai_client import (
-    MODEL_NAME,
     OpenAIWorkflowError,
+    RESPONSES_MODEL_NAME,
     parse_response,
 )
 from pydantic import BaseModel, ConfigDict
@@ -52,7 +52,7 @@ def _has_refusal(response: Any) -> bool:
 def _failure(error_code: str, status_code: int | None = None) -> dict[str, Any]:
     result: dict[str, Any] = {
         "status": "failed",
-        "model": MODEL_NAME,
+        "model": RESPONSES_MODEL_NAME,
         "error_code": error_code,
     }
     if (
@@ -70,7 +70,7 @@ def _official_response_error(response: Any) -> str | None:
         return "response_not_completed"
     if _has_refusal(response):
         return "response_refused"
-    if getattr(response, "model", None) != MODEL_NAME:
+    if getattr(response, "model", None) != RESPONSES_MODEL_NAME:
         return "unexpected_model"
     parsed = getattr(response, "output_parsed", None)
     if not isinstance(parsed, SmokeOutput) or parsed.model_dump(mode="json") != {
@@ -119,14 +119,14 @@ async def _call_live() -> dict[str, Any]:
     response_error = _official_response_error(response)
     if response_error:
         return _failure(response_error)
-    return {"status": "success", "model": MODEL_NAME, "usage": _usage_counts(response)}
+    return {"status": "success", "model": RESPONSES_MODEL_NAME, "usage": _usage_counts(response)}
 
 
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if args != ["--live"]:
         status = "skipped" if not args else "failed"
-        result = {"status": status, "model": MODEL_NAME}
+        result = {"status": status, "model": RESPONSES_MODEL_NAME}
         if status == "failed":
             result["error_code"] = "invalid_arguments"
         print(json.dumps(result, separators=(",", ":"), sort_keys=True))
