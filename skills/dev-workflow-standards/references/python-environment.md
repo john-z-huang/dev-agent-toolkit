@@ -47,6 +47,48 @@ uv run --package member-name -- python -c 'import sys; print(sys.executable)'
 
 用户或项目显式指定已有虚拟环境、自定义环境路径（例如通过 `UV_PROJECT_ENVIRONMENT`）或其他管理方式时，保持原有优先级。若当前激活环境或继承的环境变量指向其他项目，先核实其归属，不直接将其作为本项目环境；不通过 `--active`、`--no-project` 或 `--isolated` 意外绕过根环境。用户明确要求独立运行的 PEP 723 脚本仍按元数据隔离，不强制并入项目共享环境。
 
+## 代码格式化与静态检查
+
+在项目的开发指令中记录可复现的格式化、格式检查、lint 和类型检查命令，注明运行目录和检查范围。Ruff 负责格式化和 lint，ty 负责静态类型检查。Code Agent 必须调用项目配置的格式化命令来修正代码格式。禁止用 Edit、补丁或其他编辑工具手工处理缩进、空白、折行、引号等纯格式变更。格式化工具不可执行时，先核对项目环境与开发依赖，仍无法运行则报告阻塞。
+
+uv 项目将工具加入项目使用的开发依赖组，并同步锁文件。以下命令从已确认的项目根目录执行，示例使用 `dev` 组。若项目已有其他组名或锁定策略，沿用其约定。
+
+```bash
+/bin/bash -c 'uv add --dev ruff ty'
+/bin/bash -c 'uv run --group dev -- ruff format'
+/bin/bash -c 'uv run --group dev -- ruff format --check'
+/bin/bash -c 'uv run --group dev -- ruff check --no-fix'
+/bin/bash -c 'uv run --group dev -- ty check'
+```
+
+`ruff format` 会写入源码。其余三条检查命令不修改源码，检查发现问题时按实际退出状态报告。只格式化相关文件时，把目标文件或目录作为 `ruff format` 的参数传入。
+
+uv 项目可把配置放在同一份 `pyproject.toml`。以下以最低支持 Python 3.11 的项目为例。按项目实际支持版本填写目标版本，也可在自动发现配置时从 `[project].requires-python` 推断。保留项目已有的配置来源、规则及排除范围。
+
+```toml
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+include = ["*.py", "*.pyi", "*.pyw"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ty.environment]
+python-version = "3.11"
+```
+
+使用其他依赖管理器时，将 Ruff 和 ty 加入该项目的开发依赖，在已确认并激活的项目环境中从项目根执行以下命令。已有 `pyproject.toml` 时也可使用上述表。使用独立配置文件时，将 Ruff 的通用配置放在 `ruff.toml` 顶层，lint 规则放在 `[lint]`，ty 的版本配置放在 `ty.toml` 的 `[environment]`。
+
+```bash
+/bin/bash -c 'ruff format'
+/bin/bash -c 'ruff format --check'
+/bin/bash -c 'ruff check --no-fix'
+/bin/bash -c 'ty check'
+```
+
+配置参考见 [Ruff](https://docs.astral.sh/ruff/configuration/) 和 [ty](https://docs.astral.sh/ty/configuration/)。
+
 ## Modal 代理依赖
 
 安装、添加、升级或修复 Modal 依赖，且本地环境需要通过网络代理访问 Modal 平台时，必须使用带有 `api-proxy-support` extra 的 `modal` 包。本规则不适用于无关 Python 包或仅远端运行的环境；环境归属与项目根仍按前文确认。
