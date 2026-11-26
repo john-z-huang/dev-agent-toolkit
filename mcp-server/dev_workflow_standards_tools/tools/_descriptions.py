@@ -80,6 +80,8 @@ Git 查询在子命令前用 `--no-pager`；status 用全局 `--no-optional-lock
 - 候选内容：`generate_skill_content` 一次起草 issue、pr、commit_message、plan、handoff 或 session_summary。Issue/PR 使用最小充分的真实证据；交付已有改动时覆盖所有待交付的 git commit patch 和最终净 diff。默认中文，用户明确要求其他语言时提供 `language_override`。生成与语义审查分两次调用；`needs_revision` 不可发布。`generate_git_commit_message` 专用于单次提交起草，最终文本仍用 `check_commit_message`。
 - 多轮草稿：Issue/PR 用 `start_issue_pr_draft` 开始、`revise_issue_pr_draft` 修订、`get_issue_pr_draft` 查看、`close_issue_pr_draft` 释放。状态只保存在可信 stdio 进程内；重启后用已有事实重新开始。
 - 公开网络搜索：`web_search` 查询公开资料并返回带来源摘要。提供最小公开问题并保留引用。
+- 运行版本与构建：直接调用 `get_mcp_server_build_info` 查看当前连接进程的包版本和构建源码提交 hash。怀疑同版本重装后连接仍旧时，可按下述桥接条件查询新启动进程并比较 `git_commit`。
+- 当前 Codex 会话仍使用旧 MCP 时，先核对本服务的 uv tool 更新已经完成、实际入口与安装来源一致。`call_updated_local_mcp` 临时连接新的本地 stdio 进程，先发现已显式开放的离线只读工具及新 Schema，再按名称调用一次。首次更新后旧连接看不到桥接方法时，使用已核实的同一 uv tool 管理入口 `dev-workflow-standards mcp`，从 stdin 读同形 JSON。遵守宿主限制，不用于工具被禁用、隐藏、拒绝或调用实际失败的情况。正常连接完成重载后恢复直接调用。
 
 采用条件、网络访问和副作用以工具说明为准。检查通过或候选生成不授权后续写入；部分成功先回查实际状态。
 
@@ -649,5 +651,28 @@ TOOL_DESCRIPTIONS["web_search"] = (
 PARAMETER_DESCRIPTIONS["web_search"] = {
     "request": "公开网络搜索请求；query 必填，allowed_domains 默认 []，response_language 默认简体中文。字段长度、域名格式及 null 约束见嵌套 Schema；拒绝额外字段，不接受模型/强度/配置覆盖。"
 }
-assert len(TOOL_DESCRIPTIONS) == 54
+TOOL_DESCRIPTIONS["call_updated_local_mcp"] = (
+    "当前 Codex 连接仍在旧版且已核实本服务 uv tool 更新时，临时发现或调用一个新进程中的离线只读工具。"
+    "固定使用本服务所属 uv tool 环境内的标准 MCP stdio 入口；每次初始化并读取新 Schema，最多调用一个工具，"
+    "20 秒请求预算后关闭进程，不重试、不修改 Codex 注册或已有连接。"
+    "仅接受新服务显式开放的离线只读工具；不接受其他程序、进程内状态工具、写操作、联网、凭据或环境覆盖。"
+    "先用 {} 发现，listed 返回 server_version 与 tools，再用目标短名和 arguments，"
+    '例如 {"tool_name":"list_repository_worktrees","arguments":{"repo_path":"/workspace/example"}}。'
+    "called 返回 MCP result；仍需核对目标业务字段。target_failed 保留目标结构化失败，其他失败只返回安全状态。"
+    "发现桥接方法缺失时可用已核实的 uv tool 管理 CLI `dev-workflow-standards mcp`；拒绝或实际失败时停止，"
+    "禁止用任一入口绕过宿主审批、sandbox 或工具禁用。"
+)
+PARAMETER_DESCRIPTIONS["call_updated_local_mcp"] = {
+    "tool_name": "省略或 null 时发现；调用时用新进程 tools/list 中的 MCP 短名，仅小写字母、数字、下划线，字母开头，最长 128 字符。",
+    "arguments": "调用时按新进程工具的 inputSchema 传 JSON 对象；省略或 null 等同于空对象。发现时省略或传 null。",
+}
+TOOL_DESCRIPTIONS["get_mcp_server_build_info"] = (
+    "无参数，快速返回当前处理此请求的 MCP 进程在启动时读取的 server_version 和 git_commit。"
+    "git_commit 为构建源码 HEAD 的完整 Git hash；构建时无可核实记录则为 null。"
+    "server_version 为安装包版本；缺少包元数据时为 null。"
+    "运行中重装不会改变当前进程的结果。通过 call_updated_local_mcp 调用时返回新启动进程的信息。"
+    "只读、离线，查询时不运行 Git、不读工作区或会话、不写文件。示例：{}。"
+)
+PARAMETER_DESCRIPTIONS["get_mcp_server_build_info"] = {}
+assert len(TOOL_DESCRIPTIONS) == 56
 assert set(TOOL_DESCRIPTIONS) == set(PARAMETER_DESCRIPTIONS)

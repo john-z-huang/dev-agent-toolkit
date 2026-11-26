@@ -75,11 +75,21 @@ class SkillDistributionTests(unittest.TestCase):
                 )
                 return result
 
+            run(["git", "init", "-q"], project)
             wheels = []
+            commits = []
             for number in (1, 2):
                 if number == 2:
                     with (source / "SKILL.md").open("a") as stream:
                         stream.write("\n测试第二个发布快照。\n")
+                run(["git", "add", "--", "mcp-server", "skills", "instructions"], project)
+                run(
+                    ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com",
+                     "commit", "-qm", f"fixture-{number}"],
+                    project,
+                )
+                commit = run(["git", "rev-parse", "HEAD"], project).stdout.strip()
+                commits.append(commit)
                 artifacts = root / f"artifacts-{number}"
                 artifacts.mkdir()
                 run(
@@ -118,6 +128,7 @@ class SkillDistributionTests(unittest.TestCase):
                     )
                     archive.extractall(extracted, filter="data")
                 rebuild_root = next(extracted.iterdir())
+                self.assertEqual((rebuild_root / "git-commit.txt").read_text().strip(), commit)
                 self.assertEqual(
                     (rebuild_root / "global-instructions-source.md").read_bytes(),
                     global_source.read_bytes(),
@@ -139,6 +150,11 @@ class SkillDistributionTests(unittest.TestCase):
                 wheel = next(artifacts.glob("*.whl"))
                 wheels.append(wheel)
                 with zipfile.ZipFile(wheel) as archive:
+                    git_metadata = next(
+                        name for name in archive.namelist()
+                        if name.endswith(".dist-info/extra_metadata/git-commit.txt")
+                    )
+                    self.assertEqual(archive.read(git_metadata).decode().strip(), commit)
                     global_resource = "dev_workflow_standards_tools/global_instructions/codex-global.md"
                     self.assertEqual(
                         archive.read(global_resource), global_source.read_bytes()
@@ -230,6 +246,15 @@ class SkillDistributionTests(unittest.TestCase):
                     str(wheels[0]),
                 ]
             )
+            build_query = (
+                "import json; "
+                "from dev_workflow_standards_tools.services.build_info import get_mcp_server_build_info; "
+                "print(json.dumps(get_mcp_server_build_info()))"
+            )
+            self.assertEqual(
+                json.loads(run([str(python), "-c", build_query]).stdout),
+                {"server_version": "0.2.0", "git_commit": commits[0]},
+            )
             # 该环境没有 OpenAI/MCP 依赖，管理命令仍应独立工作。
             skill_home = root / "skill-home"
             environment["HOME"] = str(skill_home)
@@ -259,6 +284,10 @@ class SkillDistributionTests(unittest.TestCase):
                     "--no-deps",
                     str(wheels[1]),
                 ]
+            )
+            self.assertEqual(
+                json.loads(run([str(python), "-c", build_query]).stdout),
+                {"server_version": "0.2.0", "git_commit": commits[1]},
             )
             self.assertEqual((target / "SKILL.md").read_bytes(), before)
             run([*args, "update", "--dry-run"])

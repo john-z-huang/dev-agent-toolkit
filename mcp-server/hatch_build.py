@@ -2,7 +2,9 @@
 
 import hashlib
 import json
+import os
 import re
+import subprocess
 import tempfile
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -11,6 +13,7 @@ from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
 
 _SKILL_SCRIPTS = {"scripts/github_draft.py", "scripts/validate_github_draft.py"}
+_GIT_COMMIT_FILE = "git-commit.txt"
 
 
 def _skill_payload(source: Path) -> dict[str, bytes]:
@@ -61,6 +64,37 @@ def _global_instructions(root: Path) -> bytes:
     return global_data
 
 
+def _source_git_commit(root: Path) -> str | None:
+    """Capture the source HEAD or reuse the commit carried by the sdist."""
+    try:
+        if (root / "skill-source").is_dir():
+            commit = (root / _GIT_COMMIT_FILE).read_text(encoding="ascii").strip()
+        elif (root.parent / ".git").exists():
+            environment = {
+                key: value
+                for key, value in os.environ.items()
+                if not key.startswith("GIT_")
+            }
+            environment["GIT_NO_LAZY_FETCH"] = "1"
+            result = subprocess.run(
+                [
+                    "git", "--no-pager", "--no-optional-locks",
+                    "-C", str(root.parent), "rev-parse", "--verify", "HEAD^{commit}",
+                ],
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                check=True,
+                timeout=5,
+            )
+            commit = result.stdout.decode("ascii").strip()
+        else:
+            return None
+    except (OSError, UnicodeError, subprocess.SubprocessError):
+        return None
+    return commit if re.fullmatch(r"[0-9a-f]{40}(?:[0-9a-f]{24})?", commit) else None
+
+
 class CustomBuildHook(BuildHookInterface):
     def initialize(self, version, build_data):
         root = Path(self.root)
@@ -103,15 +137,22 @@ class CustomBuildHook(BuildHookInterface):
             prefix="dev-workflow-global-agents-build-"
         )
         global_stage = Path(self._global_stage.name)
-        (global_stage / "codex-global.md").write_bytes(global_data)
+        global_file = global_stage / "codex-global.md"
+        global_file.write_bytes(global_data)
         if self.target_name == "wheel":
-            global_destination = "dev_workflow_standards_tools/global_instructions"
+            global_destination = "dev_workflow_standards_tools/global_instructions/codex-global.md"
         else:
             global_destination = "global-instructions-source.md"
-            global_stage = global_stage / "codex-global.md"
-        build_data.setdefault("force_include", {})[str(global_stage)] = (
-            global_destination
-        )
+        build_data["force_include"][str(global_file)] = global_destination
+
+        commit = _source_git_commit(root)
+        if commit is not None:
+            commit_file = global_stage / _GIT_COMMIT_FILE
+            commit_file.write_text(commit + "\n", encoding="ascii")
+            if self.target_name == "wheel":
+                build_data["extra_metadata"][str(commit_file)] = _GIT_COMMIT_FILE
+            else:
+                build_data["force_include"][str(commit_file)] = _GIT_COMMIT_FILE
 
     def finalize(self, version, build_data, artifact_path):
         self._stage.cleanup()

@@ -5,9 +5,14 @@ from typing import Any
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.mcpserver.server import Context
+from mcp.types import ToolAnnotations
 from pydantic import ValidationError
 
+from . import SERVER_NAME
+from .services.build_info import SERVER_VERSION, get_mcp_server_build_info
+from .services.local_mcp import call_updated_local_mcp
 from .tools._descriptions import SERVER_DESCRIPTION, SERVER_INSTRUCTIONS
+from .tools._registration import _register_adapter
 from .tools.ai_workflow import register_ai_workflow_tools
 from .tools.codex_session_facts import register_codex_session_fact_tools
 from .tools.git import register_git_tools
@@ -35,9 +40,10 @@ class _SafeMCPServer(MCPServer):
 
 
 mcp = _SafeMCPServer(
-    "dev-workflow-standards-tools",
+    SERVER_NAME,
     description=SERVER_DESCRIPTION,
     instructions=SERVER_INSTRUCTIONS,
+    version=SERVER_VERSION or "",
 )
 
 register_git_tools(mcp)
@@ -48,6 +54,17 @@ register_codex_session_fact_tools(mcp)
 register_ai_workflow_tools(mcp)
 register_web_search_tools(mcp)
 register_serena_memory_tools(mcp)
+_register_adapter(
+    mcp,
+    get_mcp_server_build_info,
+    ToolAnnotations(read_only_hint=True, destructive_hint=False, open_world_hint=False),
+    local_stdio=True,
+)
+_register_adapter(
+    mcp,
+    call_updated_local_mcp,
+    ToolAnnotations(read_only_hint=True, destructive_hint=False, open_world_hint=False),
+)
 
 
 def main() -> None:

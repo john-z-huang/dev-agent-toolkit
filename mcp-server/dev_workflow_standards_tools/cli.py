@@ -1,4 +1,4 @@
-"""独立 Skill 管理入口；不导入或启动 MCP/OpenAI，不读取凭据。"""
+"""离线管理 Skill、全局指令及本地 uv tool MCP 请求。"""
 
 import argparse
 import json
@@ -11,9 +11,12 @@ from .services.skill_installation import SKILL, SkillError, manage_skill
 def _parser() -> argparse.ArgumentParser:
     """集中声明 CLI 命令与参数，执行入口只负责分派和错误输出。"""
     parser = argparse.ArgumentParser(
-        description="离线安装或显式更新开发规范 Skill；不注册 MCP 或安装 Hook"
+        description="离线管理开发规范 Skill、全局指令和临时本地 MCP 请求"
     )
     groups = parser.add_subparsers(dest="group", required=True)
+    groups.add_parser(
+        "mcp", help="从 stdin 读取单个 JSON 对象，发现或调用已安装 uv tool 的离线只读工具"
+    )
     skills = groups.add_parser("skills", help="安装、查看及更新独立 Skill 快照")
     commands = skills.add_subparsers(dest="action", required=True)
     for action, help_text in (
@@ -63,8 +66,27 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _run_local_mcp() -> int:
+    import asyncio
+
+    from .services.local_mcp import call_updated_local_mcp
+
+    try:
+        request = json.load(sys.stdin)
+        if not isinstance(request, dict) or request.keys() - {"tool_name", "arguments"}:
+            raise ValueError
+    except (ValueError, RecursionError):
+        result = {"ok": False, "status": "invalid_request"}
+    else:
+        result = asyncio.run(call_updated_local_mcp(**request))
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result["ok"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if args.group == "mcp":
+        return _run_local_mcp()
     try:
         if args.group == "skills":
             result = manage_skill(

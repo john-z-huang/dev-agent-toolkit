@@ -21,6 +21,8 @@
 
 构建后核对 wheel 和 sdist 路径及版本。安装后用 `uv tool list --show-paths` 确认实际版本和入口，按目标验证入口。安装完成只证明 uv tool 环境已更新。发生部分成功时按 [恢复](recovery.md) 核对已生成产物及已安装版本。
 
+Codex 当前连接仍旧且本次需要新版离线只读方法时，按 [更新后临时本地 MCP](updated-local-mcp.md) 使用已核实的新入口。
+
 ## 重新进入条件
 
 源码 checkout、版本、wheel、uv tool 环境或安装范围变化时，复核受影响部分。

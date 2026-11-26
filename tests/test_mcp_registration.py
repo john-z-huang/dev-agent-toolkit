@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import shlex
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from typing import get_type_hints
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
@@ -16,7 +18,7 @@ from codex_session_fixtures import ROOT, tool_json
 from dev_workflow_standards_tools.infrastructure.openai_client import GPT_LUNA_MODEL, GPT_SOL_MODEL
 from dev_workflow_standards_tools.server import mcp as complete_server
 from dev_workflow_standards_tools.services import codex_session_facts as service
-from dev_workflow_standards_tools.services import validation, workflows
+from dev_workflow_standards_tools.services import local_mcp, validation, workflows
 from dev_workflow_standards_tools.services.codex_session_facts import (
     CodexSessionSource,
 )
@@ -26,6 +28,36 @@ from pydantic import create_model
 
 class MCPRegistrationTests(IsolatedAsyncioTestCase):
     A = "00000000-0000-4000-8000-000000000005"
+
+    async def test_local_mcp_bridge_discovers_and_calls_fresh_stdio(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            prefix = Path(temporary) / local_mcp.SERVER_NAME
+            executable = prefix / "bin" / local_mcp.SERVER_NAME
+            executable.parent.mkdir(parents=True)
+            (prefix / "uv-receipt.toml").touch()
+            executable.write_text(
+                "#!/bin/bash\n"
+                f"cd -- {shlex.quote(str(ROOT / 'mcp-server'))} || exit 1\n"
+                f"exec {shlex.quote(sys.executable)} -m dev_workflow_standards_tools.server\n"
+            )
+            executable.chmod(0o700)
+            with patch.object(local_mcp, "sys", SimpleNamespace(prefix=str(prefix))):
+                listing = await local_mcp.call_updated_local_mcp()
+                self.assertEqual(listing["status"], "listed")
+                self.assertTrue(
+                    {"list_repository_worktrees", "get_codex_session_summary_guidance", "get_mcp_server_build_info"}
+                    <= {tool["name"] for tool in listing["tools"]}
+                )
+                response = await local_mcp.call_updated_local_mcp(
+                    "get_codex_session_summary_guidance", {"custom_questions": ["示例问题？"]}
+                )
+                self.assertEqual(response["status"], "called")
+                self.assertEqual(
+                    json.loads(response["result"]["content"][0]["text"])["questions"],
+                    ["示例问题？"],
+                )
+                response = await local_mcp.call_updated_local_mcp("create_repository_branch")
+                self.assertEqual(response, {"ok": False, "status": "tool_not_available"})
 
     async def test_issue_pr_metadata_over_stdio_initialize_and_tools_list(self) -> None:
         from dev_workflow_standards_tools.services.ai_workflow import (
@@ -83,6 +115,21 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             ):
                 self.assertIn(phrase, instructions)
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+            self.assertIn("get_mcp_server_build_info", instructions)
+            build_info = tools["get_mcp_server_build_info"]
+            self.assertEqual(build_info.input_schema.get("properties", {}), {})
+            self.assertTrue(build_info.annotations.read_only_hint)
+            self.assertFalse(build_info.annotations.open_world_hint)
+            running_build = tool_json(await client.call_tool(build_info.name, {}))
+            self.assertEqual(set(running_build), {"server_version", "git_commit"})
+            self.assertEqual(running_build["server_version"], client.server_info.version)
+            self.assertIn("call_updated_local_mcp", instructions)
+            bridge = tools["call_updated_local_mcp"]
+            self.assert_described_properties(bridge.input_schema, bridge.name)
+            self.assertEqual(set(bridge.input_schema["properties"]), {"tool_name", "arguments"})
+            self.assertTrue(bridge.annotations.read_only_hint)
+            self.assertFalse(bridge.annotations.open_world_hint)
+            self.assertNotIn("dev-workflow-standards/local-stdio", bridge.meta or {})
             self.assertIn("title_file", instructions)
             self.assertIn("body_file", instructions)
             for name in ("create_github_issue", "create_github_pull_request"):
@@ -254,9 +301,9 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
     async def test_all_tools_registered_with_described_schemas(self) -> None:
         self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
         tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 56)
+        self.assertEqual(len(tools), 58)
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 56)
+        self.assertEqual(len(by_name), 58)
         self.assertNotIn("decide_skill_workflow", by_name)
         for tool in tools:
             self.assertTrue(tool.description, tool.name)
