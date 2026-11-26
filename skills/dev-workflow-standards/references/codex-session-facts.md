@@ -43,7 +43,7 @@
 Python MCP Server 提供只读助手：`get_codex_session_summary_guidance` 返回下述默认问题和模板并支持用户自定义；`order_codex_session_sources` 处理来源去重和创建时间排序；`prepare_codex_session_memory` 校验并生成 Memory 写入参数。签名和适用条件见 [`mcp-tools.md`](mcp-tools.md)。助手不读取原会话、不执行 Serena 写入，也不能代替 Code Agent 核对原文或判定当前用户授权。
 
 - 项目会话摘要默认放在 `.serena/memories/codex-sessions/`，逻辑名为 `codex-sessions/<safe-entry>`。用户明确指定项目内另一个主题目录时，遵从该位置并保持一致。禁止使用跨项目的 global 目录，禁止路径穿越。
-- 按 [`code-understanding.md`](code-understanding.md) 确认 Serena 说明、session 参数及目标仓库/worktree 的准确项目绑定；已正确激活或启动绑定时复用，不因 Memory 任务自动执行 onboarding。遵守已有 Memory maintenance；先 `list_memories` 并 `read_memory` 检查维护说明和旧记录。每个去重会话默认用 Serena `write_memory` 创建摘要；已存在时按本规约维护。只有当前用户明确要求仅只读参考或禁止持久化时跳过写入。写后回读确认，并按 thread ID 查找已有记录以避免重复。
+- 按 [Serena 项目绑定](serena.md#项目绑定与能力确认) 确认工具说明、session 参数及目标仓库/worktree 的准确项目绑定；已正确激活或启动绑定时复用，不因 Memory 任务自动执行 onboarding。遵守已有 Memory maintenance；先 `list_memories` 并 `read_memory` 检查维护说明和旧记录。每个去重会话默认用 Serena `write_memory` 创建摘要；已存在时按本规约维护。只有当前用户明确要求仅只读参考或禁止持久化时跳过写入。写后回读确认，并按 thread ID 查找已有记录以避免重复。
 - 若 Serena 配置的数据目录不在 `.serena`，应报告它与当前存储目标冲突并澄清，不得声称已写入预期位置。Memory 工具未暴露时，可按 [`cli-fallback.md`](cli-fallback.md) 使用已核实的 Serena CLI 能力，保留相同项目、实际存储根、命名、访问策略及写入后回读要求；不能猜目录或用普通文件写入绕开 Memory 语义。没有能保持这些条件的入口或实际写入失败时，停止依赖持久化的操作并报告。
 - 每个去重会话对应一份中文摘要。文件/Memory 名使用路径安全的创建时间、结束时间或 `unknown`、标题 slug 和 thread ID；模板为 `<safe-created_at>-<safe-ended_at-or-unknown>-<title-slug>-<thread-id>`。完整链接只放在正文，不把原始含 `/`、`:` 的 URL 直接用作名称。用户明确禁止持久化时，不创建或更新摘要。
 
@@ -104,7 +104,7 @@ Python MCP Server 提供只读助手：`get_codex_session_summary_guidance` 返�
 
 ## 后续查询与更新
 
-- 后续 Agent 遇到项目/代码事实问题时，可从本目录（或用户明确指定的主题目录）的相关摘要定位来源，按真实会话创建时间倒序定位；再读取相关原会话完整内容并追溯证据，必要时分页和读取原工具结果。需要引用历史事实时必须核对其原文；独立代码或外部事实查询由 Agent 按当前问题判断，不能用新观察填补历史摘要；代码查询仍遵守 [`code-understanding.md`](code-understanding.md) 的 Serena 符号优先规则。没有用户提供或相关存档会话时，可走原有查询流程。
+- 后续 Agent 遇到项目/代码事实问题时，可从本目录（或用户明确指定的主题目录）的相关摘要定位来源，按真实会话创建时间倒序定位；再读取相关原会话完整内容并追溯证据，必要时分页和读取原工具结果。需要引用历史事实时必须核对其原文；独立代码或外部事实查询由 Agent 按当前问题判断，不能用新观察填补历史摘要；代码查询仍遵守 [Serena 符号查询规则](serena.md#按问题选择查询)。没有用户提供或相关存档会话时，可走原有查询流程。
 - 更新历史摘要前，先用 Serena `read_memory` 读取记录，再通过已暴露的 `edit_memory` 或 `write_memory` 工具更新，并在写后回读。只允许补充重新读取原历史会话后新识别、且确实存在于该会话中的事实；附上原消息/轮次证据和修订说明，保留来源及历史纠正依据。
 - 严禁将当前会话查代码、运行测试、联网、新用户要求或新推论写回历史会话摘要，也不得把当前事件写成原会话事实。属于另一段已提供会话的事实，应写入那段会话自己的摘要，不混合来源。
 - 不得使用名称带 `readonly` 的 Memory 名称来暗示访问控制；该逻辑名并不提供 ACL。历史摘要不会免除当前变更的要求、验证或验收；状态检查仍按对应动作条件使用专用 Git 工具。
