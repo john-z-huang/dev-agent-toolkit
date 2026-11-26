@@ -81,8 +81,39 @@ def _gh_object(args: list[str], cwd: str) -> tuple[Any, str | None]:
         return None, "GitHub CLI returned invalid JSON"
 
 
+def _read_draft_file(path: Path, field: str) -> str:
+    if not path.is_absolute():
+        raise ValueError(f"{field} 必须是文件的绝对路径")
+    try:
+        if not path.is_file():
+            raise ValueError(f"{field} 必须指向已存在的普通文件")
+        return path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError(f"{field} 必须采用 UTF-8 编码") from None
+    except OSError:
+        raise ValueError(f"无法读取 {field}") from None
+
+
+def _read_draft_title(title_file: str) -> str:
+    lines = _read_draft_file(Path(title_file), "title_file").splitlines()
+    if len(lines) != 1 or not lines[0].strip() or "\x00" in lines[0]:
+        raise ValueError("title_file 须包含一行非空标题")
+    return lines[0]
+
+
+def _read_markdown_body(body_file: str) -> str:
+    path = Path(body_file)
+    if path.suffix.lower() not in {".md", ".markdown"}:
+        raise ValueError("body_file 须指向 .md 或 .markdown 文件")
+    body = _read_draft_file(path, "body_file")
+    if not body.strip():
+        raise ValueError("body_file 的 Markdown 正文不能为空")
+    return body
+
+
 def _temporary_body_file(body: str) -> tuple[tempfile.TemporaryDirectory[str], str]:
+    """Pass the checked body to gh even if the source draft changes."""
     directory = tempfile.TemporaryDirectory(prefix="dev-workflow-standards-tools-")
     path = Path(directory.name) / "body.md"
-    path.write_text(body, encoding="utf-8")
+    path.write_bytes(body.encode("utf-8"))
     return directory, str(path)

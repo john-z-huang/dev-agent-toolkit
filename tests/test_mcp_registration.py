@@ -83,6 +83,21 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             ):
                 self.assertIn(phrase, instructions)
             tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+            self.assertIn("title_file", instructions)
+            self.assertIn("body_file", instructions)
+            for name in ("create_github_issue", "create_github_pull_request"):
+                tool = tools[name]
+                schema = tool.input_schema
+                self.assertNotIn("title", schema["properties"])
+                self.assertNotIn("body", schema["properties"])
+                for field in ("title_file", "body_file"):
+                    self.assertIn(field, schema["required"])
+                    self.assertEqual(schema["properties"][field]["type"], "string")
+                    self.assertIn("绝对路径", schema["properties"][field]["description"])
+                self.assertIn("--title", tool.description)
+                self.assertIn("--body-file", tool.description)
+                self.assertFalse(tool.annotations.read_only_hint)
+                self.assertTrue(tool.annotations.open_world_hint)
             self.assertIn("host/group[/subgroup]/project", instructions)
             self.assertIn("GitLab", instructions)
             self.assertIn("GitHub→GitLab 仓库迁移", instructions)
@@ -383,12 +398,6 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
         )
         self.assertEqual(len(copy_example["manifest"][0]["sha256"]), 64)
         self.assertEqual(set(copy_example["manifest"][0]), {"path", "sha256", "size"})
-        issue_example, _ = json.JSONDecoder().raw_decode(
-            tools["create_github_issue"].description.split("示例：", 1)[1].lstrip()
-        )
-        self.assertEqual(
-            set(issue_example), {"repo_path", "repo", "title", "body", "labels"}
-        )
         prepare_example, _ = json.JSONDecoder().raw_decode(
             tools["prepare_codex_session_memory"]
             .description.split("示例：", 1)[1]
@@ -402,6 +411,7 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
         example_services = {
             "copy_untracked_files_to_worktree": workflows.copy_untracked_files_to_worktree,
             "create_github_issue": workflows.create_github_issue,
+            "create_github_pull_request": workflows.create_github_pull_request,
             "cleanup_merged_pr_local_branch": validation.cleanup_merged_pr_local_branch,
             "prepare_codex_session_memory": service.prepare_codex_session_memory,
         }

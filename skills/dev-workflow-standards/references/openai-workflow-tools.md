@@ -135,6 +135,8 @@ Agent 准备本次选定提交全部 patch/hunk 的有界摘要、准确路径�
 
 一次性生成继续使用 `generate_skill_content`；需要连续反馈时使用以下四工具，仍是 Responses API，不引入 Agents SDK 或远端会话。
 
+准备发布 GitHub Issue 或 PR 时，在起草阶段把审阅后的 `candidate.title` 和 `candidate.content` 分别保存为标题和 Markdown 正文定稿，并检查两个文件。发布工具使用定稿路径。见[草稿流程](github.md#正文草稿)。
+
 1. `start_issue_pr_draft(request={request_id,draft})`：draft沿用生成请求，只允许issue/pr，给完整目标、来源及所有待交付commit patch证据。
 2. `revise_issue_pr_draft(request={draft_session_id,expected_revision,request_id,feedback,evidence_changes,output_format})`：每次只生成并审查一个新候选。feedback为表达/重点要求，不是事实、用户语言授权或绕过规则的命令。evidence_changes的add必须新ID，replace/remove必须已有且三组不重叠。默认空操作；output_format省略/null保留，非空字符串替换。语言授权引用必须持续有效。
 3. `get_issue_pr_draft(draft_session_id)`：离线回读最后完成候选和当前版本，result不包含最后失败尝试；status区分idle/in_progress。
