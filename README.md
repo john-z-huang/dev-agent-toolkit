@@ -55,6 +55,21 @@ Decisions API（含出站审核）固定用 `gpt-6-luna`。Responses API 的生�
 
 ## 本地验证
 
+### Python 代码格式化与静态检查
+
+从仓库根目录运行下列命令。前三条用 MCP 项目的 Ruff 配置覆盖 `mcp-server/`、`scripts/`、`skills/` 和 `tests/` 中的 Python 文件。最后一条用 ty 检查 `mcp-server/` 中的 Python 文件。
+
+```bash
+/bin/bash -c 'cd mcp-server && uv run --locked -- ruff format --config pyproject.toml . ../scripts ../skills ../tests'
+/bin/bash -c 'cd mcp-server && uv run --locked -- ruff format --check --config pyproject.toml . ../scripts ../skills ../tests'
+/bin/bash -c 'cd mcp-server && uv run --locked -- ruff check --no-fix --config pyproject.toml . ../scripts ../skills ../tests'
+/bin/bash -c 'cd mcp-server && uv run --locked -- ty check'
+```
+
+`ruff format` 写入源码。其余命令用于检查。只格式化本次改动时，把目录参数换成目标文件。`codex-hooks/` 使用独立环境和配置，见 [Hooks 验证命令](codex-hooks/README.md#验证)。
+
+### 离线测试
+
 在 `mcp-server/` 使用项目环境运行离线测试：
 
 ```bash

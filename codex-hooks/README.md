@@ -36,8 +36,19 @@ Hooks 作为独立的 `dev-workflow-standards-hooks` Python 发行包发布，�
 
 ## 验证
 
+从仓库根目录运行。`ruff format` 写入 `codex-hooks/` 中的 Python 源码，另外三条命令分别检查格式、lint 和类型。
+
 ```bash
-uv run --project mcp-server -- python -m unittest discover -s tests -p 'test_codex_hooks*.py'
+/bin/bash -c 'cd codex-hooks && uv run --locked -- ruff format'
+/bin/bash -c 'cd codex-hooks && uv run --locked -- ruff format --check'
+/bin/bash -c 'cd codex-hooks && uv run --locked -- ruff check --no-fix'
+/bin/bash -c 'cd codex-hooks && uv run --locked -- ty check'
+```
+
+从仓库根目录运行离线测试：
+
+```bash
+/bin/bash -c 'uv run --locked --project mcp-server -- python -m unittest discover -s tests -p "test_codex_hooks*.py"'
 ```
 
 测试使用合成事件、临时仓库和临时安装目录，包含真实 stdin/stdout、拒绝协议、根目录/子目录/linked worktree、失败分类、无凭据回显、路径含空格和引号、从其他 cwd 执行、拒绝覆盖及符号链接保护。测试不代表当前会话已重新加载或信任配置；真实宿主发现与触发需在安装后另行核对。

@@ -2,6 +2,10 @@
 
 本文件适用于本仓库 Python MCP Server 的工具、输入协议、模型指令、测试和文档。开发操作按 [Skill Hook 合同](skills/dev-workflow-standards/hooks/index.md) 选择适用条件。[宿主审批兼容](skills/dev-workflow-standards/SKILL.md#宿主审批兼容) 适用于本仓库及发布的 Skill 和 MCP 说明。每项写入须有对应用户授权并满足实际宿主审批及本地校验。
 
+## Python 代码格式化与静态检查
+
+按 [本仓库的验证命令](README.md#python-代码格式化与静态检查) 运行 Ruff 和 ty。Code Agent 必须用 `ruff format` 处理 Python 代码格式，禁止通过 Edit、补丁或其他编辑工具手工修正格式。
+
 ## 输入、模型指令和结果
 
 - 将语义判断和内容生成交给相应 MCP 工具。Agent 提供最小范围的结构化输入，区分用户要求、已观察事实、待验证信息、来源和输出格式，然后审阅结果。缺少信息时明确记录缺口，避免提交整仓、完整会话或无关日志。

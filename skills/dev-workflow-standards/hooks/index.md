@@ -6,7 +6,7 @@
 |---|---|
 | 修改项目内容 | [项目修改](project-change.md) |
 | 代码语义、JSON/YAML/Markdown/TOML/HTML 结构化读取、已安装依赖源码阅读或 Serena 项目配置 | [代码理解与 Serena](code-understanding.md) |
-| 选择运行环境，编写或执行 Python、JavaScript 命令或 Shell 脚本 | [执行环境](environment.md) |
+| 选择运行环境，执行 Python、JavaScript 或 TypeScript 命令，编写 Shell 脚本，或进行格式化与静态检查 | [执行环境](environment.md) |
 | 创建、同步、恢复或移除 worktree | [Worktree](worktree.md) |
 | 暂存或提交 | [暂存与提交](git-commit.md) |
 | 使用 `gh` 或访问 GitHub 的 MCP/Connector，或操作 Issue、推送分支、创建、修改或合并 PR/MR | [托管资源](github-delivery.md) |
