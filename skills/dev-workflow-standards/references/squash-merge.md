@@ -1,7 +1,5 @@
 # 合并到 main 的 Squash Merge
 
-GitLab 仓库同样适用本文的通用 Git、拓扑、授权和保留条件；PR 对应 MR，平台工具、字段及例外按 [GitLab 兼容规则](gitlab.md) 选择，不直接执行本文的 GitHub 专属命令。
-
 Pull Request 的目标分支为 `main` 时，最终合并必须使用 squash merge。这样每个 PR 在 `main` 历史中只产生一个代表整体改动的提交；PR 分支内部仍可保留多个开发提交。
 
 合并前确认目标仓库、PR 编号、base/head、PR 状态、审核决定和项目要求的 checks。已知 PR 编号时，调用只读 MCP 工具 `audit_issue_pr_policy`，传入 `repo_path`、`repo`、`pr_number`、`expected_base` 和 `expected_head` 检查策略；再调用 `merge_github_pull_request`，传入 `repo_path`、`repo`、`pr_number` 和 `merge_method`（值为 `squash`）。该工具会核验 PR 为 OPEN/MERGEABLE、required checks 通过、没有 changes-requested review，且 `main` 只允许 squash。若仓库禁止 squash、核验失败或工具执行失败，停止并报告，不要换成其他合并方法。

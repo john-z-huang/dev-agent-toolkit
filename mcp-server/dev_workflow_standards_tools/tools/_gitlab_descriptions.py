@@ -1,15 +1,5 @@
 """GitLab 工具的客户端可见合同与参数说明。"""
 
-GITLAB_INSTRUCTIONS = """
-**GitLab**
-
-依据项目事实和已核实 remote 选择托管平台。GitHub 使用 gh 和 Issue/PR 工具；GitLab 使用 glab 和 Issue/MR 工具。GitLab repo 为 host/group[/subgroup]/project，Issue #N 与 MR !N 使用项目内 iid。纯 Git 动作无需托管平台登录。
-
-GitLab 工具提供本地与远端审计、标签、Issue、分支推送、MR、Fork main 同步和本地清理。通过固定 glab api 联网；`audit_issue_mr_policy` 是确定性审计。MR 可用 `generate_skill_content(kind=pr)` 起草，提供实际 source/target 和 #Issue 关闭关联并复核 GitLab 术语。明确授权推送时可按适用策略补齐关联 Issue 和开放 MR；合并、关闭及清理需独立授权。跨项目 Fork MR 的创建与本地清理按 CLI 能力缺口处理。
-
-GitHub→GitLab 仓库迁移需组合 Git/gh/glab。分别确认 branches/tags、LFS、本地未推送 refs 和各类托管数据的迁移范围。核实源仓库、默认分支、refs/OID、目标 GitLab 身份和完整项目路径。非空或冲突目标须暂停；只有明确授权并确认可见性、默认分支后才创建空项目。迁移不得修改源 checkout 的 Git 配置；以不含凭据的目标 URL 单次执行，必须配置 remote 时改用隔离临时 clone。未经授权不推 refs/LFS，禁止 git push --mirror、--force 或 --prune。逐项回读获准的 refs/OID，独立验收 LFS；submodule 单独迁移，不改父项目 .gitmodules。浅历史、本地同名分叉、LFS 缺失、保护拒绝或写入不明时停止并回查。完整流程见 Skill 的 references/github-to-gitlab-migration.md。
-""".strip()
-
 COMMON = (
     " repo_path 必须为目标 Git 仓库/worktree 绝对根目录；repo 必填 host/group[/subgroup]/project，"
     "支持自托管域名及多级 group，host 不含端口，不接受 URL、凭据或 .git 后缀；自定义 API 端口使用已核实的 glab api_host 配置。"

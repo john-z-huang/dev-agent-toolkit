@@ -6,7 +6,7 @@ from ..infrastructure.openai_client import DECISIONS_MODEL_NAME, RESPONSES_MODEL
 from . import _gitlab_descriptions
 
 SERVER_DESCRIPTION = (
-    "本地开发工作流 MCP 服务，提供固定范围的 Git、GitHub、GitLab 与 worktree 操作，"
+    "本地开发工作流 MCP 服务，提供固定范围的 Git 仓库、worktree 和托管资源操作，"
     "以及输入审核、候选文案、会话事实和公开网络搜索等辅助能力。"
 )
 
@@ -98,8 +98,6 @@ Git 查询在子命令前用 `--no-pager`；status 用全局 `--no-optional-lock
 """.strip()
     + "\n\n"
     + OPENAI_NETWORK_DESCRIPTION
-    + "\n\n"
-    + _gitlab_descriptions.GITLAB_INSTRUCTIONS
 )
 
 

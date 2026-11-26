@@ -145,12 +145,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                 self.assertIn("--body-file", tool.description)
                 self.assertFalse(tool.annotations.read_only_hint)
                 self.assertTrue(tool.annotations.open_world_hint)
-            self.assertIn("host/group[/subgroup]/project", instructions)
-            self.assertIn("GitLab", instructions)
-            self.assertIn("GitHub→GitLab 仓库迁移", instructions)
-            self.assertIn("git push --mirror", instructions)
-            self.assertIn("不得修改源 checkout 的 Git 配置", instructions)
-            self.assertNotIn("GitLab 切到 origin", instructions)
+            self.assertNotIn("gitlab", instructions.lower())
+            self.assertNotIn("glab", instructions.lower())
             for name in (
                 "audit_gitlab_repository_state",
                 "list_gitlab_issue_labels",

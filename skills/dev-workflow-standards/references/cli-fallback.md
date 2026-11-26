@@ -1,7 +1,5 @@
 # MCP 优先与 CLI 补充
 
-本规则同时适用于 GitHub 与 GitLab。GitLab 使用 `glab` 和显式主机/完整多级项目路径，HTTP 方法与正文传递见 [GitLab 兼容规则](gitlab.md#cli-能力缺口)，不照搬 `gh --repo` 或 GitHub API endpoint；实际失败仍禁止换入口绕过。
-
 Code Agent 先检查当前可见的 MCP 工具及已授权 Connector 的能力、参数和副作用。能完整完成所需操作时优先使用；没有对应工具，或现有工具的功能、参数不能满足需求时，可在当前任务授权范围内自行选择相关 CLI、组合必要命令，无须仅因工具缺口再次请求人工授权。本规则同时适用于查询、文件操作、本地 Git 和 GitHub 写操作，不给 MCP 增加任意命令执行能力。
 
 ## 选择与停止条件
