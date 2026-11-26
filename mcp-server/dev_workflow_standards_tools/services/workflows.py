@@ -27,6 +27,8 @@ from ..infrastructure.git import (
 from ..infrastructure.github_cli import (
     _gh_current_login,
     _gh_object,
+    _read_draft_title,
+    _read_markdown_body,
     _resolve_repo,
     _temporary_body_file,
 )
@@ -765,32 +767,32 @@ def _issue_label_error(root: str, repo: str, labels: list[str]) -> str | None:
 
 
 def create_github_issue(
-    repo_path: str, repo: str, title: str, body: str, labels: list[str]
+    repo_path: str, repo: str, title_file: str, body_file: str, labels: list[str]
 ) -> dict[str, Any]:
-    """在明确授权后于指定仓库创建并核验 Issue。要求 body 完整、至少一个已存在的工作类型 label；默认指派 `@me`。使用安全临时 body-file，不将 Markdown 正文放入命令参数。副作用：创建 GitHub Issue。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
+    """读取已审阅的 title_file 和 body_file，创建并回读 GitHub Issue。需明确授权与适用宿主审批。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "created": False, "error": error}
     if not REPO_PATTERN.fullmatch(repo):
         return {"ok": False, "created": False, "error": "repo 必须为 owner/repo"}
-    if (
-        not title.strip()
-        or not body.strip()
-        or not labels
-        or any(not label.strip() for label in labels)
-    ):
+    if not labels or any(not label.strip() for label in labels):
         return {
             "ok": False,
             "created": False,
-            "error": "title/body 和至少一个非空 label 均为必填",
+            "error": "至少需要一个非空 label",
         }
+    try:
+        title = _read_draft_title(title_file)
+        body = _read_markdown_body(body_file)
+    except ValueError as exc:
+        return {"ok": False, "created": False, "error": str(exc)}
     label_error = _issue_label_error(root, repo, labels)
     if label_error:
         return {"ok": False, "created": False, "error": label_error}
     login, error = _gh_current_login(root)
     if error:
         return {"ok": False, "created": False, "error": error}
-    temporary, body_file = _temporary_body_file(body)
+    temporary, upload_file = _temporary_body_file(body)
     try:
         args = [
             "gh",
@@ -801,7 +803,7 @@ def create_github_issue(
             "--title",
             title,
             "--body-file",
-            body_file,
+            upload_file,
             "--assignee",
             "@me",
         ]
@@ -971,27 +973,27 @@ def _pr_reference_policy(
 def create_github_pull_request(
     repo_path: str,
     repo: str,
-    title: str,
-    body: str,
+    title_file: str,
+    body_file: str,
     base_branch: str,
     head_branch: str,
     issue_number: int,
 ) -> dict[str, Any]:
-    """在明确授权后创建并回读关联 PR。要求显式 repo/base/head/open Issue，body 含 Closes/Fixes/Resolves #N；PR 默认指派 `@me`。使用临时 body-file，不内联 Markdown。副作用：创建开放 PR。需要 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"""
+    """读取已审阅的 title_file 和 body_file，创建并回读关联 PR。需明确授权与适用宿主审批。"""
     root, error = _validated_repo_path(repo_path)
     if error:
         return {"ok": False, "created": False, "error": error}
-    if (
-        not REPO_PATTERN.fullmatch(repo)
-        or issue_number <= 0
-        or not title.strip()
-        or not body.strip()
-    ):
+    if not REPO_PATTERN.fullmatch(repo) or issue_number <= 0:
         return {
             "ok": False,
             "created": False,
-            "error": "repo/title/body/issue_number 参数无效",
+            "error": "repo/issue_number 参数无效",
         }
+    try:
+        title = _read_draft_title(title_file)
+        body = _read_markdown_body(body_file)
+    except ValueError as exc:
+        return {"ok": False, "created": False, "error": str(exc)}
     ref_pattern, reference_error = _pr_reference_policy(
         base_branch, head_branch, body, issue_number
     )
@@ -1029,7 +1031,7 @@ def create_github_pull_request(
     login, error = _gh_current_login(root)
     if error:
         return {"ok": False, "created": False, "error": error}
-    temporary, body_file = _temporary_body_file(body)
+    temporary, upload_file = _temporary_body_file(body)
     try:
         created = _run_fixed(
             [
@@ -1041,7 +1043,7 @@ def create_github_pull_request(
                 "--title",
                 title,
                 "--body-file",
-                body_file,
+                upload_file,
                 "--base",
                 base_branch,
                 "--head",

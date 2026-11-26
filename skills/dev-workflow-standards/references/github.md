@@ -22,22 +22,23 @@ GitLab 按 [GitLab 兼容规则](gitlab.md) 选择对应工具及字段。Issue�
 
 ## 正文草稿
 
-1. 选择 [Issue 模板](../assets/issue.md)或 [PR 模板](../assets/pr.md)。用户指定模板或输出结构时优先遵循。标题单独填写，草稿只保存正文；标签、指派、base/head 等作为创建参数按下文核实。
-2. 直接运行 Skill 自带的[独立 Python 脚本](../scripts/github_draft.py)，仅需 Python 3 标准库。脚本从自身所在 Skill 的 `assets/` 读取模板，可在任意工作目录调用。以下示例使用默认安装路径；自定义安装时使用实际脚本路径。将 `issue` 换为 `pr` 即使用 PR 模板。使用用户指定的草稿路径，未指定时选择任务独立的临时目录。父目录须已存在；已有文件会保留。用户提供其他模板时，创建和检查均传入同一 `--template 文件路径`。
+1. 选择 [Issue 模板](../assets/issue.md)或 [PR 模板](../assets/pr.md)。用户指定模板或输出结构时优先遵循。每个草稿包含单行标题文件和 Markdown 正文文件，标签、指派和 base/head 按下文核实。
+2. 运行 Skill 自带的[草稿脚本](../scripts/github_draft.py)。`create` 从模板创建正文，并在同目录创建待填写的 `.title.txt` 文件。示例分别产生 `issue.md`、`issue.title.txt` 和 `pr.md`、`pr.title.txt`。脚本只需 Python 3 标准库，可在任意工作目录运行。使用用户指定的路径，未指定时选择任务独立的临时目录。父目录须已存在，已有文件保留。自定义标题路径或正文模板时，创建和检查均传入同一 `--title-file` 或 `--template`。
 
    ```bash
    /bin/bash -c 'python3 "$HOME/.agents/skills/dev-workflow-standards/scripts/github_draft.py" create issue ./issue.md' _
+   /bin/bash -c 'python3 "$HOME/.agents/skills/dev-workflow-standards/scripts/github_draft.py" create pr ./pr.md' _
    ```
 
-3. 按下文的事实与提交证据要求逐节填写，移除模板提示。使用 `generate_skill_content` 时将选定结构传入 `output_format`，核对候选的 `quality_status`、`adoptable` 和缺失事实后再采纳。默认用中文；用户明确指定其他语言时沿用现有语言覆盖规则。
-4. 填写后运行[独立格式校验脚本](../scripts/validate_github_draft.py)。脚本检查二级章节及其顺序、空章节和残留的模板提示。使用默认 PR 模板时，在「关联 Issue」一节单独写一行关闭引用，如 `Closes #123`，也可写成列表项。检查成功返回 0，失败返回非零并指出原因。
+3. 在起草阶段写好两个文件。使用 `generate_skill_content` 或多轮草稿工具时，将选定正文结构传入 `output_format`。核对 `quality_status`、`adoptable` 和缺失事实后，把审阅后的 `candidate.title` 写入标题文件，把 `candidate.content` 填入正文模板并移除模板提示。默认用中文，用户明确指定其他语言时沿用现有语言覆盖规则。
+4. 用草稿脚本的 `check` 校验标题和正文。标题文件只含一行非空标题，正文检查二级章节、顺序、空章节和残留的模板提示。使用默认 PR 模板时，在「关联 Issue」一节单独写一行关闭引用，如 `Closes #123`，也可写成列表项。成功时返回 0 并输出正文和标题的绝对路径，失败时指出原因。
 
    ```bash
-   /bin/bash -c 'python3 "$HOME/.agents/skills/dev-workflow-standards/scripts/validate_github_draft.py" issue ./issue.md' _
-   /bin/bash -c 'python3 "$HOME/.agents/skills/dev-workflow-standards/scripts/validate_github_draft.py" pr ./pr.md' _
+   /bin/bash -c 'python3 "$HOME/.agents/skills/dev-workflow-standards/scripts/github_draft.py" check issue ./issue.md' _
+   /bin/bash -c 'python3 "$HOME/.agents/skills/dev-workflow-standards/scripts/github_draft.py" check pr ./pr.md' _
    ```
 
-   回读最终文件，核对验收与验证状态准确、PR 关闭引用匹配目标 Issue。报告草稿路径。需要发布且满足相应授权和条件时，把文件全文作为创建工具的 `body` 传入；适用 CLI 补充路径时用同一文件作为 `--body-file`。
+5. 回读两个定稿文件，核对标题、验收与验证状态，以及 PR 关闭引用是否匹配目标 Issue。报告两条路径。发布阶段只使用已确认的 UTF-8 定稿，分别把单行标题和 Markdown 正文的绝对路径传入 `title_file` 和 `body_file`。如果发现内容缺失或需要修订，回到起草阶段更新文件并重新校验。适用 CLI 补充时，从同一标题定稿读取一行作为 `gh --title`，把同一正文路径传给 `gh --body-file`。
 
 ## Issue
 
@@ -46,7 +47,7 @@ GitLab 按 [GitLab 兼容规则](gitlab.md) 选择对应工具及字段。Issue�
 - 用 `audit_repository_state` 确认目标仓库与 GitHub 身份；用 `list_github_issue_labels` 读取仓库现有标签。
 - 按 Issue 的主要目的选择至少一个已有工作类型 label；辅助标签不能替代工作类型 label。不得把未核验的 GitHub 默认标签说成仓库已有标签。
 - 正文说明需求/缺陷、影响、预期行为和验收标准，必要时补充复现、约束或依赖。
-- 获得创建授权后调用 `create_github_issue`。工具只接受已存在的 label，默认指派当前账号并回读状态/labels/assignee；校验失败时停止推送。
+- 获得创建授权后，将 Issue 的标题和正文定稿路径传给 `create_github_issue`。工具只接受已存在的 label，默认指派当前账号并回读状态、标签和指派。校验失败时停止推送。
 
 ## Issue/PR 文案的提交证据范围
 
@@ -56,7 +57,7 @@ Issue/PR 若用于交付已有 Git 改动，必须参考所有待交付的 git c
 
 - 推送前检查开放 Issue、分类 label、本人 assignee、分支拓扑、测试、提交范围和用户授权。
 - `push_issue_branch_to_origin` 只推送当前同名分支到 `origin`，不强推；Fork 的镜像 main 使用独立工具并遵守 Fork 流程。
-- PR 正文需说明范围和验收，并用 `Closes #N`、`Fixes #N` 或 `Resolves #N` 关联 Issue。获授权后使用 `create_github_pull_request`；工具通过临时 body-file 创建、默认指派本人并保持 PR 开放。
+- PR 正文需说明范围和验收，并用 `Closes #N`、`Fixes #N` 或 `Resolves #N` 关联 Issue。获授权后，将 PR 的标题和正文定稿路径传给 `create_github_pull_request`。工具校验文件中的关闭引用，默认指派本人并保持 PR 开放。
 - 创建后用 `audit_issue_pr_policy` 核对开放状态、关联关系和预期 base/head。推送/创建/审计失败时停止后续交付。
 
 ## 合并

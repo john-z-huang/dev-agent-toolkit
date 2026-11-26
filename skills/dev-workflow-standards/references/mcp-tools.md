@@ -177,13 +177,13 @@ GitLab 工具使用本机已认证的 `glab`，均需 `repo_path` 和 `repo=host
 
 ## GitHub 写操作
 
-仅当用户意图已授权对应动作时调用。创建 Issue/PR 时传完整正文；工具以临时 body-file 调用 `gh`，创建后回读。推送不会强推；合并会关闭 PR。
+仅当用户意图已授权对应动作时调用。发布 Issue 或 PR 时，将[已校验并回读的两个定稿](github.md#正文草稿)的绝对路径传入 `title_file` 和 `body_file`。两者都是服务进程可读的 UTF-8 普通文件，可位于仓库外。标题文件只含一行非空标题，正文文件是非空的 `.md` 或 `.markdown`。工具读取已定稿内容，通过 `gh --title` 和 `--body-file` 提交并回读远端状态。文件校验失败时在联网前返回 `ok=false` 和 `created=false`，按 `error` 返回起草阶段修正。
 
 | 工具 | 输入 | 前置条件 |
 |---|---|---|
-| `create_github_issue` | `repo_path`, `repo`, `title`, `body`, `labels` | label 必须是仓库已有且至少一个表达工作类型；创建后核验状态、labels 和本人 assignee。 |
+| `create_github_issue` | `repo_path`, `repo`, `title_file`, `body_file`, `labels` | label 必须是仓库已有且至少一个表达工作类型；创建后核验状态、labels 和本人 assignee。 |
 | `push_issue_branch_to_origin` | `repo_path`, `repo`, `branch_name`, `issue_number` | 当前干净工作区位于对应非主分支；Issue 开放、有 label 且指派给当前账号；只推同名分支到 `origin`。 |
-| `create_github_pull_request` | `repo_path`, `repo`, `title`, `body`, `base_branch`, `head_branch`, `issue_number` | Issue 开放、head 存在且正文含 `Closes/Fixes/Resolves #N`；创建后核验，默认指派本人并保持开放。 |
+| `create_github_pull_request` | `repo_path`, `repo`, `title_file`, `body_file`, `base_branch`, `head_branch`, `issue_number` | Issue 开放、head 存在且正文文件含 `Closes/Fixes/Resolves #N`；创建后核验，默认指派本人并保持开放。 |
 | `merge_github_pull_request` | `repo_path`, `repo`, `pr_number`, `merge_method` | PR 开放、可合并、required checks 全通过且无 changes-requested；`main` base 只允许 squash。不使用 admin/auto/delete-branch。成功执行合并后返回合并前 head OID `pre_merge_head_oid`，可供后续授权的本地清理工具核验。 |
 | `push_fork_main_fast_forward` | `repo_path`, `repo` | 必须确认为 Fork，当前在干净 `main`，`upstream/main` 是 `main` 祖先；只快进推送 `origin/main`。 |
 | `cleanup_merged_pr_local_branch` | `repo_path`, `pr_number`, `repo?`, `branch_name?`, `merged_head_oid?` | PR 已合并且工作区干净；切到实际 base 并快进同步，再删除本地 head。默认 `-d`；只有合并前 OID 精确匹配时才允许 `-D`。不删除远端或 worktree。 |

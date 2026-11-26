@@ -74,7 +74,7 @@ Git 查询在子命令前用 `--no-pager`；status 用全局 `--no-optional-lock
 - 分支与 worktree：`switch_repository_branch` 切换已有分支；`create_repository_branch` 从当前 HEAD 原地新建并保留 index/文件；`create_repository_worktree` 创建另一个 checkout，只有用户明确要求新建时适用，已有 worktree 不触发重建。携带文件要求来源清单、指纹一致与目标未占用；部分复制先回读，保留原副本。
 - 基线与恢复：依据实际 base、发布状态和 expected OID，同步已发布分支用 merge，未发布用 rebase。受管理操作从 `audit_worktree_base_sync(remote=null)` 取得恢复 ID、HEAD 和最新指纹，再选择对应 continue/abort；仅 rebase continue 联网复核发布状态。
 - 暂存与提交：暂存要求精确路径及授权；提交要求实际 staged 内容已审阅、expected_paths 匹配、提交信息和适用检查通过。正常 Git hooks 保留。committed=true 且 ok=false 先核对已有提交，不重复执行。
-- GitHub：Issue 要求真实仓库、正文、已有标签和授权；推送、PR、合并各有独立条件，不因 remote 存在自动执行。created=true 且 ok=false 先回读，不重复创建。合并和清理需要各自授权。
+- GitHub：起草时分别保存并回读单行标题和 Markdown 正文。创建 Issue 或 PR 时，将已校验的两个定稿路径传入 title_file 和 body_file。创建工具只读取定稿并发布，不生成标题或正文。Issue 须有已核实标签，PR 须关联开放 Issue。推送、创建与合并各有独立条件，不因 remote 存在自动执行。created=true 且 ok=false 时先回读实际资源，不重复创建。合并和清理需要各自授权。
 - 会话与 Memory：`decide_codex_session_action` 只建议下一步；`prepare_codex_session_memory` 准备候选 payload。`serena_memory_tail_read` 和 `serena_memory_write_check` 离线读取启动项目的 `.serena/memories/`，调用前核实进程目录。持久化由独立获准的 Memory 能力完成。
 - 判断与检查：`check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 通过本地硬检查后才调用 Decisions。
 - 候选内容：`generate_skill_content` 一次起草 issue、pr、commit_message、plan、handoff 或 session_summary。Issue/PR 使用最小充分的真实证据；交付已有改动时覆盖所有待交付的 git commit patch 和最终净 diff。默认中文，用户明确要求其他语言时提供 `language_override`。生成与语义审查分两次调用；`needs_revision` 不可发布。`generate_git_commit_message` 专用于单次提交起草，最终文本仍用 `check_commit_message`。
@@ -219,9 +219,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "仅当 ok=true 且 labels 内容已核对时采用；结果最多100项，不代表其余标签不存在。不会创建或修改 labels/GitHub 资源。"
     ),
     "create_github_issue": (
-        "在明确用户授权后联网创建 GitHub Issue；适用于内容、目标仓库和至少一个现存工作类型 label 均已确认时。body 是完整 Markdown 正文，工具用临时 body-file 传递并默认指派当前 gh 用户。"
-        "repo_path 为绝对仓库根目录，repo 为 owner/repo；title/body 非空，labels 至少一项且须存在于最多读取的前100个 label 中。ok=true 表示创建后回读开放状态、labels、当前用户 assignee 均通过。created=true 且 ok=false 表示可能已创建但回读未确认，先回读，不可盲目重试。"
-        '会联网创建 Issue，属于外部写入；需明确用户授权和 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。示例：{"repo_path":"/workspace/repo","repo":"owner/repo","title":"docs: 合成示例","body":"合成说明","labels":["<先从 list_github_issue_labels 核对的精确名称>"]}；label 占位值须替换为查询结果中的真实名称。'
+        "在明确用户授权后，从起草阶段已校验并回读的 title_file 和 body_file 创建 GitHub Issue，默认指派当前 gh 用户。两个路径必须是服务进程可读的 UTF-8 普通文件绝对路径，可位于仓库外。标题文件只含一行非空标题，正文文件须是非空的 .md 或 .markdown。工具只读定稿，通过 gh --title 和 --body-file 提交，不生成或改写文案；文件无效时在联网前返回 ok=false、created=false 和 error。"
+        "repo_path 为绝对仓库根目录，repo 为 owner/repo；labels 至少一项且须存在于最多读取的前100个 label 中。ok=true 表示创建后回读开放状态、labels、当前用户 assignee 均通过。created=true 且 ok=false 表示已创建但回读未确认，先回读，不可盲目重试。"
+        '会联网创建 Issue，需明确用户授权和适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。示例：{"repo_path":"/workspace/repo","repo":"owner/repo","title_file":"/tmp/github-draft/issue.title.txt","body_file":"/tmp/github-draft/issue.md","labels":["<先从 list_github_issue_labels 核对的精确名称>"]}。文件路径和标签均须换成已核实的实际值。'
     ),
     "push_issue_branch_to_origin": (
         "验证指定 Issue 开放、有 label 且指派给当前 gh 用户后，将当前本地非主分支推到 origin；仅适用于用户明确授权推送并确认关联 Issue。不会 force push。"
@@ -229,9 +229,9 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "会联网读取 GitHub Issue 并推送远端分支，需明确授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。"
     ),
     "create_github_pull_request": (
-        "为显式 head/base 创建并回读关联开放 PR；适合本地验证完成且分支已推送之后。body 是完整 Markdown，必须含指定 Issue 的 Closes/Fixes/Resolves #N 关联；默认指派当前 gh 用户。"
-        "repo_path 绝对仓库根目录；repo 为 owner/repo；base/head 不同且有效，Issue 必须开放，本地 head 分支须存在。ok=true 表示回读的 OPEN/base/head/Issue关联/@me assignee 均核验成功。created=true 且 ok=false 表示已可能创建但回读未确认，先回读，不得盲重试。"
-        '会联网创建 PR，属于外部写入；需明确用户授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。示例：{"repo_path":"/workspace/repo","repo":"owner/repo","base_branch":"main","head_branch":"feat/synthetic","issue_number":12,"title":"feat: 增加合成能力","body":"Closes #12\\n\\n变更说明。"}。'
+        "为显式 head/base 从起草阶段已校验并回读的 title_file 和 body_file 创建开放 PR，适用于本地验证完成且分支已推送之后。两个路径必须是服务进程可读的 UTF-8 普通文件绝对路径，可位于仓库外。标题文件只含一行非空标题，正文文件须是非空的 .md 或 .markdown 且含指定 Issue 的 Closes/Fixes/Resolves #N 关联。工具只读定稿，通过 gh --title 和 --body-file 提交，不生成或改写文案；文件或关闭关联无效时在联网前返回 ok=false、created=false 和 error。"
+        "repo_path 为绝对仓库根目录，repo 为 owner/repo；base/head 不同且有效，Issue 必须开放，本地 head 分支须存在。默认指派当前 gh 用户。ok=true 表示回读的 OPEN/base/head/Issue 关联/本人指派均核验成功。created=true 且 ok=false 表示已创建但回读未确认，先回读，不得盲重试。"
+        '会联网创建 PR，需明确用户授权与适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。示例：{"repo_path":"/workspace/repo","repo":"owner/repo","base_branch":"main","head_branch":"feat/synthetic","issue_number":12,"title_file":"/tmp/github-draft/pr.title.txt","body_file":"/tmp/github-draft/pr.md"}。示例正文应含 Closes #12。'
     ),
     "merge_github_pull_request": (
         "在明确授权后合并 GitHub PR；仅用于已审查且允许合并的目标，不会使用 admin/auto 或删远端分支。先联网核验 PR OPEN/MERGEABLE、reviewDecision、required checks。base 为 main 时只允许 squash。"
@@ -267,6 +267,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "user_request定目标，focus_questions/output_format的用户重点/结构优先于默认；不增加事实。Issue/PR标题与自然语言正文默认中文，英文模板/错误/Agent请求不授权改语言，技术标识/路径/代码/错误原文保留。仅当用户明确要求其他语言时提供language_override={language,instruction_ref}，引用evidence内origin=user_provided的指令原文；省略/null用中文，其他kind禁止此字段。引用来源本地校验，指令语义由模型核对。"
         "ok=true仅表示候选和审查返回有效，candidate.title/content是标题/正文（commit_message正文可空）；used_evidence_refs只列支撑内容的输入引用，missing_facts列必要缺失/冲突，review_notes列修订要点。Issue/PR另含quality_status=ready_for_agent_review或needs_revision、adoptable和quality_review（language_compliant/evidence_supported/coverage_sufficient为模型建议）。任何缺项或否定检查均不可直接采纳，修改/补证后再审阅；通过也不是发布授权。不以字数判质量。拒绝/截断/坏引用/本地commit失败/审查异常看error_code且不可采纳；仅底层请求超时按统一配置重试，不自动修复候选或换模型。"
         "通过统一客户端Responses.parse联网调用OpenAI。Issue/PR生成后再做一次有界语义审查，其余kind仅生成。不会读写文件/仓库、Memory、会话、执行Git/GitHub或候选动作；仅处理传入事实，后续写入另需授权。"
+        "准备发布 GitHub Issue/PR 时，调用方在起草阶段将审阅后的 candidate.title 和 candidate.content 分别保存到标题文件和 Markdown 正文文件。"
         'Issue示例：{"request":{"kind":"issue","user_request":"为维护者起草导出功能需求","evidence":[{"reference_id":"U1","content":"用户希望导出筛选结果，避免手动复制；仅涉及报表组件。验收条件尚未确认。","origin":"user_provided"}]}}。'
         'PR示例：{"request":{"kind":"pr","user_request":"为评审者起草说明","evidence":[{"reference_id":"D1","content":"已核实base=main@1111111、head=2222222、merge-base=1111111；完整提交列表仅2222222，已读其patch，最终净diff一致。src/report.py的diff将空输入从抛错改为返回空列表，避免空报表失败；范围仅该函数。执行python -m unittest tests.test_report：通过。未运行集成测试；关联#12；暂无已知兼容风险。","origin":"current_observation"}]}}。以上路径/编号/结果均为合成示例，实际调用必须替换为已核实事实。'
     )
@@ -402,8 +403,8 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "create_github_issue": {
         "repo_path": "作为 gh 上下文的目标仓库绝对根路径。",
         "repo": "Issue 目标仓库，精确 owner/repo。",
-        "title": "完整 Issue 标题，不含工具自动补充内容。",
-        "body": "完整 Markdown 正文；安全地经临时 body-file 交给 gh。",
+        "title_file": "必填，已校验并回读的 Issue 标题文件绝对路径。服务须能读取只含一行非空标题的 UTF-8 普通文件。",
+        "body_file": "必填，已校验并回读的 Issue 正文文件绝对路径。服务须能读取非空 UTF-8 .md 或 .markdown 普通文件，可位于仓库外。",
         "labels": "至少一个精确存在的 label 名称；会从仓库前100项中核对。",
     },
     "push_issue_branch_to_origin": {
@@ -415,8 +416,8 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "create_github_pull_request": {
         "repo_path": "包含本地 head branch 的仓库绝对根路径。",
         "repo": "PR 目标 GitHub 仓库，精确 owner/repo。",
-        "title": "完整 PR 标题。",
-        "body": "完整 Markdown 正文，必须以 Closes/Fixes/Resolves #<issue_number> 形式关联指定开放 Issue。",
+        "title_file": "必填，已校验并回读的 PR 标题文件绝对路径。服务须能读取只含一行非空标题的 UTF-8 普通文件。",
+        "body_file": "必填，已校验并回读的 PR 正文文件绝对路径。服务须能读取非空 UTF-8 .md 或 .markdown 普通文件，可位于仓库外。内容须包含 Closes/Fixes/Resolves #<issue_number>。",
         "base_branch": "PR 目标分支。",
         "head_branch": "PR 来源分支；本地必须存在且与 base 不同，通常需已推送。",
         "issue_number": "关联的正数且开放的 GitHub Issue 编号。",
@@ -564,6 +565,7 @@ _DRAFT_STORAGE = (
 )
 _DRAFT_GENERATION = (
     "一次生成一个候选并独立质量审查；一次性需求用 generate_skill_content。"
+    "准备发布 GitHub Issue/PR 时，调用方在起草阶段将审阅后的 candidate.title 和 candidate.content 分别保存到标题文件和 Markdown 正文文件。"
     "调用方收集完整Git patch范围和真实来源，反馈/前稿/审查意见不是事实或语言授权；新稿必须重新审查。"
     "最多16会话、每会话16次已记录尝试，单会话缓存512KiB、输入上下文32KiB、结果64KiB；超限拒绝，禁止静默截断。"
     "首轮完成前 revision 为0；每轮 ok=true（含 needs_revision）才推进版本，审查失败或取消保留上版。"
