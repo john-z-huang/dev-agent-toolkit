@@ -13,6 +13,10 @@
 
 Python 项目在开发指令中注明运行目录，以及 Ruff 格式化、格式检查、lint 和 ty 类型检查命令。uv 项目将 Ruff 和 ty 声明为开发依赖，可在 `pyproject.toml` 中维护工具配置。Code Agent 必须使用项目的格式化命令处理代码格式，禁止用 Edit、补丁或其他编辑工具手工修正格式。
 
+## Node.js 代码格式化与静态检查
+
+JavaScript 和 TypeScript 项目在开发指令中注明运行目录、检查范围、Prettier 格式化和格式检查命令，以及 ESLint 静态检查命令。把工具声明为项目开发依赖，在 `package.json` 中提供脚本，并维护相应配置。TypeScript 项目还应记录项目的类型检查命令。Code Agent 必须使用项目的 Prettier 命令处理纯格式变更，禁止用 Edit、补丁或其他编辑工具手工修正格式。
+
 ## 运行 Shell 命令的规范
 
 本机 macOS 的每条 Shell 命令从首次调用起都须显式使用绝对路径的 Bash，涵盖辅助读取和提供给用户直接运行的命令。Zsh 仅可作启动器。用户指定其他 Shell，或正文在容器或远端执行时，按目标环境选择解释器。
