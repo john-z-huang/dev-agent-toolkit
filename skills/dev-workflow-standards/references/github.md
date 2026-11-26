@@ -28,7 +28,7 @@
    /bin/bash -c 'python3 "$HOME/.agents/skills/dev-workflow-standards/scripts/github_draft.py" create pr ./pr.md' _
    ```
 
-3. 在起草阶段写好两个文件。使用 `generate_skill_content` 或多轮草稿工具时，将选定正文结构传入 `output_format`。核对 `quality_status`、`adoptable` 和缺失事实后，把审阅后的 `candidate.title` 写入标题文件，把 `candidate.content` 填入正文模板并移除模板提示。默认用中文，用户明确指定其他语言时沿用现有语言覆盖规则。
+3. 在起草阶段写好两个文件。使用 `generate_skill_content` 或多轮草稿工具时，直接提供目标和证据，工具内置上述默认模板。用户或目标仓库有自定义模板时，把自定义正文结构传入 `output_format`，并在后续草稿检查中使用同一模板。核对 `quality_status`、`adoptable` 和缺失事实后，将审阅后的 `candidate.title` 和 `candidate.content` 分别写入标题文件和正文文件。候选缺少发布所需的章节或关联 Issue 时，补齐证据并修订后再检查。默认用中文，用户明确指定其他语言时沿用现有语言覆盖规则，并使用相应语言的模板检查定稿。
 4. 用草稿脚本的 `check` 校验标题和正文。标题文件只含一行非空标题，正文检查二级章节、顺序、空章节和残留的模板提示。使用默认 PR 模板时，在「关联 Issue」一节单独写一行关闭引用，如 `Closes #123`，也可写成列表项。成功时返回 0 并输出正文和标题的绝对路径，失败时指出原因。
 
    ```bash

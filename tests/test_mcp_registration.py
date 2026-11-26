@@ -93,6 +93,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                 "PR",
                 "最小充分",
                 "所有待交付的 git commit patch",
+                "已内置默认布局",
+                "output_format",
                 "默认中文",
                 "language_override",
                 "needs_revision",
@@ -215,11 +217,15 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             self.assertIn("process_memory", tools[name].description)
             self.assertIn("1800", tools[name].description)
             self.assert_described_properties(tools[name].input_schema, name)
+        for name in ("start_issue_pr_draft", "revise_issue_pr_draft"):
+            self.assertIn("无需传通用模板", tools[name].description)
         commit_tool = tools["generate_git_commit_message"]
         self.assertIn("本次选定提交", commit_tool.description)
         self.assertIn("check_commit_message", commit_tool.description)
         self.assertIn("OPENAI_BASE_URL", commit_tool.description)
         self.assertIn("cached diff", commit_tool.description)
+        self.assertIn("单行中文标题与按需正文", commit_tool.description)
+        self.assertIn("无需传通用模板", commit_tool.description)
         self.assertTrue(commit_tool.annotations.read_only_hint)
         self.assertTrue(commit_tool.annotations.open_world_hint)
         self.assert_described_properties(commit_tool.input_schema, commit_tool.name)
@@ -237,6 +243,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             "所有待交付的 git commit patch",
             "merge-base",
             "纯需求/缺陷 Issue 尚无对应提交",
+            "无需传通用模板",
+            "编号已核实的同仓库 Issue 默认生成真实关闭引用",
         ):
             self.assertIn(phrase, tool.description)
         schema_text = json.dumps(tool.input_schema, ensure_ascii=False)
@@ -251,6 +259,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             "完整提交列表",
             "最后一次提交",
             "默认中文",
+            "已内置布局",
+            "优先于默认布局",
         ):
             self.assertIn(phrase, schema_text)
         for marker, kind in (("Issue示例：", "issue"), ("PR示例：", "pr")):

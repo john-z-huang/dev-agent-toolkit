@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -670,26 +669,15 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             audited_generation["instructions"], response_calls[0]["instructions"]
         )
+        self.assertEqual(audited_generation["input"], response_calls[0]["input"])
         self.assertIn("\n\n", audited_generation["instructions"])
 
-        # 沿用原 Issue 的指纹格式，固定含模型的生成请求快照。
-        compatibility_hash_input = json.dumps(
-            {"policy_version": "2026-11-05.1", **first_audit},
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        # 保留原始 request fixture，固定含当前生成指令的实际出站快照指纹。
         self.assertEqual(
-            hashlib.sha256(compatibility_hash_input.encode("utf-8")).hexdigest(),
-            "5d16ecaf5f6972c8502f826cdcef0a903f0191916d97421cebf9e41c66a63b48",
-        )
-        current_hash = api_input_review._input_hash(
-            first_audit["purpose"], first_audit["content"]
-        )
-        self.assertEqual(len(current_hash), 64)
-        self.assertNotEqual(
-            current_hash,
-            "d549ab8185ad4e0ee90a367d6fe8184955e79934eff404191b5b1d4debeb26d1",
+            api_input_review._input_hash(
+                first_audit["purpose"], first_audit["content"]
+            ),
+            "38a16ad3fb10d5b71749fc087f23e0b8c6098f5c7a5f18d5931d67964ce4b8a1",
         )
 
         second_audit = json.loads(policy_calls[1]["input"][0]["content"])
@@ -699,6 +687,7 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
             quality_payload["instructions"], response_calls[1]["instructions"]
         )
         self.assertEqual(quality_payload["input"], response_calls[1]["input"])
+        self.assertEqual(json.loads(quality_payload["input"])["request"], fixture)
         self.assertTrue(second_audit["content"])
 
 
