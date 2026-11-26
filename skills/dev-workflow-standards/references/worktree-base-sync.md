@@ -1,7 +1,5 @@
 # 已有 worktree 的基线同步
 
-GitLab 仓库同样适用本文的通用 Git、拓扑、授权和保留条件；PR 对应 MR，平台工具、字段及例外按 [GitLab 兼容规则](gitlab.md) 选择，不直接执行本文的 GitHub 专属命令。
-
 适用：需求 worktree 已存在，而其实际目标 base 已合入其他 PR；或用户要求检查、更新该需求分支。只检查已有 checkout 不要求重新创建 worktree，也不授权同步其他 checkout。创建新的 worktree 仍遵循 [`worktree.md`](worktree.md) 的创建前同步门禁。
 
 多个 worktree 共享大部分分支引用，各自的 HEAD、index 和工作目录独立。获取远端引用或更新本地默认分支不会自动让需求分支包含新提交。同步的验收条件是需求分支包含本次核验的目标 base，且自身需求提交得到保留；不是让所有 worktree 的 HEAD 相同。

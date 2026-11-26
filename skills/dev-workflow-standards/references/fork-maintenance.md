@@ -1,7 +1,5 @@
 # 个人 Fork 的上游同步与长期维护
 
-GitLab 仓库同样适用本文的通用 Git、拓扑、授权和保留条件；PR 对应 MR，平台工具、字段及例外按 [GitLab 兼容规则](gitlab.md) 选择，不直接执行本文的 GitHub 专属命令。
-
 仅当 `audit_repository_state` 返回非空 GitHub `parent` 时启用。独立仓库跳过本文，沿用项目自己的默认分支、开发分支和保护规则。
 
 ## 拓扑

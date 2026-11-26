@@ -23,24 +23,6 @@ Python MCP 服务 `dev-workflow-standards-tools` 支持 Codex 和 Pi Code Agent�
 
 CLI 退出码 `0` 表示 `ok=true`，`1` 表示请求失败。每次使用固定的已安装 uv tool 入口初始化新进程，设置 20 秒请求预算，结束后关闭。桥接不转发 Codex/OpenAI 凭据或代理、不读宿主会话、不写 Memory、不注册或重载 MCP。当前支持 `list_repository_worktrees`、`get_codex_session_summary_guidance` 和 `get_mcp_server_build_info`。新增工具须经审阅确认离线、只读且可在新进程独立运行，再用 `local_stdio=True` 声明开放；桥接同时校验只读/离线注解，禁止递归调用。
 
-## GitLab 对应工具
-
-GitLab 工具使用本机已认证的 `glab`，均需 `repo_path` 和 `repo=host/group[/subgroup]/project`。平台前置条件、编号及副作用见 [GitLab 兼容规则](gitlab.md)，整仓迁移另见 [GitHub→GitLab 迁移](github-to-gitlab-migration.md)。
-
-| 工具 | 其他参数 | 关键返回及副作用 |
-|---|---|---|
-| `audit_gitlab_repository_state` | 无 | `ok` 本地读取；`gitlab/gitlab_error` 独立，联网只读。 |
-| `list_gitlab_issue_labels` | 无 | `ok/labels/limit`，联网只读前 100 项含继承标签。 |
-| `create_gitlab_issue` | `title, body, labels` | 创建并回读 Issue，`ok/created/issue`；结果不明 `created=null,write_attempted=true`。 |
-| `push_gitlab_issue_branch_to_origin` | `branch_name, issue_number` | `ok/error`，核实 Issue、origin 后非强推当前同名需求分支。 |
-| `create_gitlab_merge_request` | `title, body, base_branch, head_branch, issue_number` | 创建并回读同项目开放 MR，`ok/created/merge_request`，不推送、不删 source。 |
-| `audit_issue_mr_policy` | 可选 `issue_number, mr_number, expected_base, expected_head` | 至少一个编号，分支比较需 MR；`passed/errors`，确定性联网只读，不调用 Decisions。 |
-| `merge_gitlab_merge_request` | `mr_number, merge_method` | `ok/merged/pre_merge_head_oid`，合并远端 MR；main 只 squash，不自动合并/删 source。 |
-| `push_gitlab_fork_main_fast_forward` | 无 | `ok/error`，真实 Fork 镜像 main 的非强推。 |
-| `cleanup_merged_mr_local_branch` | `mr_number`；可选 `branch_name, merged_head_oid` | `completed/actions/error`，单独清理授权后切换/快进 pull/删除本地 source，保留精确 OID 强删门禁。 |
-
-可选字段默认 `null`，表示未请求。`merged_head_oid=null` 时只允许普通删除。
-
 ## OpenAI 判断与生成
 
 联网 API 工具使用 `open_world_hint=true` 和 `idempotent_hint=false`。固定模型、环境配置、代理、重试及宿主时限见 [OpenAI 工具协议](openai-workflow-tools.md#配置与请求边界)。

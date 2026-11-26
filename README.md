@@ -1,6 +1,6 @@
 # dev-workflow-standards
 
-项目为 Codex 和 Pi 提供开发操作 Skill 和本地 Python MCP 服务。Skill 的声明式 Hooks 说明各动作适用的条件，由 Agent 规划顺序。MCP 提供固定 Git、GitHub 和 GitLab 操作、Codex 会话与项目 Memory 的只读辅助，以及 OpenAI 判断和内容生成。GitLab 支持自托管主机和多级 group。
+项目为 Codex 和 Pi 提供开发操作 Skill 和本地 Python MCP 服务。Skill 的声明式 Hooks 说明各动作适用的条件，由 Agent 规划顺序。MCP 提供 Git 仓库和托管资源操作、Codex 会话与项目 Memory 的只读辅助，以及 OpenAI 判断和内容生成。
 
 ## 安装与构建
 
@@ -13,7 +13,7 @@
 从 [Skill 入口](skills/dev-workflow-standards/SKILL.md) 和 [Hook 索引](skills/dev-workflow-standards/hooks/index.md) 查找当前动作的合同。工具选择与参数见 [MCP 工具目录](skills/dev-workflow-standards/references/mcp-tools.md)。
 
 - 分支与 worktree 的场景见 [原地建分支](skills/dev-workflow-standards/references/mcp-tools.md#原地创建工作分支)、[基线同步](skills/dev-workflow-standards/references/worktree-base-sync.md) 和 [冲突恢复](skills/dev-workflow-standards/references/worktree-recovery.md)。
-- 托管操作与 CLI 查询见 [GitHub](skills/dev-workflow-standards/references/github.md)、[GitLab](skills/dev-workflow-standards/references/gitlab.md)、[CLI 补充](skills/dev-workflow-standards/references/cli-fallback.md) 和 [只读查询规约](skills/dev-workflow-standards/references/read-only-queries.md)。
+- 托管操作与 CLI 查询见 [GitHub](skills/dev-workflow-standards/references/github.md)、[CLI 补充](skills/dev-workflow-standards/references/cli-fallback.md) 和 [只读查询规约](skills/dev-workflow-standards/references/read-only-queries.md)。
 
 ### MCP 客户端可见的使用说明
 

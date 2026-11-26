@@ -1,14 +1,12 @@
-# GitHub / GitLab 资源操作
-
-按核实的 remote 和项目事实识别托管平台。自托管平台须核实实际类型。Issue、推送、PR 拓扑与授权规则适用于 GitLab MR，GitLab 使用对应 `glab` 工具及检查。见 [GitLab 兼容规则](../references/gitlab.md)。
+# GitHub 资源操作
 
 ## 进入条件
 
-准备访问 GitHub 资源或创建、修改 Issue，推送分支，创建、修改或合并 PR/MR 时适用。Git Hook 配置和历史重写分别按 [Git Hook](../references/git-hooks.md) 与 [历史维护](../references/rewrite-weather-commit-subjects.md) 核对授权。
+准备访问 GitHub 资源或在 GitHub 上创建、修改 Issue，推送分支，创建、修改或合并 PR 时适用。Git Hook 配置和历史重写分别按 [Git Hook](../references/git-hooks.md) 与 [历史维护](../references/rewrite-weather-commit-subjects.md) 核对授权。
 
 ## 执行条件
 
-核实主机、仓库、账号、目标资源、分支和授权。涉及真实 Fork 时核对 [Fork 拓扑](../references/fork-maintenance.md)。
+按 remote 和项目事实核实 GitHub 主机、仓库、账号、目标资源、分支和授权。涉及真实 Fork 时核对 [Fork 拓扑](../references/fork-maintenance.md)。
 
 使用 `gh` 或访问 GitHub 的 MCP/Connector 前，运行 `gh auth status --active`，按 [多账号核验](../references/github.md#多账号核验) 确认实际身份和目标仓库权限。切换账号后重新核验，所有账号均缺少权限时请用户介入。
 

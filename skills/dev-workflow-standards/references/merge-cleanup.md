@@ -1,7 +1,5 @@
 # PR 合并后的本地分支清理
 
-GitLab 仓库同样适用本文的通用 Git、拓扑、授权和保留条件；PR 对应 MR，平台工具、字段及例外按 [GitLab 兼容规则](gitlab.md) 选择，不直接执行本文的 GitHub 专属命令。
-
 清理只针对已合并 PR 的本地 head 分支；不删除远端分支。同步 base 和删除分支都是本地写操作，必须先有用户对此操作的明确授权，再优先调用 MCP 工具 `cleanup_merged_pr_local_branch`。工具未暴露时按 [`cli-fallback.md`](cli-fallback.md) 保留本文核验、顺序和 OID 条件完成 CLI 清理；工具实际拒绝不能绕过。必填输入为 `repo_path`、`pr_number`，可选输入为 `repo`、`branch_name` 和 `merged_head_oid`。PR 已合并本身不构成清理授权。
 
 工具先确认工作区干净、PR 状态为 `MERGED`，然后切换到 PR 的实际 base 并执行 fast-forward 同步，再尝试普通分支删除。它不会假定 base 是 `main`，也不会删除 worktree 或远端分支。

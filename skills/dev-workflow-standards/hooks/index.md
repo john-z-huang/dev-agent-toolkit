@@ -9,7 +9,7 @@
 | 选择运行环境，执行 Python、JavaScript 或 TypeScript 命令，编写 Shell 脚本，或进行格式化与静态检查 | [执行环境](environment.md) |
 | 创建、同步、恢复或移除 worktree | [Worktree](worktree.md) |
 | 暂存或提交 | [暂存与提交](git-commit.md) |
-| 使用 `gh` 或访问 GitHub 的 MCP/Connector，或操作 Issue、推送分支、创建、修改或合并 PR/MR | [托管资源](github-delivery.md) |
+| 使用 `gh` 或访问 GitHub 的 MCP/Connector，或在 GitHub 上操作 Issue、推送分支、创建、修改或合并 PR | [托管资源](github-delivery.md) |
 | 引用历史会话事实或保存摘要 | [会话事实](session-facts.md) |
 | 发送外部 API 请求 | [外部 API](external-api.md) |
 | Codex 当前连接仍旧，需要使用已更新 uv tool 的离线只读方法 | [更新后临时本地 MCP](updated-local-mcp.md) |

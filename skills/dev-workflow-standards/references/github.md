@@ -1,7 +1,5 @@
 # GitHub 操作策略
 
-GitLab 按 [GitLab 兼容规则](gitlab.md) 选择对应工具及字段。Issue、推送、PR/MR 拓扑、证据和授权策略跨平台一致；不能把 `gh` 或 GitHub `owner/repo` 直接用于 GitLab。
-
 下文操作优先使用 [`mcp-tools.md`](mcp-tools.md) 中对应工具或当前已授权的 GitHub Connector/App；未提供工具或功能未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 补足查询或已授权写入，保留必要检查。只读细节见 [`read-only-queries.md`](read-only-queries.md)。禁止浏览器和浏览器自动化。服务器调用本机 `gh` 身份，不收集、不输出令牌。
 
 ## 授权、网络与身份

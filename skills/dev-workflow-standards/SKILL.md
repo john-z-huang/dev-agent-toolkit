@@ -1,7 +1,7 @@
 ---
 name: dev-workflow-standards
 description: >-
-  为代码理解、项目修改、Python/JavaScript/Shell 执行、本地 Modal 代理依赖管理及 Git/GitHub/GitLab 操作提供声明式 Hook 条件。也用于安装、注册和更新本项目的工具、Skill、全局指令、MCP 和原生 Codex Hooks。
+  为代码理解、项目修改、Python/JavaScript/Shell 执行、本地 Modal 代理依赖管理及 Git/GitHub 操作提供声明式 Hook 条件。也用于安装、注册和更新本项目的工具、Skill、全局指令、MCP 和原生 Codex Hooks。
 ---
 
 # 开发操作约束
@@ -30,7 +30,7 @@ Skill、MCP 服务和参考资料中的 `Codex writes approval` 均指 Codex 宿
 ## 共用边界
 
 - 准确识别仓库、worktree 和目标资源，仓库工具显式传入绝对根路径 `repo_path`。保留用户现有内容，以实际回读和验证结果为准。
-- 通用 Git、worktree 和提交规则跨平台适用，纯本地 Git 动作无需托管平台登录。账号和平台核验见 [托管资源 Hook](hooks/github-delivery.md)，跨平台迁移见 [GitHub→GitLab 迁移](references/github-to-gitlab-migration.md)。
+- 通用 Git、worktree 和提交规则跨平台适用，纯本地 Git 动作无需托管平台登录。GitHub 账号和仓库核验见 [托管资源 Hook](hooks/github-delivery.md)。
 - 优先使用覆盖需求的 MCP 或已授权 Connector。工具能力缺口按 [CLI 补充边界](references/cli-fallback.md) 处理。
 - 语义判断和文案生成提交最小结构化事实，由工具分析或生成后核对结果。涉及外发和审核时查阅 [外部 API Hook](hooks/external-api.md)。
 - 涉及可运行 Web 页面、浏览器交互或页面验收时查阅 [真实浏览器验证](references/web-browser-validation.md)，再按需读取所用 CLI 的参考 Skill。
