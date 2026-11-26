@@ -82,7 +82,7 @@ case "${1:-}" in
   --agents-install  从仓库模板创建全局 AGENTS.md；已有文件须显式接管
   --agents-update   从仓库模板更新全局 AGENTS.md，保留备份与冲突校验
   --hooks-install   安装原生 Codex Hooks（--global 或 --project-root）
-  --hooks-update    更新受管 Hooks，拒绝覆盖本地修改
+  --hooks-update    更新受管 Hooks；--reconcile 核验受管组并接纳其他组的变更
 正式安装和更新先从当前源码重建并刷新相应的 uv tool。
 Skill 和 AGENTS.md 与 MCP 共用发行包。每次只更新选定资源。
 预览和帮助跳过构建与工具刷新。Skill 和 AGENTS.md 的预览使用已安装工具。

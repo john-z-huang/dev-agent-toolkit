@@ -31,6 +31,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--merge", action="store_true", help="首次注册时显式备份并合并已有 Hooks"
     )
+    parser.add_argument(
+        "--reconcile", action="store_true", help="更新时核验受管组，备份并保留当前其他 Hooks"
+    )
     return parser
 
 
@@ -47,6 +50,8 @@ def registration_arguments(args: argparse.Namespace) -> list[str]:
         result.append("--update")
     if args.merge:
         result.append("--merge")
+    if args.reconcile:
+        result.append("--reconcile")
     return result
 
 
@@ -92,10 +97,10 @@ def main() -> int:
     args = parser.parse_args()
     if args.merge and not args.install:
         parser.error("--merge 只能与 --install 一起使用")
-    if args.project_root is not None and (
-        not args.project_root.is_absolute() or not args.project_root.is_dir()
-    ):
-        parser.error("--project-root 必须是已存在的绝对目录")
+    if args.reconcile and not args.update:
+        parser.error("--reconcile 只能与 --update 一起使用")
+    if args.project_root is not None and not args.project_root.is_absolute():
+        parser.error("--project-root 必须是绝对目录路径")
     install_command = ["uv", "tool", "install", "--python", sys.executable]
     if args.update:
         install_command.append("--force")
@@ -106,6 +111,8 @@ def main() -> int:
         print(shlex.join(install_command))
         print(f'"$(uv tool dir --bin)/{TOOL}" ' + shlex.join(configure))
         return 0
+    if args.project_root is not None and not args.project_root.is_dir():
+        parser.error("--project-root 必须是已存在的目录")
     try:
         executable = install_tool(install_command)
     except (OSError, subprocess.SubprocessError):

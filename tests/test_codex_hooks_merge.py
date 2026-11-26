@@ -118,6 +118,78 @@ class CodexHookMergeTests(InstalledHooksTestCase):
                 self.assertEqual(config.read_bytes(), original)
                 self.assertEqual(list(root.glob("hooks.json.backup-*")), [])
 
+    def test_reconcile_updates_only_current_unmanaged_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            config = root / "hooks.json"
+            custom = {"hooks": [{"type": "command", "command": "custom-check"}]}
+            config.write_text(
+                json.dumps({"hooks": {"SessionEnd": [custom]}}), encoding="utf-8"
+            )
+            installed = self.run_setup(root, "--install", "--merge")
+            self.assertEqual(installed.returncode, 0, installed.stderr)
+            backups = set(root.glob("hooks.json.backup-*"))
+            manifest = root / "hooks/dev_workflow.manifest.json"
+            old_manifest = manifest.read_bytes()
+            current = json.loads(config.read_bytes())
+            current["description"] = "updated by user"
+            current["hooks"]["SessionEnd"] = []
+            current["hooks"]["Stop"] = [custom]
+            current["hooks"]["PreToolUse"].insert(0, custom)
+            original = (json.dumps(current, indent=4) + "\n").encode()
+            config.write_bytes(original)
+
+            refused = self.run_setup(root, "--update")
+            self.assertEqual(refused.returncode, 1)
+            self.assertIn("--reconcile --dry-run", refused.stderr)
+            preview = self.run_setup(root, "--update", "--reconcile", "--dry-run")
+            self.assertEqual(preview.returncode, 0, preview.stderr)
+            self.assertEqual(json.loads(preview.stdout), current)
+            self.assertEqual(config.read_bytes(), original)
+            self.assertEqual(manifest.read_bytes(), old_manifest)
+            self.assertEqual(set(root.glob("hooks.json.backup-*")), backups)
+
+            result = self.run_setup(root, "--update", "--reconcile")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(config.read_bytes()), current)
+            recovery_backups = set(root.glob("hooks.json.backup-*")) - backups
+            self.assertEqual(len(recovery_backups), 1)
+            self.assertEqual(next(iter(recovery_backups)).read_bytes(), original)
+            result = self.run_setup(root, "--update")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(config.read_bytes()), current)
+
+    def test_reconcile_refuses_changes_to_managed_groups_or_original_fingerprint(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            installed = self.run_setup(root, "--install")
+            self.assertEqual(installed.returncode, 0, installed.stderr)
+            config = root / "hooks.json"
+            manifest = root / "hooks/dev_workflow.manifest.json"
+            original = config.read_bytes()
+            old_manifest = manifest.read_bytes()
+            modified = json.loads(original)
+            modified["hooks"]["PreToolUse"].reverse()
+            config.write_text(json.dumps(modified), encoding="utf-8")
+            result = self.run_setup(root, "--update", "--reconcile")
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("顺序变化", result.stderr)
+            self.assertEqual(json.loads(config.read_bytes()), modified)
+            self.assertEqual(manifest.read_bytes(), old_manifest)
+
+            config.write_bytes(original + b"\n")
+            stale = json.loads(old_manifest)
+            stale["files"]["hooks.json"] = "0" * 64
+            manifest.write_text(json.dumps(stale), encoding="utf-8")
+            result = self.run_setup(root, "--update", "--reconcile")
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("无法重建", result.stderr)
+            self.assertEqual(config.read_bytes(), original + b"\n")
+            self.assertEqual(json.loads(manifest.read_bytes()), stale)
+            self.assertFalse(list(root.glob("hooks.json.backup-*")))
+
     def test_merge_rejects_configuration_links_and_invalid_operation(self) -> None:
         for mode in ("symlink", "hardlink", "missing", "update"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
