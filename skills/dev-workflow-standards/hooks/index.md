@@ -5,7 +5,7 @@
 | 动作或状态 | 合同 |
 |---|---|
 | 修改项目内容 | [项目修改](project-change.md) |
-| 判断代码逻辑、符号或调用关系 | [代码理解](code-understanding.md) |
+| 代码语义、JSON/YAML/Markdown/TOML/HTML 结构化读取、已安装依赖源码阅读或 Serena 项目配置 | [代码理解与 Serena](code-understanding.md) |
 | 选择运行环境，编写或执行 Python、JavaScript 命令或 Shell 脚本 | [执行环境](environment.md) |
 | 创建、同步、恢复或移除 worktree | [Worktree](worktree.md) |
 | 暂存或提交 | [暂存与提交](git-commit.md) |
