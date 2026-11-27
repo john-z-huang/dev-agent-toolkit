@@ -12,7 +12,10 @@ from dev_agent_toolkit_tools.infrastructure import openai_client
 from dev_agent_toolkit_tools.server import mcp
 from dev_agent_toolkit_tools.services import ai_workflow
 from dev_agent_toolkit_tools.services.commit_content import generate_from_staged_diff
-from dev_agent_toolkit_tools.services.staged_commit import read_staged_diff
+from dev_agent_toolkit_tools.services.staged_commit import (
+    commit_snapshot,
+    read_staged_diff,
+)
 from mcp.server.mcpserver.exceptions import ToolError
 
 
@@ -100,6 +103,42 @@ class CommitContentTests(ContentGenerationTestCase):
         self.assertEqual(result["error_code"], "no_staged_changes")
         parse.assert_not_called()
 
+    async def test_commit_rechecks_snapshot_even_when_staged_paths_match(self):
+        root = self.staged_repository()
+        with patch.object(
+            openai_client, "parse_response", return_value=self.staged_candidate("S1")
+        ):
+            draft = await generate_from_staged_diff(str(root))
+        self.assertTrue(draft["adoptable"])
+        arguments = {
+            "repo_path": str(root),
+            "message": draft["message"],
+            "expected_paths": draft["staged_paths"],
+            "expected_snapshot": draft["snapshot"],
+        }
+        (root / "staged.txt").write_text("changed-after-review\n", encoding="utf-8")
+        self.git(root, "add", "--", "staged.txt")
+        reply = await mcp.call_tool("commit_repository_changes", arguments)
+        result = reply.structured_content or json.loads(reply.content[0].text)
+        self.assertEqual(result, {"ok": False, "error_code": "commit_snapshot_changed"})
+        self.assertFalse(
+            (root / ".git" / "refs" / "heads" / draft["snapshot"]["branch"]).exists()
+        )
+
+        self.git(root, "config", "user.name", "Fixture")
+        self.git(root, "config", "user.email", "fixture@example.invalid")
+        self.git(root, "config", "commit.gpgsign", "false")
+        self.git(root, "config", "core.hooksPath", "/dev/null")
+        current = await read_staged_diff(str(root))
+        arguments["expected_snapshot"] = commit_snapshot(
+            str(root), current.sha256
+        ).model_dump()
+        reply = await mcp.call_tool("commit_repository_changes", arguments)
+        result = reply.structured_content or json.loads(reply.content[0].text)
+        self.assertTrue(result["committed"], result)
+        self.assertEqual(result["message"], draft["message"])
+        self.assertEqual(result["paths"], ["staged.txt"])
+
     async def test_commit_tool_rejects_removed_arguments(self):
         with (
             patch.object(openai_client, "parse_response") as parse,
@@ -153,6 +192,64 @@ class CommitContentTests(ContentGenerationTestCase):
         for path, item in zip(staged.paths, evidence, strict=True):
             self.assertIn(f"A {path}", item["content"])
             self.assertIn("@@ -0,0 +1,12 @@", item["content"])
+
+    async def test_large_index_uses_file_excerpts_in_one_audited_request(self):
+        root = self.repository()
+        context = (
+            "reconcile_document_changes_using_stable_paths_and_registered_configuration"
+        )
+        base = "\n\n".join(
+            f"def {context}_{index}():\n    return 'before'\n" for index in range(10)
+        )
+        paths = [root / f"module_{index:02}.py" for index in range(42)]
+        for path in paths:
+            path.write_text(base, encoding="utf-8")
+        self.git(root, "add", "--", ".")
+        self.git(
+            root,
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "commit",
+            "--quiet",
+            "--no-gpg-sign",
+            "-m",
+            "Fixture baseline",
+        )
+        for path in paths:
+            path.write_text(base.replace("'before'", "'after'"), encoding="utf-8")
+        self.git(root, "add", "--", ".")
+
+        snapshot = await read_staged_diff(str(root))
+        detailed = ai_workflow.ContentGenerationRequest(
+            kind="commit_message",
+            user_request="根据整个暂存区生成提交信息。",
+            evidence=snapshot.evidence(0),
+        )
+        self.assertFalse(ai_workflow.commit_request_fits(detailed))
+
+        with patch.object(
+            openai_client, "parse_response", return_value=self.staged_candidate("S1")
+        ) as parse:
+            result = await generate_from_staged_diff(str(root))
+
+        parse.assert_awaited_once()
+        self.assertTrue(result["adoptable"])
+        self.assertEqual(result["staged_paths"], [path.name for path in paths])
+        self.assertEqual(result["staged_sha256"], snapshot.sha256)
+        call = parse.call_args.kwargs
+        self.assertTrue(openai_client.structured_response_fits(**call))
+        evidence = json.loads(call["input"])["evidence"]
+        self.assertEqual(len(evidence), len(paths))
+        for path, item in zip(paths, evidence, strict=True):
+            name, counts, ranges, *_ = item["content"].splitlines()
+            self.assertEqual(name, f"M {path.name}")
+            self.assertEqual(counts, "10 个 hunk，+10/-10")
+            self.assertEqual(len(ranges.split()), 10)
+            self.assertTrue(all("/+" in span for span in ranges.split()))
 
     async def test_shared_generator_fixed_kind_and_optional_body(self):
         root = self.staged_repository()

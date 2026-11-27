@@ -130,6 +130,7 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     ),
     "commit_repository_changes": (
         "提交已暂存的精确文件集合；仅适用于用户明确授权 commit 且 staged diff 已审查、检查通过之后。expected_paths 必须精确等于当前 staged paths；message 是完整提交信息，并须通过既有本地策略及 cached diff check。"
+        "提供 expected_snapshot 时，提交前重新比对草稿的分支、HEAD OID 和暂存指纹。快照变化时返回 commit_snapshot_changed。"
         "成功需看 ok=true、committed=true 及回读的 commit_oid/message/paths/status。若 committed=true 但 ok=false，提交已发生而后续回读不全，先查仓库，不要重试。"
         '会运行 `git commit` 和正常 hooks（hooks 可能执行项目检查或其他副作用），可能创建提交；不绕过 hooks。固定 Git 操作本身不主动访问网络；仓库配置的 hooks 可能有额外效果。需用户授权与 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制）。示例：{"repo_path":"/workspace/repo","message":"docs: 更新合成说明","expected_paths":["README.md"]}。'
     ),
@@ -311,6 +312,7 @@ PARAMETER_DESCRIPTIONS: dict[str, dict[str, str]] = {
         "repo_path": "目标 Git 仓库的绝对根路径。",
         "message": "完整提交信息，主题须通过既有本地规则；commit 会正常触发仓库 hooks。",
         "expected_paths": "用户审查并授权提交的精确仓库根相对路径集合；必须与当前 staged paths 完全相等。",
+        "expected_snapshot": "可选。原样传入生成工具返回的 snapshot，提交前校验分支、HEAD OID 和暂存指纹。",
     },
     "list_repository_worktrees": {
         "repo_path": "拥有待列举 worktrees 的 Git 仓库绝对根路径。"
@@ -611,7 +613,7 @@ _COMMIT_GENERATION_CONTRACT = (
     "先暂存本次选定提交，只传 repo_path。工具读取真实 cached diff，调用方无需提供差异、证据、验证摘要或格式参数。"
     "工具复用 generate_skill_content(kind=commit_message) 的默认布局，生成单行中文标题与按需正文，无需传通用模板或先写 message。"
     "分多个 commit 时分别暂存各自范围。用户已给完整 message 时保留原文并调用 check_commit_message。"
-    "返回 message、staged_paths、staged_sha256、missing_facts 和 review_notes。"
+    "返回 message、staged_paths、staged_sha256、snapshot、missing_facts 和 review_notes。"
     "adoptable=true 的候选仍须按实际暂存 diff 审阅，再用 check_commit_message 检查最终完整文本。"
     "提交还需分支、暂存检查和独立用户授权。"
 )
@@ -620,7 +622,8 @@ TOOL_DESCRIPTIONS["generate_git_commit_message"] = (
     "以及Issue/PR多轮工具：本工具是一次性无会话生成，仅固定commit_message，不接受kind/source/language_override或模型配置。"
     + _COMMIT_GENERATION_CONTRACT
     + "通过统一客户端联网调用 OpenAI Responses.parse，推理强度 low，store=False，复用本地引用和提交规则校验。"
-    "只读本地暂存差异，依据实际审核请求大小调整摘录，保留各暂存路径及 hunk 范围。生成后核对暂存指纹。"
+    "只读本地暂存差异，按实际审核预算选择逐 hunk 摘录或更紧凑的文件级摘要，两种方式均保留各暂存路径和 hunk 范围。"
+    "整个暂存区作为一个范围生成，生成后核对暂存指纹。"
     "暂存为空、最小证据超限或生成中变化时返回 error_code。工具不修改暂存区、不提交或调用 GitHub。"
     + _RESPONSES_MODEL_DESCRIPTION
     + _OPENAI_TOOL_CONFIGURATION

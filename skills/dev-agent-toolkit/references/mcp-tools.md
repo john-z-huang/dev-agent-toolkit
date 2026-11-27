@@ -20,6 +20,22 @@ Toolkit 服务的本地 STDIO 启动命令为 `dev-agent-toolkit-tools`。本目
 
 工具注解标识只读、写入及破坏性。CLI 调用遵守宿主命令审批和沙箱，写操作还需对应用户授权。详见 [宿主审批兼容](../SKILL.md#宿主审批兼容)。GitHub 工具使用本机已授权的 `gh`。有能力缺口或调用失败时查阅 [CLI 补充边界](cli-fallback.md)。
 
+## 提交草稿
+
+从已核实的仓库根目录运行 Toolkit 专用的 `dev-agent-toolkit commit draft`，给草稿选择一个新的仓库外文件路径。Toolkit 调用已安装的 MCP Client CLI，向注册表中的服务只传 `repo_path`，并只保存可采用的候选。默认服务 ID 为 `dev-agent-toolkit-tools`，其他服务 ID 用 `--server` 指定。
+
+```bash
+/bin/bash -c 'exec dev-agent-toolkit commit draft "$1"' _ '/tmp/toolkit-commit-draft.json'
+```
+
+核对消息和实际暂存内容，完成项目检查并获得提交授权后，显式执行下一步。
+
+```bash
+/bin/bash -c 'exec dev-agent-toolkit commit apply "$1"' _ '/tmp/toolkit-commit-draft.json'
+```
+
+Toolkit 对同一个草稿执行分支、暂存区和提交信息检查，再通过 MCP Client 提交。快照比对涵盖分支、HEAD、暂存路径和暂存指纹。快照变更需重新生成并审阅。使用独立注册表时，两次命令均在 `commit` 后传同一个 `--registry`。按 [恢复 Hook](../hooks/recovery.md) 处理提交结果不明的情况。
+
 ## 正在运行的 MCP 构建信息
 
 通过 CLI 调用 `get_mcp_server_build_info`，不传参数。返回处理请求的进程启动时读取的 `server_version`（包版本）和 `git_commit`（构建时源码 HEAD 的完整 Git hash）。无法取得相应记录时返回 `null`。从 sdist 重建 wheel 时沿用 sdist 记录的 hash。同一提交上的未提交改动不反映在 hash 中，同版本重装应结合发行包来源和实际工具 Schema 核对。详见 [调用已更新的本地 MCP](../hooks/updated-local-mcp.md)。

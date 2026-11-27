@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import shutil
@@ -37,6 +38,12 @@ from ..infrastructure.process import _run_fixed
 from ..policy import REPO_PATTERN
 from ..policy import branch_errors as _branch_errors
 from . import worktree_sync as _worktree_sync
+from .staged_commit import (
+    CommitSnapshot,
+    StagedDiffError,
+    commit_snapshot,
+    read_staged_diff,
+)
 from .validation import check_commit_message
 
 # 保留既有 workflows 策略常量与同步操作的导入入口。
@@ -619,7 +626,10 @@ def stage_repository_paths(repo_path: str, paths: list[str]) -> dict[str, Any]:
 
 
 def commit_repository_changes(
-    repo_path: str, message: str, expected_paths: list[str]
+    repo_path: str,
+    message: str,
+    expected_paths: list[str],
+    expected_snapshot: CommitSnapshot | None = None,
 ) -> dict[str, Any]:
     """在明确用户授权且 适用的宿主写入审批（Codex 使用 writes approval；Pi 遵守其实际权限机制） 后提交已暂存内容。要求 staged paths 与 expected_paths 完全相等、提交信息通过既有策略、`git diff --cached --check` 通过。运行固定 `git commit -m <message>`，不使用绕过 Hook 的参数；返回提交 OID、实际消息、提交路径及提交后的工作区状态。"""
     root, error = _validated_repo_path(repo_path)
@@ -653,6 +663,14 @@ def commit_repository_changes(
             "error": "git diff --cached --check 未通过",
             "diagnostics": whitespace.stdout.splitlines(),
         }
+    if expected_snapshot is not None:
+        try:
+            snapshot = asyncio.run(read_staged_diff(root))
+            actual_snapshot = commit_snapshot(root, snapshot.sha256)
+        except (StagedDiffError, OSError, UnicodeError):
+            return {"ok": False, "error_code": "commit_snapshot_unavailable"}
+        if actual_snapshot != expected_snapshot:
+            return {"ok": False, "error_code": "commit_snapshot_changed"}
     committed = _run_fixed(["git", "commit", "-m", message], cwd=root)
     if committed.returncode != 0:
         return {

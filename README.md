@@ -42,7 +42,7 @@ Decisions API（含出站审核）固定用 `gpt-6-luna`。Responses API 的生�
 
 ## Git commit 信息生成
 
-需要起草提交信息时，先暂存本次改动，再调用 `generate_git_commit_message`，只传仓库绝对根路径 `repo_path`。工具读取暂存区并返回候选。经审阅并用 `check_commit_message` 检查后，才在独立授权及其他检查满足时提交。详见 [提交信息生成与检查](skills/dev-agent-toolkit/references/check-commit-message.md)。
+暂存本次改动后，用 `dev-agent-toolkit commit draft` 起草并保存候选。Toolkit 通过本地 MCP Client 调用生成工具，只传仓库绝对根路径 `repo_path`。审阅候选、完成项目检查并获得提交授权后，用 `dev-agent-toolkit commit apply` 复用同一草稿并执行提交检查。详见 [提交草稿](skills/dev-agent-toolkit/references/mcp-tools.md#提交草稿)。
 
 ## Issue/PR 多轮修订
 

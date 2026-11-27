@@ -107,9 +107,9 @@ PR 最小合成示例（路径、编号和验证须替换为真实事实）：
 
 提交前需要起草时使用 `generate_git_commit_message`，由工具复用既有 `generate_skill_content(kind="commit_message")` 的 Responses.parse、指令、输出Schema、出站审核及本地格式/署名校验。推理强度沿用 `low`；不添加模型参数或新客户端。用户已指定完整 message 时保留原文，只执行检查。
 
-先暂存本次改动，只传绝对仓库根路径 `repo_path`。工具在本地读取暂存区，保留全部暂存路径和 hunk 范围，并验证序列化后的生成请求和嵌套审核请求都在预算内，再发出审核和生成请求。候选只描述证据能支持的主要变更，省略无法核实的实现细节和测试结果。
+先暂存本次改动，只传绝对仓库根路径 `repo_path`。工具在本地读取暂存区并保留全部路径和 hunk 范围。逐 hunk 摘录超出预算时，按文件汇总改动行数、范围和代表性摘录，仍将整个暂存区作为一个范围生成。发出请求前检查序列化后的生成请求和嵌套审核请求大小。候选只描述证据能支持的主要变更。
 
-生成完成后再次核对暂存指纹。通过 MCP Client CLI 调用时，从 `result.structuredContent` 读取 `message`、`staged_paths`、`staged_sha256`、`adoptable`、`missing_facts` 和 `review_notes`。暂存为空、最小证据超限或生成期间内容变化时返回错误。根据实际暂存改动审阅候选，再调用 `check_commit_message` 检查最终消息。提交仍需用户授权及分支、暂存等适用检查。
+生成完成后再次核对暂存指纹和分支、HEAD。直接调用时从 `result.structuredContent` 读取 `message`、`staged_paths`、`staged_sha256`、`snapshot`、`adoptable`、`missing_facts` 和 `review_notes`。暂存为空、最小证据超限或生成期间内容变化时返回错误。需要提交时用 [Toolkit 的提交草稿](mcp-tools.md#提交草稿) 保存并复用已审阅的候选和快照。
 
 ## Issue/PR 多轮修订草稿
 

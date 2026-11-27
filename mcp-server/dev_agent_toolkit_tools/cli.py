@@ -1,4 +1,4 @@
-"""离线管理 Skill、全局指令及本地 uv tool MCP 请求。"""
+"""管理 Skill、全局指令及 Toolkit 工作流。"""
 
 import argparse
 import json
@@ -12,7 +12,7 @@ from .services.skill_installation import SKILL, SkillError, manage_skill
 def _parser() -> argparse.ArgumentParser:
     """集中声明 CLI 命令与参数，执行入口只负责分派和错误输出。"""
     parser = argparse.ArgumentParser(
-        description="离线管理 Dev Agent Toolkit Skill、全局指令和临时本地 MCP 请求"
+        description="管理 Dev Agent Toolkit Skill、全局指令及提交草稿"
     )
     parser.add_argument(
         "--source-root",
@@ -24,6 +24,15 @@ def _parser() -> argparse.ArgumentParser:
         "mcp",
         help="从 stdin 读取单个 JSON 对象，发现或调用已安装 uv tool 的离线只读工具",
     )
+    commit = groups.add_parser("commit", help="通过本地 MCP Client 生成和提交草稿")
+    commit.add_argument("--registry", type=Path, help="使用指定的 MCP Client 注册表")
+    commit_commands = commit.add_subparsers(dest="action", required=True)
+    draft = commit_commands.add_parser("draft", help="生成并保存可采用的候选")
+    draft.add_argument("draft_file", type=Path)
+    draft.add_argument("--repo-path", type=Path, help="仓库根路径，默认当前目录")
+    draft.add_argument("--server", help="Toolkit 服务注册 ID")
+    apply = commit_commands.add_parser("apply", help="校验并提交已审阅的草稿")
+    apply.add_argument("draft_file", type=Path)
     skills = groups.add_parser("skills", help="安装、查看及更新独立 Skill 快照")
     commands = skills.add_subparsers(dest="action", required=True)
     for action, help_text in (
@@ -87,10 +96,36 @@ def _run_local_mcp() -> int:
     return 0 if result["ok"] else 1
 
 
+def _run_commit(args: argparse.Namespace) -> int:
+    from .commit_draft import (
+        DEFAULT_TOOLKIT_SERVER,
+        DraftError,
+        apply_draft,
+        create_draft,
+    )
+
+    try:
+        if args.action == "draft":
+            result = create_draft(
+                args.registry,
+                args.server or DEFAULT_TOOLKIT_SERVER,
+                args.repo_path or Path.cwd(),
+                args.draft_file,
+            )
+        else:
+            result = apply_draft(args.registry, args.draft_file)
+    except DraftError as error:
+        result = {"ok": False, "error": error.as_dict()}
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result["ok"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.group == "mcp":
         return _run_local_mcp()
+    if args.group == "commit":
+        return _run_commit(args)
     try:
         if args.group == "skills":
             result = manage_skill(
