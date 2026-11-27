@@ -3,21 +3,6 @@
 # 从项目根目录定位实现，使入口不依赖调用者的工作目录。
 script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
 
-refresh_management_tool() {
-    local argument
-    for argument in "$@"; do
-        [[ "$argument" == -- ]] && break
-        # argparse 也接受无歧义的长选项缩写。
-        if [[ "$argument" == -h || ( "$argument" == --?* &&
-              ( --help == "$argument"* || --dry-run == "$argument"* ) ) ]]; then
-            return 0
-        fi
-    done
-    # 版本号未变化时也重新构建本地包。
-    uv tool install --managed-python --reinstall-package dev-agent-toolkit-tools \
-        "$script_dir/mcp-server" >&2
-}
-
 install_tool_wheel() {
     local project_dir="$1" wheel_prefix="$2" build_option="$3"
     local version wheel
@@ -66,21 +51,19 @@ case "${1:-}" in
         fi
         exec "$client" "$@"
         ;;
-    --skills-install|--skills-update|--agents-install|--agents-update)
+    --skills-install|--skills-update|--skills-show|--agents-install|--agents-update|--agents-show)
         operation="$1"
         shift
-        # 管理资源必须使用完整发行包入口，不能从可编辑源码环境导入。
-        refresh_management_tool "$@" || exit $?
-        tool_bin="$(uv tool dir --bin)" || exit $?
         case "$operation" in
             --skills-install) set -- skills install "$@" ;;
             --skills-update) set -- skills update "$@" ;;
-            --agents-install|--agents-update)
-                # 项目入口默认读取当前模板，调用方可用后面的 --source 覆盖。
-                set -- agents update --source "$script_dir/instructions/codex-global.md" "$@"
-                ;;
+            --skills-show) set -- skills show "$@" ;;
+            --agents-install|--agents-update) set -- agents update "$@" ;;
+            --agents-show) set -- agents show "$@" ;;
         esac
-        exec "$tool_bin/dev-agent-toolkit" "$@"
+        python="$(uv python find --system --no-python-downloads '>=3.11')" || exit $?
+        PYTHONPATH="$script_dir/mcp-server" exec "$python" -B -P -S -m dev_agent_toolkit_tools.cli \
+            --source-root "$script_dir" "$@"
         ;;
     --help|-h|"")
         cat <<'HELP'
@@ -90,8 +73,6 @@ dev_agent_toolkit_tools（MCP Server）
   --mcp-server-build  构建 mcp-server 发行包，输出到仓库的 dist/
   --mcp-server-install [--force]  安装 dist/ 中与服务端版本匹配的 wheel
   --mcp-server-install [uv 选项] <wheel 路径>  安装指定服务端 wheel
-  --server NAME [--dry-run]  将已安装的服务注册到 Codex 并配置环境变量转发
-  --env-only [--dry-run]  修复 Codex 中已注册服务的环境变量转发
   --uv-build 和 --uv-tool-install 分别是服务端构建和安装的别名
 
 dev_agent_toolkit_mcp_client（MCP Client CLI）
@@ -104,16 +85,19 @@ dev_agent_toolkit_mcp_client（MCP Client CLI）
 Skill 与全局指令
   --skills-install  安装技能（Skill）
   --skills-update   更新技能（Skill）
+  --skills-show     查看 Skill 安装状态
   --agents-install  从仓库模板创建全局 AGENTS.md；已有文件须显式接管
   --agents-update   从仓库模板更新全局 AGENTS.md，保留备份与冲突校验
+  --agents-show     查看全局 AGENTS.md 状态
 
-Skill 和 AGENTS.md 的安装与更新会从当前源码刷新服务工具。
-Skill 和 AGENTS.md 操作支持 --dry-run，预览和帮助使用已安装的工具。
+Skill 和 AGENTS.md 由 Python 直接管理 checkout 中的资源。
+安装和更新支持 --dry-run。
 在操作参数后加 --help 查看对应选项。
 HELP
         exit 0
         ;;
+    *)
+        printf '未知操作：%s。请查看 --help。\n' "$1" >&2
+        exit 2
+        ;;
 esac
-
-# exec 保留退出状态与信号语义；参数逐项转发，避免空格或通配符被重新解释。
-exec uv run --managed-python -- "$script_dir/scripts/setup-codex-mcp.py" "$@"

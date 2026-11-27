@@ -291,7 +291,7 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
                 "Decisions",
                 "OPENAI_BASE_URL",
                 "search_evidence_missing",
-                "Pi",
+                "Client CLI",
             ):
                 self.assertIn(phrase, tool.description)
             self.assertTrue(tool.annotations.read_only_hint)

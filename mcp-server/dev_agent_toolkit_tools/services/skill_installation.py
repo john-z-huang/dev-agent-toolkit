@@ -9,19 +9,23 @@ import errno
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import sys
 import tempfile
+import tomllib
 from contextlib import contextmanager
 from importlib.resources import files
 from pathlib import Path, PurePosixPath
+from urllib.parse import unquote, urlsplit
 
 OWNER = "dev-agent-toolkit-tools"
 SKILL = "dev-agent-toolkit"
 MARKER = ".dev-agent-toolkit-skill.json"
 MAX_FILES = 200
 MAX_BYTES = 2_000_000
+_SKILL_SCRIPTS = {"scripts/github_draft.py", "scripts/validate_github_draft.py"}
 
 
 class SkillError(Exception):
@@ -60,14 +64,7 @@ def _manifest(data: bytes) -> dict:
                     part in {"", ".", ".."} or part.startswith(".")
                     for part in path.parts
                 )
-                or (
-                    path.suffix != ".md"
-                    and name
-                    not in {
-                        "scripts/github_draft.py",
-                        "scripts/validate_github_draft.py",
-                    }
-                )
+                or (path.suffix != ".md" and name not in _SKILL_SCRIPTS)
                 or len(name) > 240
                 or not isinstance(digest, str)
                 or len(digest) != 64
@@ -91,6 +88,66 @@ def _bundle() -> tuple[dict, dict[str, bytes]]:
     ):
         raise SkillError("发布包 Skill 资源完整性检查失败")
     return manifest, payload
+
+
+def load_skill_source(source: Path, version: str) -> tuple[dict, dict[str, bytes]]:
+    """Build the same validated snapshot from source for installation and packaging."""
+    if source.is_symlink() or not (source / "SKILL.md").is_file():
+        raise SkillError("缺少完整 Skill 指令源")
+    payload = {}
+    total = 0
+    for path in sorted(source.rglob("*")):
+        relative = path.relative_to(source)
+        if path.is_symlink() or not (path.is_file() or path.is_dir()):
+            raise SkillError("Skill 源包含链接或特殊文件")
+        if path.is_dir():
+            continue
+        name = relative.as_posix()
+        if (path.suffix != ".md" and name not in _SKILL_SCRIPTS) or any(
+            part.startswith(".") for part in relative.parts
+        ):
+            raise SkillError("Skill 源只允许 Markdown 资料及指定的 GitHub 草稿脚本")
+        with path.open("rb") as stream:
+            data = stream.read(MAX_BYTES - total + 1)
+        total += len(data)
+        if total > MAX_BYTES or len(payload) >= MAX_FILES:
+            raise SkillError("Skill 源超过文件数量或总大小上限")
+        payload[name] = data
+    root = source.resolve()
+    for name, data in payload.items():
+        if not name.endswith(".md"):
+            continue
+        try:
+            for link in re.findall(r"\]\(([^)]+)\)", data.decode("utf-8")):
+                url = urlsplit(link)
+                if url.scheme or not url.path:
+                    continue
+                target = (source / name).parent / unquote(url.path)
+                if not target.resolve().is_relative_to(root) or not target.exists():
+                    raise SkillError(f"Skill 内部链接缺失或越界: {name}: {link}")
+        except (UnicodeError, ValueError):
+            raise SkillError(f"Skill Markdown 或链接无效: {name}") from None
+    manifest = {
+        "schema": 1,
+        "owner": OWNER,
+        "skill": SKILL,
+        "version": version,
+        "files": {name: _digest(data) for name, data in payload.items()},
+    }
+    return _manifest(_manifest_bytes(manifest)), payload
+
+
+def _checkout_bundle(root: Path) -> tuple[dict, dict[str, bytes]]:
+    try:
+        with (root / "mcp-server" / "pyproject.toml").open("rb") as config:
+            version = tomllib.load(config)["project"]["version"]
+        if not isinstance(version, str):
+            raise ValueError
+    except (KeyError, OSError, TypeError, ValueError):
+        raise SkillError(
+            "无法从 checkout 的 mcp-server/pyproject.toml 读取版本"
+        ) from None
+    return load_skill_source(root / "skills" / SKILL, version)
 
 
 def _target(raw: str | None) -> Path:
@@ -223,10 +280,16 @@ def _lock(target: Path):
 
 
 def manage_skill(
-    action: str, raw_target: str | None = None, *, dry_run: bool = False
+    action: str,
+    raw_target: str | None = None,
+    *,
+    dry_run: bool = False,
+    source_root: Path | None = None,
 ) -> dict:
     try:
-        return _manage_skill(action, raw_target, dry_run=dry_run)
+        return _manage_skill(
+            action, raw_target, dry_run=dry_run, source_root=source_root
+        )
     except OSError:
         raise SkillError(
             "本地文件访问失败；检查权限、目录类型及残留暂存目录后重试"
@@ -266,10 +329,14 @@ def _old_skill_snapshot_matches(stage: Path, before: dict | None) -> bool:
         return False
 
 
-def _manage_skill(action: str, raw_target: str | None, *, dry_run: bool) -> dict:
+def _manage_skill(
+    action: str, raw_target: str | None, *, dry_run: bool, source_root: Path | None
+) -> dict:
     if action not in {"install", "update", "show"}:
         raise SkillError("未知 Skill 操作")
-    manifest, payload = _bundle()
+    manifest, payload = (
+        _bundle() if source_root is None else _checkout_bundle(source_root)
+    )
     target = _target(raw_target)
     result = {
         "ok": True,

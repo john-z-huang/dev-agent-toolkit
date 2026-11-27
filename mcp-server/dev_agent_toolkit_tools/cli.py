@@ -3,6 +3,7 @@
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from .services.global_agents import GlobalAgentsError, manage_global_agents
 from .services.skill_installation import SKILL, SkillError, manage_skill
@@ -12,6 +13,11 @@ def _parser() -> argparse.ArgumentParser:
     """集中声明 CLI 命令与参数，执行入口只负责分派和错误输出。"""
     parser = argparse.ArgumentParser(
         description="离线管理 Dev Agent Toolkit Skill、全局指令和临时本地 MCP 请求"
+    )
+    parser.add_argument(
+        "--source-root",
+        type=Path,
+        help="从指定 checkout 读取 Skill 和全局 AGENTS.md 模板",
     )
     groups = parser.add_subparsers(dest="group", required=True)
     groups.add_parser(
@@ -23,7 +29,7 @@ def _parser() -> argparse.ArgumentParser:
     for action, help_text in (
         ("install", "安装到不存在的目录；拒绝覆盖任何已有目标"),
         ("update", "仅更新完整且未修改的受管安装"),
-        ("show", "只读查看包版本、目标状态和已安装版本"),
+        ("show", "只读查看来源版本、目标状态和已安装版本"),
     ):
         command = commands.add_parser(action, help=help_text)
         command.add_argument(
@@ -40,15 +46,12 @@ def _parser() -> argparse.ArgumentParser:
     show = agent_commands.add_parser(
         "show", help="只读校验模板并查看候选内容哈希和目标状态"
     )
-    show.add_argument(
-        "--source", help="显式 Markdown 模板路径；默认使用 wheel 中独立打包的模板"
-    )
+    source_help = "显式指定 Markdown 模板路径。默认使用当前 checkout 或发行包随附的模板"
+    show.add_argument("--source", help=source_help)
     update = agent_commands.add_parser(
         "update", help="显式更新 ~/.codex/AGENTS.md；现有目标先备份"
     )
-    update.add_argument(
-        "--source", help="显式 Markdown 模板路径；默认使用 wheel 中独立打包的模板"
-    )
+    update.add_argument("--source", help=source_help)
     update.add_argument(
         "--dry-run",
         action="store_true",
@@ -91,12 +94,18 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.group == "skills":
             result = manage_skill(
-                args.action, args.target, dry_run=getattr(args, "dry_run", False)
+                args.action,
+                args.target,
+                dry_run=getattr(args, "dry_run", False),
+                source_root=args.source_root,
             )
         else:
+            source = args.source
+            if source is None and args.source_root is not None:
+                source = str(args.source_root / "instructions" / "codex-global.md")
             result = manage_global_agents(
                 args.action,
-                args.source,
+                source,
                 dry_run=getattr(args, "dry_run", False),
                 adopt=getattr(args, "adopt", False),
                 replace_local=getattr(args, "replace_local", False),

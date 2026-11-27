@@ -128,8 +128,9 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             self.assertEqual(instructions.count(OPENAI_NETWORK_DESCRIPTION), 1)
             for phrase in (
                 "Pi Code Agent",
-                "searchTools",
-                "describeNamespace",
+                "dev_agent_toolkit_mcp_client_cli",
+                "registry list",
+                "tools/schema",
                 "不要求调用",
                 "不提供 read_thread",
                 "timeout",
@@ -153,7 +154,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                 "HTTPS_PROXY",
                 "ALL_PROXY",
                 "NO_PROXY",
-                "重新加载",
+                "get_mcp_environment",
+                "request_timeout",
             ):
                 self.assertIn(phrase, instructions)
             for phrase in (
@@ -174,7 +176,8 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             self.assertEqual(
                 running_build["server_version"], client.server_info.version
             )
-            self.assertIn("call_updated_local_mcp", instructions)
+            self.assertNotIn("describeNamespace", instructions)
+            self.assertNotIn("call_updated_local_mcp", instructions)
             bridge = tools["call_updated_local_mcp"]
             self.assert_described_properties(bridge.input_schema, bridge.name)
             self.assertEqual(

@@ -292,7 +292,9 @@ class SetupLauncherTests(unittest.TestCase):
                 result.stdout.decode().split("\0")[:-1], [str(root), *arguments]
             )
 
-    def test_tool_lookup_failure_does_not_fall_back_to_path_or_source(self) -> None:
+    def test_python_lookup_failure_does_not_fall_back_to_installed_manager(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             uv = root / "uv"
@@ -309,142 +311,96 @@ class SetupLauncherTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 19, result.stderr)
 
-    def test_resource_operations_use_only_installed_management_cli(self) -> None:
-        source = str(LAUNCHER.parent / "instructions" / "codex-global.md")
-        agents = ["agents", "update", "--source", source]
-        operations = (
-            ("--skills-install", [], ["skills", "install"]),
-            ("--skills-update", [], ["skills", "update"]),
-            ("--agents-install", [], agents),
-            ("--agents-update", [], agents),
-            ("--agents-update", ["--source", "custom template.md"], agents),
-            ("--agents-update", ["--source=custom template.md"], agents),
-        )
-        with tempfile.TemporaryDirectory(prefix="installed tools ") as directory:
-            root = Path(directory)
-            (root / "uv").write_text(
-                '#!/bin/bash\n[ "$*" = "tool dir --bin" ] || exit 99\n'
-                'printf "%s\\n" "${0%/*}"\n',
-                encoding="utf-8",
-            )
-            cli = root / "dev-agent-toolkit"
-            cli.write_text(
-                "#!/bin/bash\nprintf '%s\\0' \"$@\"\nexit 24\n", encoding="utf-8"
-            )
-            for executable in (root / "uv", cli):
-                executable.chmod(0o755)
-            for operation, options, expected in operations:
-                with self.subTest(operation=operation, options=options):
-                    result = subprocess.run(
-                        [str(LAUNCHER), operation, *options, "--dry-run"],
-                        cwd=root,
-                        env={**os.environ, "PATH": f"{root}:/usr/bin:/bin"},
-                        capture_output=True,
-                        check=False,
-                    )
-                    self.assertEqual(result.returncode, 24, result.stderr)
-                    self.assertEqual(
-                        result.stdout.decode().split("\0")[:-1],
-                        [*expected, *options, "--dry-run"],
-                    )
-
-    def test_resource_write_refreshes_tool_before_running_installed_cli(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="refresh tools ") as directory:
-            root = Path(directory)
-            uv = root / "uv"
-            uv.write_text(
-                "#!/bin/bash\n"
-                'printf "%s\\0" "$@" >> "$CALL_LOG"\n'
-                'if [[ "$2" == install ]]; then\n'
-                '    printf "build output\\n"\n'
-                '    exit "$INSTALL_STATUS"\n'
-                "fi\n"
-                'printf "%s\\n" "${0%/*}"\n',
-                encoding="utf-8",
-            )
-            cli = root / "dev-agent-toolkit"
-            cli.write_text('#!/bin/bash\nprintf "%s\\0" "$@"\n', encoding="utf-8")
-            for executable in (uv, cli):
-                executable.chmod(0o755)
-            log = root / "calls"
-            environment = {
-                **os.environ,
-                "PATH": f"{root}:/usr/bin:/bin",
-                "CALL_LOG": str(log),
-            }
-            refresh = [
-                "tool",
-                "install",
-                "--managed-python",
-                "--reinstall-package",
-                "dev-agent-toolkit-tools",
-                str(LAUNCHER.parent / "mcp-server"),
-            ]
-            lookup = ["tool", "dir", "--bin"]
-            skills = ["skills", "update"]
-            agents = [
-                "agents",
-                "update",
-                "--source",
-                str(LAUNCHER.parent / "instructions" / "codex-global.md"),
-            ]
-            for operation, options, status, uv_args, cli_args in (
-                ("--skills-update", [], 0, [*refresh, *lookup], skills),
-                ("--agents-update", [], 0, [*refresh, *lookup], agents),
-                ("--skills-update", [], 19, refresh, []),
-                ("--skills-update", ["--dry"], 0, lookup, [*skills, "--dry"]),
-                ("--skills-update", ["--help"], 0, lookup, [*skills, "--help"]),
-            ):
-                with self.subTest(operation=operation, options=options, status=status):
-                    log.write_bytes(b"")
-                    result = subprocess.run(
-                        [str(LAUNCHER), operation, *options],
-                        cwd=root,
-                        env={**environment, "INSTALL_STATUS": str(status)},
-                        capture_output=True,
-                        check=False,
-                    )
-                    self.assertEqual(result.returncode, status, result.stderr)
-                    self.assertEqual(
-                        log.read_bytes().decode().split("\0")[:-1], uv_args
-                    )
-                    self.assertEqual(result.stdout.decode().split("\0")[:-1], cli_args)
-
-    def test_launch_from_other_directory_preserves_arguments_and_exit_status(
+    def test_document_operations_run_checkout_python_without_installing_tools(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             checkout = root / "checkout with spaces"
             checkout.mkdir()
             launcher = checkout / LAUNCHER.name
             shutil.copy2(LAUNCHER, launcher)
             uv = root / "uv"
             uv.write_text(
-                "#!/bin/bash\nprintf '%s\\0' \"$@\"\nexit 23\n", encoding="utf-8"
+                "#!/bin/bash\n"
+                'printf "%s\\0" "$@" >> "$CALL_LOG"\n'
+                'printf "%s\\n" "$DOCUMENT_PYTHON"\n',
+                encoding="utf-8",
             )
-            uv.chmod(0o755)
-            arguments = ["--install", "--force", "--config", "a b/*;$(echo x)", ""]
-            result = subprocess.run(
-                [str(launcher), *arguments],
-                cwd=root,
-                env={**os.environ, "PATH": f"{root}:/usr/bin:/bin"},
-                capture_output=True,
-                check=False,
+            python = root / "document python"
+            python.write_text(
+                '#!/bin/bash\nprintf "%s\\0" "$PYTHONPATH" "$@"\nexit 24\n',
+                encoding="utf-8",
             )
-            self.assertEqual(result.returncode, 23, result.stderr)
-            self.assertEqual(
-                result.stdout.decode().split("\0")[:-1],
-                [
-                    "run",
-                    "--managed-python",
-                    "--",
-                    str(checkout.resolve() / "scripts" / "setup-codex-mcp.py"),
-                    *arguments,
-                ],
-            )
+            for executable in (uv, python):
+                executable.chmod(0o755)
+            log = root / "calls"
+            environment = {
+                **os.environ,
+                "PATH": f"{root}:/usr/bin:/bin",
+                "CALL_LOG": str(log),
+                "DOCUMENT_PYTHON": str(python),
+            }
+            for operation, command, options in (
+                ("--skills-install", ["skills", "install"], ["--target", "a b/*"]),
+                ("--skills-update", ["skills", "update"], ["--dry-run"]),
+                ("--skills-show", ["skills", "show"], []),
+                ("--agents-install", ["agents", "update"], ["--help"]),
+                (
+                    "--agents-update",
+                    ["agents", "update"],
+                    ["--source", "a b/*;$(echo x)"],
+                ),
+                ("--agents-show", ["agents", "show"], []),
+            ):
+                with self.subTest(operation=operation):
+                    log.write_bytes(b"")
+                    result = subprocess.run(
+                        ["/bin/bash", str(launcher), operation, *options],
+                        cwd=root,
+                        env=environment,
+                        capture_output=True,
+                        check=False,
+                    )
+                    self.assertEqual(result.returncode, 24, result.stderr)
+                    self.assertEqual(
+                        log.read_bytes().decode().split("\0")[:-1],
+                        [
+                            "python",
+                            "find",
+                            "--system",
+                            "--no-python-downloads",
+                            ">=3.11",
+                        ],
+                    )
+                    self.assertEqual(
+                        result.stdout.decode().split("\0")[:-1],
+                        [
+                            str(checkout / "mcp-server"),
+                            "-B",
+                            "-P",
+                            "-S",
+                            "-m",
+                            "dev_agent_toolkit_tools.cli",
+                            "--source-root",
+                            str(checkout),
+                            *command,
+                            *options,
+                        ],
+                    )
 
-    def test_missing_uv_fails_before_python_or_config_writes(self) -> None:
+    def test_removed_native_registration_options_are_rejected(self) -> None:
+        for operation in ("--server", "--env-only"):
+            with self.subTest(operation=operation):
+                result = subprocess.run(
+                    ["/bin/bash", str(LAUNCHER), operation],
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(operation.encode(), result.stderr)
+
+    def test_missing_uv_fails_before_document_writes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             # 只提供入口定位所需命令，确保不会意外调用本机 uv。
@@ -452,12 +408,18 @@ class SetupLauncherTests(unittest.TestCase):
             if dirname is None:
                 self.skipTest("requires dirname")
             (root / "dirname").symlink_to(dirname)
-            config = root / "config.toml"
+            target = root / "skill"
             result = subprocess.run(
-                [str(LAUNCHER), "--install", "--config", str(config)],
+                [
+                    "/bin/bash",
+                    str(LAUNCHER),
+                    "--skills-install",
+                    "--target",
+                    str(target),
+                ],
                 env={**os.environ, "PATH": str(root)},
                 capture_output=True,
                 check=False,
             )
             self.assertEqual(result.returncode, 127)
-            self.assertFalse(config.exists())
+            self.assertFalse(target.exists())
