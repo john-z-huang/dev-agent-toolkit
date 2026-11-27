@@ -10,7 +10,7 @@
 - `mcp-server/`：Python/uv MCP v2 stdio 服务和固定操作工具。
 - `instructions/codex-global.md`：版本化的全局指令源；通过独立 CLI 显式同步到用户目录。
 - `archive/mcp-server-ts/`：已归档且不再支持的历史 TypeScript MCP 实现；其历史说明见该目录的 [`README.md`](../archive/mcp-server-ts/README.md)。
-- `scripts/`：Codex 安装配置脚本，以及供标准 Git Hook 集成使用的可移植校验资产；`.githooks/`：Hook 入口。
+- `scripts/`：工具安装脚本和供标准 Git Hook 集成使用的可移植校验资产；`.githooks/`：Hook 入口。
 - `.agents/`：本目录，仅用于开发和维护本仓库，不随发行包交付。
 
 当前 MCP 服务实现与调用约束见 [`mcp-server/pyproject.toml`](../mcp-server/pyproject.toml) 和 [`references/mcp-tools.md`](../skills/dev-agent-toolkit/references/mcp-tools.md)。
@@ -21,10 +21,10 @@
 
 - `--uv-build`：调用 `uv build mcp-server --out-dir dist`。
 - `--uv-tool-install [--force]`：安装 `dist/` 中与项目版本匹配的 wheel。
-- `--skills-install|--skills-update|--agents-install|--agents-update`：先重建并刷新 `dev-agent-toolkit-tools` uv tool，再调用已安装的 `dev-agent-toolkit` 管理命令；`--agents-*` 固定传入 `--source instructions/codex-global.md`，调用方仍可用后面的 `--source` 覆盖。
-- `--server NAME` 和 `--env-only`：转发到 `scripts/setup-codex-mcp.py`，用于在 Codex 注册 MCP Server 和修复环境变量转发。
+- `--skills-*` 和 `--agents-*`：用 `uv python find` 查找已安装的 Python 3.11 或更新版本，直接运行源码中的文档管理模块。`--agents-*` 默认读取 `instructions/codex-global.md`，可用 `--source` 指定其他模板。
+- `--mcp-client-build` 和 `--mcp-client-install`：构建及安装 MCP Client 发行包。`--mcp-client` 调用已安装的 CLI，按客户端注册表启动本地服务。
 
-`--help` 与 `--dry-run` 预览跳过构建和工具刷新。交付边界与硬编码路径见 [交付边界与发行包](distribution.md)。
+文档安装、更新及预览共用源码入口。交付边界与路径见 [交付边界与发行包](distribution.md)。
 
 ## 异步与指令迁移（#95 / #96）
 

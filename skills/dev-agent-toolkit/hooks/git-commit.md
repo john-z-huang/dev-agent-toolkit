@@ -6,7 +6,7 @@
 
 ## 执行条件
 
-暂存范围须涵盖于授权且变更归属明确。整文件用 `stage_repository_paths`，混合修改按 [CLI](../references/cli-fallback.md) 选择准确 hunk。核对实际 staged diff。
+暂存范围须在授权内且变更归属明确。通过 [本地 MCP Client](../references/mcp-tools.md#通过本地-mcp-client-调用) 调用本流程的 MCP 工具。整文件用 `stage_repository_paths`，混合修改按 [命令行补充](../references/cli-fallback.md) 选择准确 hunk。核对实际 staged diff。
 
 用户提供完整提交信息时保留原文并检查。需要起草时先暂存本次改动，再按 [提交信息生成协议](../references/openai-workflow-tools.md) 调用 `generate_git_commit_message`，只传 `repo_path`。核对候选的 `ok`、`adoptable`、缺失事实与实际暂存内容，再用 `check_commit_message` 检查最终完整信息。生成失败按 [恢复](recovery.md) 处理。
 

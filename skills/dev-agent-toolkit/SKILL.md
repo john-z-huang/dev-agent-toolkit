@@ -12,6 +12,12 @@ Hook 的进入、执行、离开和重新进入条件由 Agent 判断。未知�
 
 生成终端命令前，必须先在用户可见的对话中简短说明为什么需要命令、预期结果及判断标准，以及操作步骤和影响范围。说明必须出现在调用执行工具或展示命令文本之前。单条、批量和仅提供给用户运行的命令均适用，具体条件见 [执行环境 Hook](hooks/environment.md#命令前置说明)。
 
+## 项目 MCP 调用
+
+- 在 Codex、Pi 或其他 Code Agent 中，通过 `dev_agent_toolkit_mcp_client` 提供的 `dev_agent_toolkit_mcp_client_cli` 调用项目 MCP。复用客户端注册表中已配置的本地服务，包括 `dev-agent-toolkit-tools`、Serena 及项目使用的其他本地 STDIO 服务。工具发现、Schema 和调用命令见 [本地 MCP Client](references/mcp-tools.md#通过本地-mcp-client-调用)。
+- 日常项目任务使用预先安装的服务程序。缺少客户端、服务程序或注册项时，报告具体缺口，继续可独立完成的步骤。项目服务的启动配置统一放在 MCP Client 注册表。构建、安装、更新或修改注册表按用户授权单独执行。
+- 项目工具的领域参数、项目绑定、审批与检查条件仍适用。通过终端调用时遵守宿主命令审批及沙箱。服务不可用、工具拒绝或结果不明时按 [恢复 Hook](hooks/recovery.md) 处理。
+
 ## 宿主审批兼容
 
 Skill、MCP 服务和参考资料中的 `Codex writes approval` 均指 Codex 宿主的写操作审批机制。
@@ -21,19 +27,13 @@ Skill、MCP 服务和参考资料中的 `Codex writes approval` 均指 Codex 宿
 - 写操作前核对用户对当前动作、目标及范围的明确授权、适用的宿主权限与审批，以及工具前置校验。已有授权仅在原范围有效，换工具无须重复询问。授权缺失或不清时先询问。内容修改授权不自动扩展到提交、推送、合并、删除、历史重写、配置或 Memory 写入，通过检查也不授予后续写入权限。
 - 审批状态未知、实际拒绝、权限错误或校验失败时，暂停受影响操作并报告。按 [恢复 Hook](hooks/recovery.md) 处理，禁止经 CLI、其他工具或 Codex App Server 绕过。
 
-## Pi 工具发现与能力边界
-
-- codemode 下用 `searchTools` 和 `describeTool` 发现实际工具名及 Schema，用 `describeNamespace` 读取完整服务指令。工具未直接声明时先查找，hidden 不可绕过。工具前缀由宿主注册名决定。
-- Pi 从 `~/.agents/skills/` 发现 Skill，独立于 Codex 全局指令。Pi stdio 继承启动环境，配置 `timeout`（秒）。变更配置后重载，必要时重启 Pi。详见 [Pi MCP 合同](hooks/install-pi-mcp.md) 与 [环境传递](references/openai-workflow-tools.md#pi-stdio-环境传递与工具时限)。
-- 历史读取依赖宿主的实际能力。应使用真实 Codex 会话来源，缺少读取能力时只暂停依赖历史的部分。见 [会话事实](hooks/session-facts.md)。
-
 ## 共用边界
 
 - 准确识别仓库、worktree 和目标资源，仓库工具显式传入绝对根路径 `repo_path`。保留用户现有内容，以实际回读和验证结果为准。
 - 通用 Git、worktree 和提交规则跨平台适用，纯本地 Git 动作无需托管平台登录。GitHub 账号和仓库核验见 [托管资源 Hook](hooks/github-delivery.md)。
-- 优先使用覆盖需求的 MCP 或已授权 Connector。工具能力缺口按 [CLI 补充边界](references/cli-fallback.md) 处理。
+- 宿主会话 API 和已授权托管平台 Connector 按其适用条件使用。历史读取使用真实会话来源，缺少读取能力时只暂停依赖历史的部分。详见 [会话事实](hooks/session-facts.md)。项目工具能力缺口按 [CLI 补充边界](references/cli-fallback.md) 处理。
 - 语义判断和文案生成提交最小结构化事实，由工具分析或生成后核对结果。涉及外发和审核时查阅 [外部 API Hook](hooks/external-api.md)。
 - 涉及可运行 Web 页面、浏览器交互或页面验收时查阅 [真实浏览器验证](references/web-browser-validation.md)，再按需读取所用 CLI 的参考 Skill。
 - 禁止输出或记录凭据及添加 Agent 署名或生成声明。
 
-安装、注册或更新本项目资源时，从 [安装与更新索引](hooks/index.md#安装与更新) 直达所选资源的命令、写入范围与验收条件。
+用户授权安装、注册或更新本项目资源时，从 [安装与更新索引](hooks/index.md#安装与更新) 核对命令、写入范围与验收条件。

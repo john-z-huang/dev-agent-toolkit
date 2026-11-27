@@ -5,7 +5,7 @@
 ## 实际交付内容
 
 - wheel/sdist 使用显式白名单：`mcp-server/pyproject.toml` 的 wheel `packages` 与 sdist `include`。
-- Skill：`mcp-server/hatch_build.py` 的 `_skill_payload` 只打包 `skills/dev-agent-toolkit/**` 中的 Markdown 和 `scripts/github_draft.py`、`scripts/validate_github_draft.py`，并校验 Skill 内的相对链接不越出 Skill 目录。
+- Skill：打包与源码安装共用 `load_skill_source`。快照只包含 `skills/dev-agent-toolkit/**` 中的 Markdown 和 `scripts/github_draft.py`、`scripts/validate_github_draft.py`，并校验相对链接的存在性和范围。
 - 全局指令：同一构建钩子读取 `instructions/codex-global.md`，在 wheel 中作为 `dev_agent_toolkit_tools/global_instructions/codex-global.md`，在 sdist 中作为 `global-instructions-source.md`。
 - 安装目标：Skill 默认安装到 `~/.agents/skills/dev-agent-toolkit`，全局指令默认写入 `~/.codex/AGENTS.md`。
 
@@ -15,7 +15,7 @@
 
 ## 禁止随意移动的路径
 
-- `dev-agent-toolkit` 启动器的 `--agents-*` 分支固定传入 `--source instructions/codex-global.md`。
+- `dev-agent-toolkit` 启动器向 Python 传入 checkout 根目录。Python 根据该根目录查找 Skill 和 `instructions/codex-global.md`。
 - `mcp-server/hatch_build.py` 从 `mcp-server/` 的同级目录读取 `instructions/codex-global.md`。
 - 因此不要移动 `instructions/`、`skills/`、`mcp-server/`；移动需同步修改构建钩子、启动器和相关测试。
 

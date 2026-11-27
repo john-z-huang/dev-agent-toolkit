@@ -55,7 +55,7 @@
 | 服务 ID 示例 | 可执行文件 | `args` |
 | --- | --- | --- |
 | `serena` | `serena` | `["start-mcp-server", "--context", "codex", "--project-from-cwd", "--open-web-dashboard", "false"]` |
-| `dev_agent_toolkit` | `dev-agent-toolkit-tools` | `[]` |
+| `dev-agent-toolkit-tools` | `dev-agent-toolkit-tools` | `[]` |
 
 按项目使用 Serena 时，可在配置中把 `cwd` 设为项目绝对路径。
 
