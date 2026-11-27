@@ -23,7 +23,6 @@
 - `--uv-tool-install [--force]`：安装 `dist/` 中与项目版本匹配的 wheel。
 - `--skills-install|--skills-update|--agents-install|--agents-update`：先重建并刷新 `dev-agent-toolkit-tools` uv tool，再调用已安装的 `dev-agent-toolkit` 管理命令；`--agents-*` 固定传入 `--source instructions/codex-global.md`，调用方仍可用后面的 `--source` 覆盖。
 - `--mcp-install|--mcp-update`：转发到 `scripts/setup-codex-mcp.py`。
-- `--hooks-install|--hooks-update`：转发到 `scripts/setup-codex-hooks.py`。
 
 `--help` 与 `--dry-run` 预览跳过构建和工具刷新。交付边界与硬编码路径见 [交付边界与发行包](distribution.md)。
 

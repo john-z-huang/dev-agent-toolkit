@@ -36,7 +36,7 @@ class HooksDistributionTests(unittest.TestCase):
             root = Path(directory).resolve()
             source = root / "source"
             shutil.copytree(
-                ROOT / "codex-hooks",
+                ROOT,
                 source,
                 ignore=shutil.ignore_patterns(".venv", "__pycache__", "dist"),
             )

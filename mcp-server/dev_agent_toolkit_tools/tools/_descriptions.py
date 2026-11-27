@@ -46,7 +46,7 @@ SERVER_INSTRUCTIONS = (
 
 **宿主兼容与工具发现**
 
-本服务可用于 Codex 和 Pi Code Agent。Codex writes approval 不是 MCP Tool；Pi 未提供该机制时不要求调用、安装或模拟它，也不因这一缺失单独阻塞已获授权的操作。写入仍需用户明确授权当前动作、目标和范围，遵守实际宿主权限及本地校验；未知审批状态、实际拒绝或错误均不能视为不适用，不得换入口绕过或虚称已获审批。Pi 的 codemode 暴露模式下先用 searchTools/describeTool 发现实际工具名与 Schema，完整服务指令可用 describeNamespace 读取；未直接声明不等于工具缺失，hidden 工具不得绕过。原生 Codex Hooks 仅为可选 Codex 组件，不要求在 Pi 安装。
+本服务可用于 Codex 和 Pi Code Agent。Codex writes approval 不是 MCP Tool；Pi 未提供该机制时不要求调用、安装或模拟它，也不因这一缺失单独阻塞已获授权的操作。写入仍需用户明确授权当前动作、目标和范围，遵守实际宿主权限及本地校验；未知审批状态、实际拒绝或错误均不能视为不适用，不得换入口绕过或虚称已获审批。Pi 的 codemode 暴露模式下先用 searchTools/describeTool 发现实际工具名与 Schema，完整服务指令可用 describeNamespace 读取；未直接声明不等于工具缺失，hidden 工具不得绕过。
 
 会话来源只接受真实 codex://threads/<小写标准UUID>。本服务不提供 read_thread 或 Pi 历史读取器；缺少历史证据时仅暂停依赖该证据的部分。摘要指导及不要求来源的候选生成可跨宿主使用。
 

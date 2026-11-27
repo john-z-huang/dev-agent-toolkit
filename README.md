@@ -4,11 +4,9 @@
 
 ## 安装与构建
 
-构建发行包、安装或更新 uv tool 和 Skill、注册 Codex 或 Pi MCP，以及管理全局指令和原生 Hooks，见 [安装与构建指南](INSTALL.md)。
+构建发行包、安装或更新 uv tool 和 Skill、注册 Codex 或 Pi MCP，以及管理全局指令，见 [安装与构建指南](INSTALL.md)。
 
 ## 使用
-
-可选的 [原生 Codex Hooks](codex-hooks/README.md) 提供会话与交付提示、MCP 目标仓库路径校验，以及结构化失败后的恢复提示。安装和更新步骤见 [原生 Codex Hooks 安装说明](INSTALL.md#安装与更新原生-codex-hooks)。
 
 从 [Skill 入口](skills/dev-agent-toolkit/SKILL.md) 和 [Hook 索引](skills/dev-agent-toolkit/hooks/index.md) 查找当前动作的合同。工具选择与参数见 [MCP 工具目录](skills/dev-agent-toolkit/references/mcp-tools.md)。
 

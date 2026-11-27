@@ -65,10 +65,6 @@
 
 选择 `/bin/bash ./dev-agent-toolkit --mcp-install` 或 `/bin/bash ./dev-agent-toolkit --mcp-update`，安装软件包、注册服务并配置环境变量转发。只注册已安装工具或只修复转发时，有独立入口。见 [Codex MCP 合同](skills/dev-agent-toolkit/hooks/install-codex-mcp.md)。
 
-## 安装与更新原生 Codex Hooks
-
-选择 `/bin/bash ./dev-agent-toolkit --hooks-install --global` 或 `/bin/bash ./dev-agent-toolkit --hooks-update --global`。项目级注册改用 `--project-root` 和已有项目的绝对路径。预览、合并及宿主信任步骤见 [原生 Codex Hooks 合同](skills/dev-agent-toolkit/hooks/install-codex-hooks.md)。
-
 ## 给 Pi Code Agent 注册 MCP
 
 选择 [Pi MCP 合同](skills/dev-agent-toolkit/hooks/install-pi-mcp.md) 中的独立脚本命令，按需安装包并注册到用户级或项目级配置。Pi 可从同一 Skill 目录加载声明式合同。

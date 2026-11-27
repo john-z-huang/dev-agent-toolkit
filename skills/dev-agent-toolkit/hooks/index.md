@@ -25,4 +25,3 @@
 | 创建、接管或更新 Codex 全局 AGENTS.md | [全局指令](install-global-agents.md) |
 | 安装、更新 Codex MCP 或修复转发 | [Codex MCP](install-codex-mcp.md) |
 | 安装或更新 Pi MCP 及注册 | [Pi MCP](install-pi-mcp.md) |
-| 安装、合并或更新全局或项目级原生 Codex Hooks | [原生 Codex Hooks](install-codex-hooks.md) |

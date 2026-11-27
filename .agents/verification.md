@@ -13,7 +13,7 @@ Code Agent 必须用 `ruff format` 处理 Python 代码格式，禁止通过 Edi
 /bin/bash -c 'cd mcp-server && uv run --locked -- ty check'
 ```
 
-`ruff format` 写入源码。其余命令用于检查。只格式化本次改动时，把目录参数换成目标文件。`codex-hooks/` 使用独立环境和配置，见 [Hooks 验证命令](../codex-hooks/README.md#验证)。
+`ruff format` 写入源码。其余命令用于检查。只格式化本次改动时，把目录参数换成目标文件。
 
 ## 离线测试
 

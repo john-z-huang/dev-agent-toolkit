@@ -14,7 +14,7 @@ from pathlib import Path
 from codex_hooks_test_support import InstalledHooksTestCase
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME = ROOT / "codex-hooks/dev_agent_toolkit_hooks/runtime.py"
+RUNTIME = ROOT / "dev_agent_toolkit_hooks/runtime.py"
 PREFIX = "mcp__dev_agent_toolkit__"
 
 

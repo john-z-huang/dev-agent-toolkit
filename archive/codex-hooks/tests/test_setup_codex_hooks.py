@@ -84,7 +84,7 @@ class HooksSetupTests(unittest.TestCase):
                 [
                     "--reinstall-package",
                     setup.TOOL,
-                    str(SETUP.parent.parent / "codex-hooks"),
+                    str(SETUP.parent.parent),
                 ],
             )
             self.assertEqual(commands[2], [str(executable), "--version"])
