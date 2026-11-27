@@ -10,12 +10,12 @@
    /bin/bash -c 'git clone https://github.com/john-z-huang/dev-agent-toolkit.git'
    ```
 
-2. 从源码仓库根目录构建并安装。构建产物放在 `dist/`，安装时选用与当前项目版本匹配的 wheel。
+2. 从源码仓库根目录构建并安装 MCP Server。构建产物放在 `dist/`，安装时选用与 Server 当前版本匹配的 wheel。
 
    ```bash
    /bin/bash ./dev-agent-toolkit --help
-   /bin/bash ./dev-agent-toolkit --uv-build
-   /bin/bash ./dev-agent-toolkit --uv-tool-install
+   /bin/bash ./dev-agent-toolkit --mcp-server-build
+   /bin/bash ./dev-agent-toolkit --mcp-server-install
    /bin/bash -c 'uv tool list --show-paths && tool_bin=$(uv tool dir --bin) && "$tool_bin/dev-agent-toolkit" --help'
    ```
 
@@ -49,20 +49,21 @@
    /bin/bash -c 'tool_bin=$(uv tool dir --bin) && printf "%s\n" "{\"tool_name\":\"get_mcp_server_build_info\",\"arguments\":{}}" | "$tool_bin/dev-agent-toolkit" mcp'
    ```
 
-## 构建与安装发行包
+## 构建与安装 MCP Server
 
-`/bin/bash ./dev-agent-toolkit --uv-build` 在 `dist/` 生成 sdist 和 wheel。`/bin/bash ./dev-agent-toolkit --uv-tool-install` 安装与项目当前版本匹配的 wheel。缺少匹配的 wheel 时，安装命令会退出，先执行构建再重试。重装时加 `--force`。见 [项目工具合同](skills/dev-agent-toolkit/hooks/install-tooling.md)。
+`/bin/bash ./dev-agent-toolkit --mcp-server-build` 在仓库的 `dist/` 生成 Server 的 sdist 和 wheel。`/bin/bash ./dev-agent-toolkit --mcp-server-install` 默认安装与 Server 当前版本匹配的 wheel。重装时可加 `--force`，也可显式传入 wheel 路径和 `uv tool install` 选项。旧命令 `--uv-build` 和 `--uv-tool-install` 分别是这两个 Server 命令的别名。详细步骤见 [项目工具合同](skills/dev-agent-toolkit/hooks/install-tooling.md)。
 
 ## 独立 MCP Client
 
-在 macOS 或 Linux 上，从仓库根目录安装 `dev_agent_toolkit_mcp_client` 项目，再检查 CLI 入口。
+在 macOS 或 Linux 上，从仓库根目录构建并安装 `dev_agent_toolkit_mcp_client`，再通过启动器检查 CLI。
 
 ```bash
-/bin/bash -c 'exec uv tool install --managed-python ./mcp-client'
-/bin/bash -c 'exec dev_agent_toolkit_mcp_client --help'
+/bin/bash ./dev-agent-toolkit --mcp-client-build
+/bin/bash ./dev-agent-toolkit --mcp-client-install
+/bin/bash ./dev-agent-toolkit --mcp-client --help
 ```
 
-Server 注册、请求参数和 Python API 见 [独立 MCP Client](mcp-client/README.md)。
+构建后的 sdist 和 wheel 位于仓库的 `dist/`。`--mcp-client-install` 默认安装 Client 当前版本对应的 wheel，重装时可加 `--force`，也可显式传入 wheel 路径和 `uv tool install` 选项。`--mcp-client` 将后续参数转发给 uv 已安装的 Client，例如 `/bin/bash ./dev-agent-toolkit --mcp-client registry list`。Server 注册、请求参数和 Python API 见 [独立 MCP Client](mcp-client/README.md)。
 
 ## 独立安装 Skill
 
@@ -71,14 +72,6 @@ Server 注册、请求参数和 Python API 见 [独立 MCP Client](mcp-client/RE
 ## 版本管理与更新全局 AGENTS.md
 
 选择 `/bin/bash ./dev-agent-toolkit --agents-install` 或 `/bin/bash ./dev-agent-toolkit --agents-update`，从当前源码模板创建或更新用户的 `~/.codex/AGENTS.md`。见 [全局指令合同](skills/dev-agent-toolkit/hooks/install-global-agents.md)。
-
-## Codex 中安装
-
-选择 `/bin/bash ./dev-agent-toolkit --mcp-install` 或 `/bin/bash ./dev-agent-toolkit --mcp-update`，安装软件包、注册服务并配置环境变量转发。只注册已安装工具或只修复转发时，有独立入口。见 [Codex MCP 合同](skills/dev-agent-toolkit/hooks/install-codex-mcp.md)。
-
-## 给 Pi Code Agent 注册 MCP
-
-选择 [Pi MCP 合同](skills/dev-agent-toolkit/hooks/install-pi-mcp.md) 中的独立脚本命令，按需安装包并注册到用户级或项目级配置。Pi 可从同一 Skill 目录加载声明式合同。
 
 ## 安装排查
 

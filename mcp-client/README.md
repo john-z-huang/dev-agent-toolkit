@@ -13,6 +13,14 @@
 
 使用 Python API 时，在调用方的 Python 环境中安装 `dev_agent_toolkit_mcp_client` 发行包，再从同名包导入。
 
+在完整的 Dev Agent Toolkit 源码仓库中，可从仓库根目录使用启动器构建、安装和运行 Client。
+
+```bash
+/bin/bash ./dev-agent-toolkit --mcp-client-build
+/bin/bash ./dev-agent-toolkit --mcp-client-install
+/bin/bash ./dev-agent-toolkit --mcp-client --help
+```
+
 ## 注册 Server
 
 默认注册表为 `$XDG_CONFIG_HOME/dev-agent-toolkit/mcp-servers.json`，未设置时使用 `~/.config/dev-agent-toolkit/mcp-servers.json`。`--registry` 可指定独立文件。仅注册可信的可执行文件。`allowed_tools` 由用户列出获准的只读工具，默认列表为空。

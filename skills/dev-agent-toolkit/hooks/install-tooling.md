@@ -2,18 +2,29 @@
 
 ## 进入条件
 
-需要构建发行包，或只刷新 dev-agent-toolkit 的 uv tool。若目标是更新已安装 Skill、全局指令或 MCP 注册，直接使用 [对应合同](index.md)。
+需要构建 MCP Server 或 MCP Client 发行包，或只刷新对应的 uv tool。若目标是更新已安装 Skill、全局指令或 Codex 中的 MCP Server 注册，直接使用 [对应合同](index.md)。
 
 ## 执行条件
 
-核对源码 checkout、`mcp-server/pyproject.toml` 的版本及 `uv tool dir --bin` 对应的安装环境。构建写入仓库的 `dist/`，安装写入 uv tool 环境。构建或解析依赖可能联网。在源码根目录选择所需动作。
+核对源码 checkout、目标项目的 `pyproject.toml` 版本及 `uv tool dir --bin` 对应的安装环境。构建写入仓库的 `dist/`，安装写入 uv tool 环境。构建或解析依赖可能联网。在源码根目录按目标项目选择命令。
+
+### MCP Server
 
 ```bash
-/bin/bash ./dev-agent-toolkit --uv-build
-/bin/bash ./dev-agent-toolkit --uv-tool-install
+/bin/bash ./dev-agent-toolkit --mcp-server-build
+/bin/bash ./dev-agent-toolkit --mcp-server-install
 ```
 
-安装命令默认使用 `dist/` 中与当前项目版本匹配的 wheel。缺少该 wheel 时，安装命令会退出并提示先运行 `/bin/bash ./dev-agent-toolkit --uv-build`。构建完成后重新执行安装。更新或重装同版本 wheel 用 `/bin/bash ./dev-agent-toolkit --uv-tool-install --force`。指定其他 wheel 时，在操作参数后传 uv 选项及 wheel 路径。显式相对路径以调用目录为准。
+旧命令 `--uv-build` 和 `--uv-tool-install` 分别是 Server 构建与安装命令的别名。
+
+### MCP Client
+
+```bash
+/bin/bash ./dev-agent-toolkit --mcp-client-build
+/bin/bash ./dev-agent-toolkit --mcp-client-install
+```
+
+两个安装命令都默认使用 `dist/` 中与所选项目及其当前版本匹配的 wheel。缺少对应 wheel 时，安装命令会提示先构建所选项目。更新或重装同版本 wheel 时，在对应安装命令后加 `--force`。指定其他 wheel 时，传入 uv 选项和 wheel 路径。显式相对路径以调用目录为准。
 
 每次将一个操作参数放在首位。`/bin/bash ./dev-agent-toolkit` 无参数只打印帮助。可在所选操作后加 `--help`。从其他目录调用时用 `dev-agent-toolkit` 的绝对路径，保持入口和源码组件的相对布局。Skill 和全局指令预览依赖已安装的管理 CLI。选择安装前核对它的来源。
 

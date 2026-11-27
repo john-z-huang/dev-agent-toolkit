@@ -20,22 +20,42 @@ class SetupLauncherTests(unittest.TestCase):
                 "#!/bin/bash\nprintf '%s\\0' \"$@\"\nexit 23\n", encoding="utf-8"
             )
             uv.chmod(0o755)
+            install = ["tool", "install", "--managed-python"]
+            server_build = [
+                "build",
+                "--managed-python",
+                str(LAUNCHER.parent / "mcp-server"),
+                "--out-dir",
+                str(LAUNCHER.parent / "dist"),
+            ]
             for operation, options, command in (
+                ("--mcp-server-build", ["--wheel"], server_build),
+                ("--uv-build", ["--wheel"], server_build),
                 (
-                    "--uv-build",
+                    "--mcp-server-install",
+                    ["--force", "dist with spaces/package.whl"],
+                    install,
+                ),
+                (
+                    "--uv-tool-install",
+                    ["--force", "dist with spaces/package.whl"],
+                    install,
+                ),
+                (
+                    "--mcp-client-build",
                     ["--wheel"],
                     [
                         "build",
                         "--managed-python",
-                        str(LAUNCHER.parent / "mcp-server"),
+                        str(LAUNCHER.parent / "mcp-client"),
                         "--out-dir",
                         str(LAUNCHER.parent / "dist"),
                     ],
                 ),
                 (
-                    "--uv-tool-install",
-                    ["--force", "dist with spaces/package.whl"],
-                    ["tool", "install", "--managed-python"],
+                    "--mcp-client-install",
+                    ["--force", "dist with spaces/client.whl"],
+                    install,
                 ),
             ):
                 with self.subTest(operation=operation):
@@ -63,7 +83,9 @@ class SetupLauncherTests(unittest.TestCase):
             uv.write_text(
                 "#!/bin/bash\n"
                 'if [ "$1" = version ]; then\n'
-                '    printf "2.3.4rc1\\n"\n'
+                '    [[ $# -eq 4 && "$2" == --short && "$3" == --project &&\n'
+                '       "$4" == "$EXPECTED_PROJECT" ]] || exit 19\n'
+                '    printf "%s\\n" "$PROJECT_VERSION"\n'
                 "else\n"
                 '    printf "%s\\0" "$@"\n'
                 "fi\n",
@@ -71,26 +93,127 @@ class SetupLauncherTests(unittest.TestCase):
             )
             uv.chmod(0o755)
             (dist / "dev_agent_toolkit_tools-2.3.3-py3-none-any.whl").touch()
-            wheel = dist / "dev_agent_toolkit_tools-2.3.4rc1-py3-none-any.whl"
-            command = [str(launcher), "--uv-tool-install"]
-            env = {**os.environ, "PATH": f"{root}:/usr/bin:/bin"}
+            (dist / "dev_agent_toolkit_mcp_client-5.6.6-py3-none-any.whl").touch()
+            projects = (
+                (
+                    "mcp-server",
+                    "2.3.4rc1",
+                    "dev_agent_toolkit_tools",
+                    ("--mcp-server-install", "--uv-tool-install"),
+                    "--mcp-server-build",
+                ),
+                (
+                    "mcp-client",
+                    "5.6.7",
+                    "dev_agent_toolkit_mcp_client",
+                    ("--mcp-client-install",),
+                    "--mcp-client-build",
+                ),
+            )
+            for project, version, package, install_options, build in projects:
+                env = {
+                    **os.environ,
+                    "PATH": f"{root}:/usr/bin:/bin",
+                    "EXPECTED_PROJECT": str(checkout / project),
+                    "PROJECT_VERSION": version,
+                }
+                wheel = dist / f"{package}-{version}-py3-none-any.whl"
+                for install in install_options:
+                    command = [str(launcher), install]
+                    with self.subTest(install=install, wheel="missing"):
+                        result = subprocess.run(
+                            command, cwd=root, env=env, capture_output=True, check=False
+                        )
+                        self.assertEqual(result.returncode, 1)
+                        self.assertIn(
+                            f"./dev-agent-toolkit {build}".encode(), result.stderr
+                        )
+                        self.assertEqual(result.stdout, b"")
 
-            result = subprocess.run(command, cwd=root, env=env, capture_output=True)
-            self.assertEqual(result.returncode, 1)
-            self.assertIn(b"./dev-agent-toolkit --uv-build", result.stderr)
-            self.assertEqual(result.stdout, b"")
+                    wheel.touch()
+                    for options in ([], ["--force"]):
+                        with self.subTest(install=install, options=options):
+                            result = subprocess.run(
+                                [*command, *options],
+                                cwd=root,
+                                env=env,
+                                capture_output=True,
+                                check=False,
+                            )
+                            self.assertEqual(result.returncode, 0, result.stderr)
+                            self.assertEqual(
+                                result.stdout.decode().split("\0")[:-1],
+                                [
+                                    "tool",
+                                    "install",
+                                    "--managed-python",
+                                    *options,
+                                    str(wheel),
+                                ],
+                            )
+                    wheel.unlink()
 
-            wheel.touch()
-            for options in ([], ["--force"]):
-                with self.subTest(options=options):
-                    result = subprocess.run(
-                        [*command, *options], cwd=root, env=env, capture_output=True
-                    )
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertEqual(
-                        result.stdout.decode().split("\0")[:-1],
-                        ["tool", "install", "--managed-python", *options, str(wheel)],
-                    )
+    def test_help_groups_server_and_client_commands_by_distribution(self) -> None:
+        result = subprocess.run(
+            [str(LAUNCHER), "--help"],
+            capture_output=True,
+            check=False,
+            encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        server_help, client_help = result.stdout.split(
+            "dev_agent_toolkit_mcp_client（MCP Client）", 1
+        )
+        self.assertIn("dev_agent_toolkit_tools（MCP Server）", server_help)
+        self.assertIn("--mcp-server-build", server_help)
+        self.assertIn("--mcp-server-install", server_help)
+        self.assertIn("--mcp-client-build", client_help)
+        self.assertIn("--mcp-client-install", client_help)
+
+    def test_mcp_client_uses_the_installed_cli_and_preserves_invocation(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="mcp client launcher ") as directory:
+            root = Path(directory).resolve()
+            bin_dir = root / "installed tools"
+            bin_dir.mkdir()
+            uv = root / "uv"
+            uv.write_text(
+                '#!/bin/bash\n[ "$*" = "tool dir --bin" ] || exit 99\n'
+                'printf "%s\\n" "$TOOL_BIN"\n',
+                encoding="utf-8",
+            )
+            executable = "dev_agent_toolkit_mcp_client"
+            decoy = root / executable
+            decoy.write_text("#!/bin/bash\nexit 98\n", encoding="utf-8")
+            for path in (uv, decoy):
+                path.chmod(0o755)
+            env = {
+                **os.environ,
+                "PATH": f"{root}:/usr/bin:/bin",
+                "TOOL_BIN": str(bin_dir),
+            }
+            arguments = ["--registry", "a b/*.json", "request", "local", "tools/call"]
+            command = [str(LAUNCHER), "--mcp-client", *arguments]
+
+            missing = subprocess.run(
+                command, cwd=root, env=env, capture_output=True, check=False
+            )
+            self.assertEqual(missing.returncode, 1)
+            self.assertIn(b"--mcp-client-install", missing.stderr)
+            self.assertEqual(missing.stdout, b"")
+
+            cli = bin_dir / executable
+            cli.write_text(
+                '#!/bin/bash\nprintf "%s\\0" "$(pwd -P)" "$@"\nexit 24\n',
+                encoding="utf-8",
+            )
+            cli.chmod(0o755)
+            result = subprocess.run(
+                command, cwd=root, env=env, capture_output=True, check=False
+            )
+            self.assertEqual(result.returncode, 24, result.stderr)
+            self.assertEqual(
+                result.stdout.decode().split("\0")[:-1], [str(root), *arguments]
+            )
 
     def test_tool_lookup_failure_does_not_fall_back_to_path_or_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
