@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Annotated, Any
+
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
+from pydantic import Field
 
 from ..services import ai_workflow, api_input_review
 from ..services.ai_workflow import (
@@ -32,9 +35,21 @@ async def generate_skill_content(request: ContentGenerationRequest) -> dict:
     return await ai_workflow.generate_skill_content(request)
 
 
-async def generate_git_commit_message(request: CommitMessageRequest) -> dict:
-    """通过既有内容生成链路起草完整提交信息，不执行Git。"""
-    return await commit_content.generate_git_commit_message(request)
+async def generate_git_commit_message(
+    request: CommitMessageRequest | None = None,
+    repo_path: str | None = None,
+    verification: Annotated[str | None, Field(max_length=2000)] = None,
+) -> dict[str, Any]:
+    """根据调用方证据或实际暂存差异起草完整提交信息。"""
+    if request is not None and repo_path is None and verification is None:
+        return await commit_content.generate_git_commit_message(request)
+    if request is None and repo_path is not None:
+        return await commit_content.generate_from_staged_diff(repo_path, verification)
+    return {
+        "ok": False,
+        "adoptable": False,
+        "error_code": "invalid_commit_message_source",
+    }
 
 
 async def check_api_input(request: ApiInputReviewRequest) -> dict:

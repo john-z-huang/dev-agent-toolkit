@@ -87,6 +87,12 @@
 /bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli call serena get_symbols_overview --arg relative_path "$1"' _ 'src/app.py'
 ```
 
+在仓库根目录，可通过 Toolkit 从暂存区起草提交信息。服务 ID 使用本地登记的名称。
+
+```bash
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli call dev-agent-toolkit-tools generate_git_commit_message --arg repo_path "$PWD"'
+```
+
 `request <server> <method>` 适用于直接发出 MCP 方法请求。`call` 和 `request` 默认执行一次并回收连接及进程。加 `--session <id>` 可复用指定会话的下游连接。
 
 `session open <server>` 返回 `session_id`，首次请求时启动 Server。使用 `call` 或 `request` 加 `--session <id>` 发起后续请求，也可以用 `session request <id> <method>`。`--session` 要求与创建会话时使用同一注册表和服务 ID。会话关闭或过期时，请求会返回会话错误。

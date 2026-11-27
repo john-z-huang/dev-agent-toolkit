@@ -12,7 +12,7 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 - 代码、文档和日志不得包含真实凭据或端点值。错误只返回安全分类，不输出原始异常、请求头、响应正文或环境变量值。工具不能让调用者覆盖模型、凭据或端点。
 - 业务判断及出站审核通过 `client.decisions.create` 固定使用 `gpt-6-luna`。候选生成和质量审查通过 `client.responses.parse` 固定使用 `gpt-6.2-sol`，公开网络搜索通过 `client.responses.create` 及内置 `web_search` 使用同一 Responses 模型。请求失败时禁止回退到其他模型或接口。搜索的自适应强度与引用协议见 [公开网络搜索](web-search.md)。
 - Decisions 当前没有推理强度参数，判断使用 Decisions 自身机制，不发送不支持的 `reasoning` 参数；生成显式指定强度：提交信息为 `low`，计划和历史会话摘要为 `high`，其余为 `medium`，默认值为 `medium`。
-- 生成请求设置 `store=False`，不附加模型可执行的工具。API 不读本地仓库、原始 Codex 会话或 Serena；证据必须由调用者显式提供。输入超出预算时拒绝，不静默截断；普通测试不联网。
+- 生成请求设置 `store=False`，不附加模型可执行的工具。暂存区证据可由本地 MCP Server 按 `repo_path` 读取，其余证据由调用者显式提供。输入超出预算时拒绝，不静默截断；普通测试不联网。
 
 接口依据：[Decisions](https://developers.openai.com/api/docs/guides/decisions)、[创建判断](https://developers.openai.com/api/reference/resources/decisions/methods/create)、[结构化输出](https://developers.openai.com/api/docs/guides/structured-outputs)、[GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna)。
 
@@ -119,7 +119,9 @@ PR 最小合成示例（路径、编号和验证须替换为真实事实）：
 
 提交前需要起草时使用 `generate_git_commit_message`，由工具复用既有 `generate_skill_content(kind="commit_message")` 的 Responses.parse、指令、输出Schema、出站审核及本地格式/署名校验。推理强度沿用 `low`；不添加模型参数或新客户端。用户已指定完整 message 时保留原文，只执行检查。
 
-Agent 准备本次选定提交全部 patch/hunk 的有界摘要、准确路径、前后行为、原因、实际验证和来源，不先生成整篇 message。已暂存时核对实际 cached diff；未暂存明确拟提交范围；分多个提交时分别提供各自范围，不能只给最后一次历史 commit 或整个 PR 改动。
+已暂存时传 `repo_path`，可选传简短的实际 `verification`。工具读取暂存区，记录全部路径与 hunk 范围，并将有界变更摘录交给出站审核与生成。生成完成后再次核对暂存指纹。返回 `message`、`staged_paths`、`staged_sha256`、`missing_facts` 和 `review_notes`。通过 MCP Client CLI 调用时，从 `result.structuredContent` 读取。暂存为空、超出采集上限或生成时发生变化，会返回错误。
+
+尚未暂存时，用 `request` 提供选定提交的 patch/hunk、原因、实际验证和来源。分多个提交时分别提供各自范围。以下是手工证据模式的示例。
 
 ```json
 {"request":{"user_request":"概述本次空输入修复","evidence":[{"reference_id":"D1","origin":"current_observation","content":"拟提交范围仅src/report.py空输入分支：原抛错，现返回空列表；测试未运行。"}]}}
@@ -127,7 +129,7 @@ Agent 准备本次选定提交全部 patch/hunk 的有界摘要、准确路径�
 
 以上路径和事实为合成示例。输入不含kind/source/language_override；focus_questions/output_format可选，重点/结构优先默认但不覆盖固定规则。默认正文仅在需要补充动机或重要改动时填写。返回candidate、used_evidence_refs、missing_facts、review_notes及完整message；正文为空时message只有标题，否则标题后空行加正文。ok=true与validation_scope=local_format_and_attribution只说明本地引用/格式/署名通过，不代表语义或Git范围已校验。adoptable=false或缺口存在不可直接采用；Agent审阅后调用check_commit_message检查最终完整文本，暂存范围变更需重新核对生成依据。生成失败不默认为通过，不自动转手写绕过。
 
-工具仅联网生成单次提交候选，不读取 Git 或文件，也不保存或发布候选。提交仍需用户授权及分支、暂存等适用检查。
+两个模式都只生成候选。提交仍需用户授权及分支、暂存等适用检查。
 
 ## Issue/PR 多轮修订草稿
 

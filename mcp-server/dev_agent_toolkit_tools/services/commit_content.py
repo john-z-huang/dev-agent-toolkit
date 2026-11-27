@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from pydantic import Field, model_validator
 
+from ..infrastructure.paths import _validated_repo_path
 from . import ai_workflow
 from .ai_workflow import ContentGenerationRequest, EvidenceItem, StrictInput
+from .staged_commit import StagedDiffError, read_staged_diff
 
 
 class CommitMessageRequest(StrictInput):
@@ -55,5 +59,64 @@ async def generate_git_commit_message(request: CommitMessageRequest) -> dict:
         "message": message,
         "adoptable": not candidate["missing_facts"],
         "validation_scope": "local_format_and_attribution",
+        "requires_agent_review": True,
+    }
+
+
+def _staged_error(code: str) -> dict:
+    return {"ok": False, "adoptable": False, "error_code": code}
+
+
+async def generate_from_staged_diff(repo_path: str, verification: str | None) -> dict:
+    try:
+        root, _ = await asyncio.to_thread(_validated_repo_path, repo_path)
+    except (OSError, UnicodeError):
+        return _staged_error("staged_diff_unavailable")
+    if root is None:
+        return _staged_error("invalid_repo_path")
+    try:
+        staged = await read_staged_diff(root)
+    except StagedDiffError as error:
+        return _staged_error(str(error))
+
+    evidence = list(staged.evidence)
+    if verification and verification.strip():
+        evidence.append(
+            EvidenceItem(
+                reference_id="V1",
+                origin="user_provided",
+                content=f"调用方报告的实际验证结果：{verification.strip()}",
+            )
+        )
+    result = await generate_git_commit_message(
+        CommitMessageRequest(
+            user_request=(
+                "依据 staged diff 的路径、各 hunk 范围和变更行摘录，为整个暂存区起草单个提交。"
+                "摘录只支持可直接核对的主张；未提供验证结果时省略测试事实，有重要缺口时明确列出。"
+            ),
+            evidence=evidence,
+        )
+    )
+    if not result.get("ok"):
+        return result
+    try:
+        current = await read_staged_diff(root)
+    except StagedDiffError as error:
+        code = str(error)
+        return _staged_error(
+            "staged_diff_changed" if code == "no_staged_changes" else code
+        )
+    if current.sha256 != staged.sha256:
+        return _staged_error("staged_diff_changed")
+
+    candidate = result["candidate"]
+    return {
+        "ok": True,
+        "adoptable": result["adoptable"],
+        "message": result["message"],
+        "staged_paths": staged.paths,
+        "staged_sha256": staged.sha256,
+        "missing_facts": candidate["missing_facts"],
+        "review_notes": candidate["review_notes"],
         "requires_agent_review": True,
     }
