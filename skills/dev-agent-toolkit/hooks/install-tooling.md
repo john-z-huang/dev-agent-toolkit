@@ -26,6 +26,8 @@
 
 两个安装命令都默认使用 `dist/` 中与所选项目及其当前版本匹配的 wheel。缺少对应 wheel 时，安装命令会提示先构建所选项目。更新或重装同版本 wheel 时，在对应安装命令后加 `--force`。指定其他 wheel 时，传入 uv 选项和 wheel 路径。显式相对路径以调用目录为准。
 
+供 Codex 通过终端调用时，可用 `/bin/bash ./dev-agent-toolkit --codex-mcp-client-install` 从当前源码刷新 MCP Client 的 uv tool 并验证 CLI。可用 `--dry-run` 预览，或用 `--force` 强制重装。通过 `/bin/bash ./dev-agent-toolkit --mcp-client --help` 查看客户端用法。
+
 每次将一个操作参数放在首位。`/bin/bash ./dev-agent-toolkit` 无参数只打印帮助。可在所选操作后加 `--help`。从其他目录调用时用 `dev-agent-toolkit` 的绝对路径，保持入口和源码组件的相对布局。Skill 和全局指令预览依赖已安装的管理 CLI。选择安装前核对它的来源。
 
 ## 离开条件

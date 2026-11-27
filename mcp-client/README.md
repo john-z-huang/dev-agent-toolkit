@@ -13,7 +13,14 @@
 
 使用 Python API 时，在调用方的 Python 环境中安装 `dev_agent_toolkit_mcp_client` 发行包，再从同名包导入。
 
-在完整的 Dev Agent Toolkit 源码仓库中，可从仓库根目录使用启动器构建、安装和运行 Client。
+要在 Codex 中通过终端调用 CLI，从完整源码仓库的根目录执行以下命令，从当前源码安装并验证入口。加 `--dry-run` 可预览，加 `--force` 可强制重装。
+
+```bash
+/bin/bash ./dev-agent-toolkit --codex-mcp-client-install
+/bin/bash ./dev-agent-toolkit --mcp-client --help
+```
+
+也可从仓库根目录使用启动器构建 wheel、安装并运行 Client。
 
 ```bash
 /bin/bash ./dev-agent-toolkit --mcp-client-build

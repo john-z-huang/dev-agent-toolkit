@@ -55,6 +55,26 @@
 
 ## 独立 MCP Client
 
+### 供 Codex 调用
+
+从仓库根目录执行以下命令。预览会显示源码路径和验证步骤。安装会从当前源码刷新 uv tool，包括版本号未变化的情况，并检查 `uv tool dir --bin` 下的 CLI 能否运行 `--help`。
+
+```bash
+/bin/bash ./dev-agent-toolkit --codex-mcp-client-install --dry-run
+/bin/bash ./dev-agent-toolkit --codex-mcp-client-install
+/bin/bash ./dev-agent-toolkit --mcp-client --help
+```
+
+强制重装时加 `--force`。也可直接执行安装脚本。
+
+```bash
+/bin/bash -c 'exec uv run --managed-python -- scripts/setup-codex-mcp-client.py'
+```
+
+Codex 通过终端调用这个 CLI。MCP Client 使用自己的注册表管理要连接的 STDIO Server。注册和调用示例见 [独立 MCP Client](mcp-client/README.md#注册-server)。
+
+### 从 wheel 安装
+
 在 macOS 或 Linux 上，从仓库根目录构建并安装 `dev_agent_toolkit_mcp_client`，再通过启动器检查 CLI。
 
 ```bash

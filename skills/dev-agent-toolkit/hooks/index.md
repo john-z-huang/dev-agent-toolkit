@@ -24,5 +24,5 @@
 | 构建 sdist/wheel 或安装、重装项目工具包 | [项目工具](install-tooling.md) |
 | 安装或更新已安装的 Skill 快照 | [Skill](install-skill.md) |
 | 创建、接管或更新 Codex 全局 AGENTS.md | [全局指令](install-global-agents.md) |
-| 安装、更新 Codex MCP 或修复转发 | [Codex MCP](install-codex-mcp.md) |
+| 注册 Codex MCP Server 或修复转发 | [Codex MCP](install-codex-mcp.md) |
 | 安装或更新 Pi MCP 及注册 | [Pi MCP](install-pi-mcp.md) |

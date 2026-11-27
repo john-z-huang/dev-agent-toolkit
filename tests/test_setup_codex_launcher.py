@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -169,6 +170,81 @@ class SetupLauncherTests(unittest.TestCase):
         self.assertIn("--mcp-server-install", server_help)
         self.assertIn("--mcp-client-build", client_help)
         self.assertIn("--mcp-client-install", client_help)
+        self.assertIn("--codex-mcp-client-install", client_help)
+
+    def test_codex_client_setup_installs_from_source_and_verifies_the_cli(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="codex client setup ") as directory:
+            root = Path(directory).resolve()
+            bin_dir = root / "tool bin"
+            bin_dir.mkdir()
+            log = root / "calls"
+            uv = root / "uv"
+            uv.write_text(
+                "#!/bin/bash\n"
+                'if [[ "$1" == run ]]; then\n'
+                '    [[ "$2" == --managed-python && "$3" == -- ]] || exit 19\n'
+                "    shift 3\n"
+                '    exec "$SETUP_PYTHON" "$@"\n'
+                "fi\n"
+                'printf "%s\\0" "$@" >> "$CALL_LOG"\n'
+                'case "$1 $2" in\n'
+                '    "tool install") exit "$INSTALL_STATUS" ;;\n'
+                '    "tool dir") printf "%s\\n" "$TOOL_BIN" ;;\n'
+                "    *) exit 19 ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            cli = bin_dir / "dev_agent_toolkit_mcp_client"
+            cli.write_text(
+                '#!/bin/bash\nprintf "%s\\0" "$@" >> "$CALL_LOG"\n',
+                encoding="utf-8",
+            )
+            for path in (uv, cli):
+                path.chmod(0o755)
+            codex_home = root / "codex"
+            env = {
+                **os.environ,
+                "PATH": f"{root}:/usr/bin:/bin",
+                "SETUP_PYTHON": sys.executable,
+                "TOOL_BIN": str(bin_dir),
+                "CALL_LOG": str(log),
+                "CODEX_HOME": str(codex_home),
+            }
+            source = str(LAUNCHER.parent / "mcp-client")
+            install = ["tool", "install", "--managed-python"]
+            package = ["--reinstall-package", "dev-agent-toolkit-mcp-client", source]
+            verify = ["tool", "dir", "--bin", "--help"]
+            for options, install_status, status, expected in (
+                (["--help"], 0, 0, []),
+                (["--dry-run"], 0, 0, []),
+                ([], 0, 0, [*install, *package, *verify]),
+                (["--force"], 0, 0, [*install, "--force", *package, *verify]),
+                ([], 23, 1, [*install, *package]),
+            ):
+                with self.subTest(options=options, install_status=install_status):
+                    log.write_bytes(b"")
+                    result = subprocess.run(
+                        [
+                            "/bin/bash",
+                            str(LAUNCHER),
+                            "--codex-mcp-client-install",
+                            *options,
+                        ],
+                        cwd=root,
+                        env={**env, "INSTALL_STATUS": str(install_status)},
+                        capture_output=True,
+                        check=False,
+                        encoding="utf-8",
+                    )
+                    self.assertEqual(result.returncode, status, result.stderr)
+                    self.assertEqual(
+                        log.read_bytes().decode().split("\0")[:-1], expected
+                    )
+                    self.assertFalse(codex_home.exists())
+                    if options == ["--dry-run"]:
+                        self.assertIn(source, result.stdout)
+                    if expected and status == 0:
+                        self.assertIn(str(cli), result.stdout)
 
     def test_mcp_client_uses_the_installed_cli_and_preserves_invocation(self) -> None:
         with tempfile.TemporaryDirectory(prefix="mcp client launcher ") as directory:
@@ -332,37 +408,6 @@ class SetupLauncherTests(unittest.TestCase):
                         log.read_bytes().decode().split("\0")[:-1], uv_args
                     )
                     self.assertEqual(result.stdout.decode().split("\0")[:-1], cli_args)
-
-    def test_explicit_mcp_operations_select_install_or_update(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            uv = root / "uv"
-            uv.write_text("#!/bin/bash\nprintf '%s\\0' \"$@\"\n", encoding="utf-8")
-            uv.chmod(0o755)
-            for operation, flags in (
-                ("--mcp-install", ["--install"]),
-                ("--mcp-update", ["--install", "--force"]),
-            ):
-                with self.subTest(operation=operation):
-                    result = subprocess.run(
-                        [str(LAUNCHER), operation, "--dry-run"],
-                        cwd=LAUNCHER.parent,
-                        env={**os.environ, "PATH": f"{root}:/usr/bin:/bin"},
-                        capture_output=True,
-                        check=False,
-                    )
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertEqual(
-                        result.stdout.decode().split("\0")[:-1],
-                        [
-                            "run",
-                            "--managed-python",
-                            "--",
-                            str(LAUNCHER.parent / "scripts" / "setup-codex-mcp.py"),
-                            *flags,
-                            "--dry-run",
-                        ],
-                    )
 
     def test_launch_from_other_directory_preserves_arguments_and_exit_status(
         self,

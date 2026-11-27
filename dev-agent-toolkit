@@ -52,12 +52,16 @@ case "${1:-}" in
         shift
         install_tool_wheel "$script_dir/mcp-client" dev_agent_toolkit_mcp_client --mcp-client-build "$@"
         ;;
+    --codex-mcp-client-install)
+        shift
+        exec uv run --managed-python -- "$script_dir/scripts/setup-codex-mcp-client.py" "$@"
+        ;;
     --mcp-client)
         shift
         tool_bin="$(uv tool dir --bin)" || exit $?
         client="$tool_bin/dev_agent_toolkit_mcp_client"
         if [[ ! -x "$client" ]]; then
-            printf '找不到已安装的 MCP Client，请先运行 /bin/bash ./dev-agent-toolkit --mcp-client-install。\n' >&2
+            printf '找不到已安装的 MCP Client，请先运行 /bin/bash ./dev-agent-toolkit --codex-mcp-client-install 或 --mcp-client-install。\n' >&2
             exit 1
         fi
         exec "$client" "$@"
@@ -78,14 +82,6 @@ case "${1:-}" in
         esac
         exec "$tool_bin/dev-agent-toolkit" "$@"
         ;;
-    --mcp-install)
-        shift
-        set -- --install "$@"
-        ;;
-    --mcp-update)
-        shift
-        set -- --install --force "$@"
-        ;;
     --help|-h|"")
         cat <<'HELP'
 用法：/bin/bash ./dev-agent-toolkit 操作参数 [对应操作的选项]
@@ -94,27 +90,26 @@ dev_agent_toolkit_tools（MCP Server）
   --mcp-server-build  构建 mcp-server 发行包，输出到仓库的 dist/
   --mcp-server-install [--force]  安装 dist/ 中与服务端版本匹配的 wheel
   --mcp-server-install [uv 选项] <wheel 路径>  安装指定服务端 wheel
+  --server NAME [--dry-run]  将已安装的服务注册到 Codex 并配置环境变量转发
+  --env-only [--dry-run]  修复 Codex 中已注册服务的环境变量转发
   --uv-build 和 --uv-tool-install 分别是服务端构建和安装的别名
 
 dev_agent_toolkit_mcp_client（MCP Client）
   --mcp-client-build  构建 mcp-client 发行包，输出到仓库的 dist/
   --mcp-client-install [--force]  安装 dist/ 中与客户端版本匹配的 wheel
   --mcp-client-install [uv 选项] <wheel 路径>  安装指定客户端 wheel
+  --codex-mcp-client-install [--force] [--dry-run]  从当前源码安装并验证供 Codex 调用的 CLI
   --mcp-client [CLI 参数]  调用已安装的 dev_agent_toolkit_mcp_client
 
-Codex 注册与资源管理
-  --mcp-install     安装 MCP 服务，并在 Codex 中注册和配置
-  --mcp-update      更新 MCP 服务，并在 Codex 中注册和配置
+Skill 与全局指令
   --skills-install  安装技能（Skill）
   --skills-update   更新技能（Skill）
   --agents-install  从仓库模板创建全局 AGENTS.md；已有文件须显式接管
   --agents-update   从仓库模板更新全局 AGENTS.md，保留备份与冲突校验
 
-MCP 服务、Skill 和 AGENTS.md 的安装与更新会从当前源码刷新服务工具。
-Skill 和 AGENTS.md 与 MCP 共用发行包。每次只更新选定资源。
-预览和帮助跳过构建与工具刷新。Skill 和 AGENTS.md 的预览使用已安装工具。
-在操作参数后加 --help 查看对应选项。MCP 服务、Skill 和 AGENTS.md 操作支持 --dry-run。
-兼容原 MCP 参数，例如 --install --force 或 --env-only。
+Skill 和 AGENTS.md 的安装与更新会从当前源码刷新服务工具。
+Skill 和 AGENTS.md 操作支持 --dry-run，预览和帮助使用已安装的工具。
+在操作参数后加 --help 查看对应选项。
 HELP
         exit 0
         ;;
