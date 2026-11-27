@@ -71,6 +71,41 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                     response, {"ok": False, "status": "tool_not_available"}
                 )
 
+    async def test_discovers_environment_names_in_both_stdio_protocols(self) -> None:
+        params = StdioServerParameters(
+            command=sys.executable,
+            args=["-m", "dev_agent_toolkit_tools.server"],
+            cwd=ROOT / "mcp-server",
+        )
+        for mode in ("auto", "legacy"):
+            with self.subTest(mode=mode):
+                async with asyncio.timeout(10), Client(params, mode=mode) as client:
+                    catalog = {
+                        tool.name: tool for tool in (await client.list_tools()).tools
+                    }
+                    discovery = catalog["get_mcp_environment"]
+                    self.assertTrue(discovery.annotations.read_only_hint)
+                    reply = await client.call_tool("get_mcp_environment")
+                    self.assertFalse(reply.is_error)
+                    declaration = reply.structured_content
+                    self.assertEqual(set(declaration), {"names"})
+                    self.assertEqual(
+                        set(declaration["names"]),
+                        {
+                            "OPENAI_API_KEY",
+                            "OPENAI_BASE_URL",
+                            "OPENAI_TIMEOUT_MAX_RETRIES",
+                            "HTTP_PROXY",
+                            "HTTPS_PROXY",
+                            "ALL_PROXY",
+                            "NO_PROXY",
+                            "http_proxy",
+                            "https_proxy",
+                            "all_proxy",
+                            "no_proxy",
+                        },
+                    )
+
     async def test_issue_pr_metadata_over_stdio_initialize_and_tools_list(self) -> None:
         from dev_agent_toolkit_tools.services.ai_workflow import (
             ContentGenerationRequest,
@@ -311,9 +346,10 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
     async def test_all_tools_registered_with_described_schemas(self) -> None:
         self.assertIn("本地开发工作流 MCP 服务", complete_server.description)
         tools = await complete_server.list_tools()
-        self.assertEqual(len(tools), 49)
+        self.assertEqual(len(tools), 50)
         by_name = {tool.name: tool for tool in tools}
-        self.assertEqual(len(by_name), 49)
+        self.assertEqual(len(by_name), len(tools))
+        self.assertIn("get_mcp_environment", by_name)
         self.assertNotIn("decide_skill_workflow", by_name)
         for tool in tools:
             self.assertTrue(tool.description, tool.name)

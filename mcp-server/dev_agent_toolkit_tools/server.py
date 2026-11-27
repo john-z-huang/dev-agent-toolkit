@@ -9,6 +9,7 @@ from mcp.types import ToolAnnotations
 from pydantic import ValidationError
 
 from . import SERVER_NAME
+from .infrastructure.openai_client import OPENAI_ENVIRONMENT_NAMES
 from .services.build_info import SERVER_VERSION, get_mcp_server_build_info
 from .services.local_mcp import call_updated_local_mcp
 from .tools._descriptions import SERVER_DESCRIPTION, SERVER_INSTRUCTIONS
@@ -38,6 +39,11 @@ class _SafeMCPServer(MCPServer):
             raise
 
 
+def get_mcp_environment() -> dict[str, list[str]]:
+    """返回本服务为联网调用所需的变量名称。可在仅有基础 STDIO 环境时调用。"""
+    return {"names": list(OPENAI_ENVIRONMENT_NAMES)}
+
+
 mcp = _SafeMCPServer(
     SERVER_NAME,
     description=SERVER_DESCRIPTION,
@@ -52,6 +58,12 @@ register_codex_session_fact_tools(mcp)
 register_ai_workflow_tools(mcp)
 register_web_search_tools(mcp)
 register_serena_memory_tools(mcp)
+mcp.add_tool(
+    get_mcp_environment,
+    annotations=ToolAnnotations(
+        read_only_hint=True, destructive_hint=False, open_world_hint=False
+    ),
+)
 _register_adapter(
     mcp,
     get_mcp_server_build_info,

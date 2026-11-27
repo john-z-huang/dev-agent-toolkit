@@ -46,6 +46,19 @@ MAX_REQUEST_BYTES = 48 * 1024
 T = TypeVar("T")
 _LOG_REDACTION_MARKER = "[REDACTED]"
 CLIENT_CLEANUP_SECONDS = 5.0
+_OPENAI_VALUE_ENV_NAMES = (
+    "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "no_proxy",
+)
+OPENAI_ENVIRONMENT_NAMES = (*_OPENAI_VALUE_ENV_NAMES, "OPENAI_TIMEOUT_MAX_RETRIES")
 # 每个任务独立保存进行中请求的脱敏值；配置轮换不应让旧请求的诊断泄漏。
 _active_secrets: ContextVar[tuple[str, ...]] = ContextVar(
     "openai_active_secrets", default=()
@@ -69,19 +82,7 @@ class _JsonModelDump(Protocol):
 
 def _configuration_secrets() -> tuple[str, ...]:
     """收集当前配置的脱敏值，仅在进行中的请求上下文中保留。"""
-    env_names = (
-        "OPENAI_API_KEY",
-        "OPENAI_BASE_URL",
-        "HTTP_PROXY",
-        "HTTPS_PROXY",
-        "ALL_PROXY",
-        "NO_PROXY",
-        "http_proxy",
-        "https_proxy",
-        "all_proxy",
-        "no_proxy",
-    )
-    secrets: list[str] = [os.environ.get(name, "").strip() for name in env_names]
+    secrets = [os.environ.get(name, "").strip() for name in _OPENAI_VALUE_ENV_NAMES]
     proxy_names = (
         "HTTP_PROXY",
         "HTTPS_PROXY",
