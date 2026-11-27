@@ -6,6 +6,7 @@
 |---|---|
 | 修改项目内容 | [项目修改](project-change.md) |
 | 代码语义、JSON/YAML/Markdown/TOML/HTML 结构化读取、已安装依赖源码阅读或 Serena 项目配置 | [代码理解与 Serena](code-understanding.md) |
+| 生成终端命令（执行或仅展示给用户） | [命令前置说明](environment.md#命令前置说明) |
 | 选择运行环境，执行 Python、JavaScript 或 TypeScript 命令，编写 Shell 脚本，或进行格式化与静态检查 | [执行环境](environment.md) |
 | 创建、同步、恢复或移除 worktree | [Worktree](worktree.md) |
 | 暂存或提交 | [暂存与提交](git-commit.md) |
