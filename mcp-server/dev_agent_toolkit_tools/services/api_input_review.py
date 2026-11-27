@@ -262,6 +262,25 @@ def _review_client_failure(
     return result
 
 
+def _audit_input(purpose: str, content: str) -> str:
+    return json.dumps(
+        {"purpose": purpose, "content": content},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def review_request_fits(purpose: str, content: str) -> bool:
+    limit = min(api_input_policy.MAX_FIELD_BYTES, openai_client.MAX_REQUEST_BYTES)
+    if any(len(value.encode("utf-8")) > limit for value in (purpose, content)):
+        return False
+    payload = openai_client._policy_review_payload(
+        _audit_input(purpose, content), _questions()
+    )
+    return len(openai_client._payload_text(payload).encode("utf-8")) <= limit
+
+
 async def review_api_input(purpose: str, content: str) -> dict[str, Any]:
     """检测完整用途与内容，本地通过后异步请求 Decisions 逐字段分类。
 
@@ -272,16 +291,10 @@ async def review_api_input(purpose: str, content: str) -> dict[str, Any]:
         return _local_result(purpose, content, local)
 
     result = _base_result(purpose, content)
-    audit_input = json.dumps(
-        {"purpose": purpose, "content": content},
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
     try:
         response = await openai_client._create_policy_review_decision(
             purpose="审查已提供的双字段请求，判断其是否适合安全地发送给外部 API。",
-            content=audit_input,
+            content=_audit_input(purpose, content),
             questions=_questions(),
         )
     except openai_client.OpenAIWorkflowError as error:

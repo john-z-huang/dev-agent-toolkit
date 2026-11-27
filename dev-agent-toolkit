@@ -3,84 +3,101 @@
 # 从项目根目录定位实现，使入口不依赖调用者的工作目录。
 script_dir="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
 
-refresh_management_tool() {
-    local argument
-    for argument in "$@"; do
-        [[ "$argument" == -- ]] && break
-        # argparse 也接受无歧义的长选项缩写。
-        if [[ "$argument" == -h || ( "$argument" == --?* &&
-              ( --help == "$argument"* || --dry-run == "$argument"* ) ) ]]; then
-            return 0
+install_tool_wheel() {
+    local project_dir="$1" wheel_prefix="$2" build_option="$3"
+    local version wheel
+    shift 3
+    if [[ $# -eq 0 || ( $# -eq 1 && $1 == --force ) ]]; then
+        version="$(uv version --short --project "$project_dir")" || exit $?
+        wheel="$script_dir/dist/$wheel_prefix-$version-py3-none-any.whl"
+        if [[ ! -f "$wheel" ]]; then
+            printf '找不到当前版本的 wheel，请先运行 /bin/bash ./dev-agent-toolkit %s。\n  %s\n' \
+                "$build_option" "$wheel" >&2
+            exit 1
         fi
-    done
-    # 版本号未变化时也重新构建本地包。
-    uv tool install --managed-python --reinstall-package dev-agent-toolkit-tools \
-        "$script_dir/mcp-server" >&2
+        set -- "$@" "$wheel"
+    fi
+    exec uv tool install --managed-python "$@"
 }
 
 case "${1:-}" in
-    --uv-build)
+    --mcp-server-build|--uv-build)
         shift
         exec uv build --managed-python "$script_dir/mcp-server" --out-dir "$script_dir/dist" "$@"
         ;;
-    --uv-tool-install)
+    --mcp-server-install|--uv-tool-install)
         shift
-        if [[ $# -eq 0 || ( $# -eq 1 && $1 == --force ) ]]; then
-            version="$(uv version --short --project "$script_dir/mcp-server")" || exit $?
-            wheel="$script_dir/dist/dev_agent_toolkit_tools-$version-py3-none-any.whl"
-            if [[ ! -f "$wheel" ]]; then
-                printf '找不到当前版本的 wheel，请先运行 ./dev-agent-toolkit --uv-build。\n  %s\n' "$wheel" >&2
-                exit 1
-            fi
-            set -- "$@" "$wheel"
-        fi
-        exec uv tool install --managed-python "$@"
+        install_tool_wheel "$script_dir/mcp-server" dev_agent_toolkit_tools --mcp-server-build "$@"
         ;;
-    --skills-install|--skills-update|--agents-install|--agents-update)
+    --mcp-client-build)
+        shift
+        exec uv build --managed-python "$script_dir/mcp-client" --out-dir "$script_dir/dist" "$@"
+        ;;
+    --mcp-client-install)
+        shift
+        install_tool_wheel "$script_dir/mcp-client" dev_agent_toolkit_mcp_client --mcp-client-build "$@"
+        ;;
+    --codex-mcp-client-install)
+        shift
+        exec uv run --managed-python -- "$script_dir/scripts/setup-codex-mcp-client.py" "$@"
+        ;;
+    --mcp-client)
+        shift
+        tool_bin="$(uv tool dir --bin)" || exit $?
+        client="$tool_bin/dev_agent_toolkit_mcp_client_cli"
+        if [[ ! -x "$client" ]]; then
+            printf '找不到已安装的 MCP Client，请先运行 /bin/bash ./dev-agent-toolkit --codex-mcp-client-install 或 --mcp-client-install。\n' >&2
+            exit 1
+        fi
+        exec "$client" "$@"
+        ;;
+    --skills-install|--skills-update|--skills-show|--agents-install|--agents-update|--agents-show)
         operation="$1"
         shift
-        # 管理资源必须使用完整发行包入口，不能从可编辑源码环境导入。
-        refresh_management_tool "$@" || exit $?
-        tool_bin="$(uv tool dir --bin)" || exit $?
         case "$operation" in
             --skills-install) set -- skills install "$@" ;;
             --skills-update) set -- skills update "$@" ;;
-            --agents-install|--agents-update)
-                # 项目入口默认读取当前模板，调用方可用后面的 --source 覆盖。
-                set -- agents update --source "$script_dir/instructions/codex-global.md" "$@"
-                ;;
+            --skills-show) set -- skills show "$@" ;;
+            --agents-install|--agents-update) set -- agents update "$@" ;;
+            --agents-show) set -- agents show "$@" ;;
         esac
-        exec "$tool_bin/dev-agent-toolkit" "$@"
-        ;;
-    --mcp-install)
-        shift
-        set -- --install "$@"
-        ;;
-    --mcp-update)
-        shift
-        set -- --install --force "$@"
+        python="$(uv python find --system --no-python-downloads '>=3.11')" || exit $?
+        PYTHONPATH="$script_dir/mcp-server" exec "$python" -B -P -S -m dev_agent_toolkit_tools.cli \
+            --source-root "$script_dir" "$@"
         ;;
     --help|-h|"")
         cat <<'HELP'
-用法：./dev-agent-toolkit 操作参数 [对应操作的选项]
-  --uv-build        仅构建 mcp-server 发行包，输出到仓库的 dist/
-  --uv-tool-install [--force]  安装 dist/ 中与项目版本匹配的 wheel
-  --uv-tool-install [uv 选项] <wheel 路径>  安装指定 wheel
-  --mcp-install     安装 MCP 服务，并在 Codex 中注册和配置
-  --mcp-update      更新 MCP 服务，并在 Codex 中注册和配置
+用法：/bin/bash ./dev-agent-toolkit 操作参数 [对应操作的选项]
+
+dev_agent_toolkit_tools（MCP Server）
+  --mcp-server-build  构建 mcp-server 发行包，输出到仓库的 dist/
+  --mcp-server-install [--force]  安装 dist/ 中与服务端版本匹配的 wheel
+  --mcp-server-install [uv 选项] <wheel 路径>  安装指定服务端 wheel
+  --uv-build 和 --uv-tool-install 分别是服务端构建和安装的别名
+
+dev_agent_toolkit_mcp_client（MCP Client CLI）
+  --mcp-client-build  构建 mcp-client 发行包，输出到仓库的 dist/
+  --mcp-client-install [--force]  安装 dist/ 中与客户端版本匹配的 wheel
+  --mcp-client-install [uv 选项] <wheel 路径>  安装指定客户端 wheel
+  --codex-mcp-client-install [--force] [--dry-run]  从当前源码安装并验证供 Codex 调用的 CLI
+  --mcp-client [CLI 参数]  调用已安装的 dev_agent_toolkit_mcp_client_cli
+
+Skill 与全局指令
   --skills-install  安装技能（Skill）
   --skills-update   更新技能（Skill）
+  --skills-show     查看 Skill 安装状态
   --agents-install  从仓库模板创建全局 AGENTS.md；已有文件须显式接管
   --agents-update   从仓库模板更新全局 AGENTS.md，保留备份与冲突校验
-正式安装和更新先从当前源码重建并刷新相应的 uv tool。
-Skill 和 AGENTS.md 与 MCP 共用发行包。每次只更新选定资源。
-预览和帮助跳过构建与工具刷新。Skill 和 AGENTS.md 的预览使用已安装工具。
-在操作参数后加 --help 查看对应选项。MCP、Skill 和 AGENTS.md 操作支持 --dry-run。
-兼容原 MCP 参数，例如 --install --force 或 --env-only。
+  --agents-show     查看全局 AGENTS.md 状态
+
+Skill 和 AGENTS.md 由 Python 直接管理 checkout 中的资源。
+安装和更新支持 --dry-run。
+在操作参数后加 --help 查看对应选项。
 HELP
         exit 0
         ;;
+    *)
+        printf '未知操作：%s。请查看 --help。\n' "$1" >&2
+        exit 2
+        ;;
 esac
-
-# exec 保留退出状态与信号语义；参数逐项转发，避免空格或通配符被重新解释。
-exec uv run --managed-python -- "$script_dir/scripts/setup-codex-mcp.py" "$@"

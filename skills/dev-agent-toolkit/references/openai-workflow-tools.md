@@ -6,13 +6,13 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 
 - Decisions、Responses 和输入安全审核的每次 API 请求统一显式使用 `OPENAI_TIMEOUT_SECONDS = 180.0`（3 分钟）。`OPENAI_TIMEOUT_MAX_RETRIES` 为可选环境变量，配置非负十进制整数重试次数：未设置默认 `5`，`0` 关闭；空字符串、负数或其他非法值在任何请求前返回 `invalid_timeout_max_retries`，不静默回退。该变量不改变模型、凭据、地址或代理配置，不接受工具参数覆盖。
 - 仅 SDK `APITimeoutError` 触发调用处重试，默认首次加 5 次重试，最多 6 次。每次超时后立即串行重发同一受检请求，每次新建客户端并重新读取当前凭据、端点及代理，最后关闭客户端；每个独立请求读取当前重试配置，SDK 的 `max_retries=0` 避免重试叠加。输入审核和业务请求各有预算，不在外层重新运行整条工作流。认证、权限、连接错误、HTTP 错误、拒绝和无效结果不自动重试；预算耗尽返回安全 `api_timeout`。Agent 收到该失败时不再自动叠加整工具重试，按恢复条件处理。
-- 超时请求可能已经到达服务端，重试可能产生重复 API 用量。180 秒为底层请求超时配置，不能当作整工具总时限：普通生成有审核和生成两个阶段，Issue/PR 还有审核和质量审查，共四个阶段；默认每阶段最多 6 次请求。MCP 客户端的调用时限（Codex `tool_timeout_sec`，Pi `timeout`，单位秒）须覆盖所需阶段和重试预算，具体还受网络各阶段超时语义影响，不能保证固定墙钟上限。本次不自动覆盖已有客户端时限。
+- 超时请求可能已经到达服务端，重试可能产生重复 API 用量。180 秒为单次底层请求时限。普通生成有审核和生成两个阶段，Issue/PR 还有审核和质量审查，共四个阶段。默认每阶段最多 6 次请求。Client CLI 注册项的 `request_timeout` 以秒为单位，须考虑调用阶段与重试预算。调整时限需获配置授权。
 - 每次实际请求均从本地环境读取 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，两者都必须非空，并显式传给 SDK。缺少任意一项即停止请求，不使用 SDK 的默认凭据或地址，不从工具参数、其他变量或配置文件补齐。
 - 所有 Decisions 和 Responses 请求共用 `httpx2.AsyncClient(trust_env=True)`，每次调用新建并显式传入 SDK，结束后释放；SDK 初始化失败也关闭已创建的 HTTP 客户端。发行包依赖 `httpx2[socks]`，随安装提供 SOCKS 支持。代理从服务进程的 `HTTP_PROXY`、`HTTPS_PROXY`、`ALL_PROXY`、`NO_PROXY`（含小写形式）读取，选择及绕过规则遵循 httpx2；不接受工具参数覆盖代理。未配置代理时按库默认直连，目标匹配 `NO_PROXY` 时绕过代理；代理配置或连接失败不会回退直连。
 - 代码、文档和日志不得包含真实凭据或端点值。错误只返回安全分类，不输出原始异常、请求头、响应正文或环境变量值。工具不能让调用者覆盖模型、凭据或端点。
 - 业务判断及出站审核通过 `client.decisions.create` 固定使用 `gpt-6-luna`。候选生成和质量审查通过 `client.responses.parse` 固定使用 `gpt-6.2-sol`，公开网络搜索通过 `client.responses.create` 及内置 `web_search` 使用同一 Responses 模型。请求失败时禁止回退到其他模型或接口。搜索的自适应强度与引用协议见 [公开网络搜索](web-search.md)。
 - Decisions 当前没有推理强度参数，判断使用 Decisions 自身机制，不发送不支持的 `reasoning` 参数；生成显式指定强度：提交信息为 `low`，计划和历史会话摘要为 `high`，其余为 `medium`，默认值为 `medium`。
-- 生成请求设置 `store=False`，不附加模型可执行的工具。API 不读本地仓库、原始 Codex 会话或 Serena；证据必须由调用者显式提供。输入超出预算时拒绝，不静默截断；普通测试不联网。
+- 生成请求设置 `store=False`，不附加模型可执行的工具。暂存区证据可由本地 MCP Server 按 `repo_path` 读取，其余证据由调用者显式提供。输入超出预算时拒绝，不静默截断；普通测试不联网。
 
 接口依据：[Decisions](https://developers.openai.com/api/docs/guides/decisions)、[创建判断](https://developers.openai.com/api/reference/resources/decisions/methods/create)、[结构化输出](https://developers.openai.com/api/docs/guides/structured-outputs)、[GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna)。
 
@@ -20,25 +20,13 @@ Python MCP Server 通过 OpenAI Python SDK 执行规约分支判断和内容生�
 
 `check_api_input` 按 [API 输入审核](api-input-review.md) 的默认许可先本地检查，再联网审核。业务 Decisions、生成和质量审查均有自己的最终出站门禁，仅在实际发送的内容快照通过后继续。离线测试分别模拟审核与业务请求。
 
-### Codex stdio 环境传递与排查
+### 本地 MCP Client 环境传递与排查
 
-安装为 uv tool 后，服务仍只读取自身进程的环境变量。Codex 启动环境须持有非空的 `OPENAI_API_KEY`、`OPENAI_BASE_URL`，并在 `[mcp_servers.dev_agent_toolkit]` 的 `env_vars` 中转发这两个名称及所需标准代理变量。自定义重试次数时，也转发 `OPENAI_TIMEOUT_MAX_RETRIES`。源码 `dev-agent-toolkit` 会合并这些名称。终端中手动运行成功只验证了该次进程的配置。脚本入口见 [Codex MCP 合同](../hooks/install-codex-mcp.md)，字段语义见 [Codex MCP 官方说明](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)。
-
-需要用源码辅助脚本修复已有注册时，在源码仓库根目录运行 `./dev-agent-toolkit --env-only`；可添加 `--dry-run` 只检查不写入，或用 `--server NAME`、`--config PATH` 指定目标。无参数执行入口仅打印使用帮助；安装或更新 MCP 须显式使用 `--mcp-install` 或 `--mcp-update`。`--env-only` 只合并变量名，保留其他配置，不读取凭据或代理值，也不发起 API 请求。它不会替调用进程加载凭据、配置代理服务、启用额外授权或修改 MCP 的请求配置规则。
-
-更改配置后须重新加载 MCP 服务，必要时退出后重开客户端以重新创建进程。`env_vars` 不会读取 Shell 配置文件或 `.env` 文件，也不会让已运行的子进程自动获得新变量；本服务不增加凭据文件、其他变量或默认地址回退。
+通过 [本地 MCP Client](mcp-tools.md#通过本地-mcp-client-调用) 调用已登记的服务。Client CLI 通过服务的 `get_mcp_environment` 发现所需变量名，从自身进程环境中取值，只转发给相应下游进程。启动 CLI 的环境须持有非空的 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`，以及所需代理变量。工具参数和注册表只承载调用或启动配置，凭据由进程环境提供。显式会话使用 `session open` 时的环境，变量变化后用新会话。
 
 `missing_api_key` 和 `missing_base_url` 都是在创建 SDK 客户端、发送请求之前返回的本地配置错误。服务先检查 Key，再检查 Base URL；两项都缺失或为空时，先返回 `missing_api_key`，不代表 Base URL 已通过检查。排查仅记录进程或配置位置及变量是否存在、是否非空，不输出真实值；配置修复后再用最小必要事实验证请求。
 
 代理配置无效或客户端初始化失败返回 `client_initialization_failed`；请求超时返回 `api_timeout`，代理/网络连接失败通常返回 `api_connection_failed`，代理返回的 HTTP 错误可表现为 `api_status_error`。这些分类不包含原始异常或代理认证信息；排查时核对代理可用性、变量是否传入，以及目标是否被 `NO_PROXY` 排除，不以错误触发直连重试。
-
-### Pi stdio 环境传递与工具时限
-
-Pi 原生 MCP 使用用户级 `~/.pi/agent/mcp.json` 或已信任项目的 `.pi/mcp.json`，不是 Codex TOML 配置。stdio 继承启动 Pi 的进程环境；启动时须持有非空 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和所需代理变量。无需照搬 `env_vars`，也不要写入真实配置值。本服务仍只读自身进程环境，不加载凭据文件或回退。仅检查变量存在性/非空状态。
-
-Pi 的服务级 `timeout` 单位为秒，默认 60，不能覆盖单次最长 180 秒及多阶段重试预算；按当前调用阶段与重试配置审阅并设置足够时限，不保证固定墙钟上限，不自动修改用户配置。超时不能当作服务零请求或无副作用，不自动重跑整工具。修改服务配置后 `/reload` 或重新连接；启动环境改变时必要时退出并重启 Pi。替代原生 MCP 的扩展按其实际配置处理，不强套原生配置。
-
-注册说明见 [Pi MCP 合同](../hooks/install-pi-mcp.md)。
 
 ## 判断工具与硬校验
 
@@ -119,15 +107,9 @@ PR 最小合成示例（路径、编号和验证须替换为真实事实）：
 
 提交前需要起草时使用 `generate_git_commit_message`，由工具复用既有 `generate_skill_content(kind="commit_message")` 的 Responses.parse、指令、输出Schema、出站审核及本地格式/署名校验。推理强度沿用 `low`；不添加模型参数或新客户端。用户已指定完整 message 时保留原文，只执行检查。
 
-Agent 准备本次选定提交全部 patch/hunk 的有界摘要、准确路径、前后行为、原因、实际验证和来源，不先生成整篇 message。已暂存时核对实际 cached diff；未暂存明确拟提交范围；分多个提交时分别提供各自范围，不能只给最后一次历史 commit 或整个 PR 改动。
+先暂存本次改动，只传绝对仓库根路径 `repo_path`。工具在本地读取暂存区并保留全部路径和 hunk 范围。逐 hunk 摘录超出预算时，按文件汇总改动行数、范围和代表性摘录，仍将整个暂存区作为一个范围生成。发出请求前检查序列化后的生成请求和嵌套审核请求大小。候选只描述证据能支持的主要变更。
 
-```json
-{"request":{"user_request":"概述本次空输入修复","evidence":[{"reference_id":"D1","origin":"current_observation","content":"拟提交范围仅src/report.py空输入分支：原抛错，现返回空列表；测试未运行。"}]}}
-```
-
-以上路径和事实为合成示例。输入不含kind/source/language_override；focus_questions/output_format可选，重点/结构优先默认但不覆盖固定规则。默认正文仅在需要补充动机或重要改动时填写。返回candidate、used_evidence_refs、missing_facts、review_notes及完整message；正文为空时message只有标题，否则标题后空行加正文。ok=true与validation_scope=local_format_and_attribution只说明本地引用/格式/署名通过，不代表语义或Git范围已校验。adoptable=false或缺口存在不可直接采用；Agent审阅后调用check_commit_message检查最终完整文本，暂存范围变更需重新核对生成依据。生成失败不默认为通过，不自动转手写绕过。
-
-工具仅联网生成单次提交候选，不读取 Git 或文件，也不保存或发布候选。提交仍需用户授权及分支、暂存等适用检查。
+生成完成后再次核对暂存指纹和分支、HEAD。直接调用时从 `result.structuredContent` 读取 `message`、`staged_paths`、`staged_sha256`、`snapshot`、`adoptable`、`missing_facts` 和 `review_notes`。暂存为空、最小证据超限或生成期间内容变化时返回错误。需要提交时用 [Toolkit 的提交草稿](mcp-tools.md#提交草稿) 保存并复用已审阅的候选和快照。
 
 ## Issue/PR 多轮修订草稿
 

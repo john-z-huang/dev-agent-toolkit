@@ -1,27 +1,44 @@
 # MCP 工具目录
 
-Python MCP 服务 `dev_agent_toolkit` 支持 Codex 和 Pi Code Agent，两者默认使用该名称注册。Codex 中的默认工具前缀为 `mcp__dev_agent_toolkit__`。发行包和 stdio 启动命令均为 `dev-agent-toolkit-tools`。优先选择覆盖需求的工具或已授权 Connector；能力不足按 [CLI 补充边界](cli-fallback.md) 处理。工具只接收领域参数；仓库绑定工具须显式传入目标 checkout 的绝对 Git 根路径 `repo_path`。
+Toolkit 服务的本地 STDIO 启动命令为 `dev-agent-toolkit-tools`。本目录所列 MCP 工具均通过本地 Client CLI 调用。仓库绑定工具须显式传入目标 checkout 的绝对 Git 根路径 `repo_path`。
 
-只读工具带 `read_only_hint`，写入及破坏性由工具注解标识。Codex 服务配置为 `default_tools_approval_mode="writes"`。用户授权、Codex 写入审批和 Pi 适用条件见 [宿主审批兼容](../SKILL.md#宿主审批兼容)；Pi 的工具发现见 [Pi 工具发现与能力边界](../SKILL.md#pi-工具发现与能力边界)。`gh` 工具使用本机已授权的 GitHub CLI，令牌不进入参数或结果。
+## 通过本地 MCP Client 调用
+
+1. 用 `registry list` 查找已配置的服务 ID，必要时用 `registry get <服务 ID>` 核对可执行文件、启动参数和工作目录。使用已确认的本地安装。用户指定独立注册表时，在子命令前传 `--registry`。缺少可信配置或安装时按 [项目 MCP 调用规则](../SKILL.md#项目-mcp-调用) 处理。
+2. 已知工具短名时用 `request <服务 ID> tools/schema` 核对参数。需要查找工具或服务说明时，使用 `request <服务 ID> tools/list` 或 `server info <服务 ID>`。服务 ID 取自客户端注册表，工具短名取自该服务的工具清单。
+3. 用 `call <服务 ID> <工具短名>` 调用。字符串参数用 `--arg NAME VALUE`，数组、布尔值和嵌套对象用 `--json`、`--stdin` 或 `--file` 传工具参数对象。读取 CLI 的 `result.structuredContent` 或工具提供的 `result.content`，同时核对工具的业务成功字段。
+
+从核实的仓库根目录运行下列示例。示例假设注册表中的服务 ID 为 `dev-agent-toolkit-tools`。
+
+```bash
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli registry list'
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli request dev-agent-toolkit-tools tools/schema --json "$1"' _ '{"name":"check_staged_changes"}'
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli call dev-agent-toolkit-tools check_staged_changes --arg repo_path "$PWD"'
+```
+
+`call` 和 `request` 默认使用单次连接。项目切换、分页游标及多轮草稿依赖下游状态时，使用 `session open <服务 ID>`，后续调用传同一个 `--session <ID>`，完成后用 `session close <ID>` 回收连接。
+
+工具注解标识只读、写入及破坏性。CLI 调用遵守宿主命令审批和沙箱，写操作还需对应用户授权。详见 [宿主审批兼容](../SKILL.md#宿主审批兼容)。GitHub 工具使用本机已授权的 `gh`。有能力缺口或调用失败时查阅 [CLI 补充边界](cli-fallback.md)。
+
+## 提交草稿
+
+从已核实的仓库根目录运行 Toolkit 专用的 `dev-agent-toolkit commit draft`，给草稿选择一个新的仓库外文件路径。Toolkit 调用已安装的 MCP Client CLI，向注册表中的服务只传 `repo_path`，并只保存可采用的候选。默认服务 ID 为 `dev-agent-toolkit-tools`，其他服务 ID 用 `--server` 指定。
+
+```bash
+/bin/bash -c 'exec dev-agent-toolkit commit draft "$1"' _ '/tmp/toolkit-commit-draft.json'
+```
+
+核对消息和实际暂存内容，完成项目检查并获得提交授权后，显式执行下一步。
+
+```bash
+/bin/bash -c 'exec dev-agent-toolkit commit apply "$1"' _ '/tmp/toolkit-commit-draft.json'
+```
+
+Toolkit 对同一个草稿执行分支、暂存区和提交信息检查，再通过 MCP Client 提交。快照比对涵盖分支、HEAD、暂存路径和暂存指纹。快照变更需重新生成并审阅。使用独立注册表时，两次命令均在 `commit` 后传同一个 `--registry`。按 [恢复 Hook](../hooks/recovery.md) 处理提交结果不明的情况。
 
 ## 正在运行的 MCP 构建信息
 
-直接调用 `get_mcp_server_build_info`，参数为 `{}`。返回 `server_version`（包版本）和 `git_commit`（构建时源码 HEAD 的完整 Git hash）。无法取得相应记录时返回 `null`。从 sdist 重建 wheel 时沿用 sdist 封装的源码 hash。同一提交上的未提交改动不会反映在 hash 中。
-
-结果取自处理该请求的 MCP 进程启动时读取的包元数据。需要比较新旧进程时，直接调用查询当前连接，再按下节使用 `{"tool_name":"get_mcp_server_build_info"}` 查询新进程。若两次来自同一提交，需要结合发行包来源或实际工具发现核对更新。
-
-## 更新后临时本地 MCP
-
-`call_updated_local_mcp` 用于当前 Codex 连接仍旧、同一 `dev-agent-toolkit-tools` uv tool 已完成更新时。也可从已更新的 `dev-agent-toolkit mcp` 管理入口通过 stdin 提交同形 JSON。适用条件及命令见 [更新后临时本地 MCP Hook](../hooks/updated-local-mcp.md)。
-
-| 请求 | 结果 |
-|---|---|
-| `{}`，或 `tool_name` 和 `arguments` 均为 `null` | `ok=true`、`status=listed`、`server_version`、`tools`。每项包含短名及最新 `inputSchema`。 |
-| `tool_name` 为发现的 MCP 短名，`arguments` 为目标工具 JSON 对象 | `status=called` 时返回 `server_version`、`tool_name` 和标准 MCP `result`。`arguments` 省略或 `null` 传空对象。按目标工具文档检查 `result.content` 或其提供的 `result.structuredContent`。 |
-| 目标 `structuredContent.ok=false` | `ok=false`、`status=target_failed`，保留目标的业务结果。 |
-| 其他错误 | `ok=false` 加安全状态 `invalid_request`、`installation_unavailable`、`server_mismatch`、`incomplete_discovery`、`tool_not_available`、`tool_error`、`timeout` 或 `stdio_failed`。停止受影响请求，避免盲重试。 |
-
-CLI 退出码 `0` 表示 `ok=true`，`1` 表示请求失败。每次使用固定的已安装 uv tool 入口初始化新进程，设置 20 秒请求预算，结束后关闭。桥接不转发 Codex/OpenAI 凭据或代理、不读宿主会话、不写 Memory、不注册或重载 MCP。当前支持 `list_repository_worktrees`、`get_codex_session_summary_guidance` 和 `get_mcp_server_build_info`。新增工具须经审阅确认离线、只读且可在新进程独立运行，再用 `local_stdio=True` 声明开放；桥接同时校验只读/离线注解，禁止递归调用。
+通过 CLI 调用 `get_mcp_server_build_info`，不传参数。返回处理请求的进程启动时读取的 `server_version`（包版本）和 `git_commit`（构建时源码 HEAD 的完整 Git hash）。无法取得相应记录时返回 `null`。从 sdist 重建 wheel 时沿用 sdist 记录的 hash。同一提交上的未提交改动不反映在 hash 中，同版本重装应结合发行包来源和实际工具 Schema 核对。详见 [调用已更新的本地 MCP](../hooks/updated-local-mcp.md)。
 
 ## OpenAI 判断与生成
 
@@ -34,7 +51,7 @@ CLI 退出码 `0` 表示 `ok=true`，`1` 表示请求失败。每次使用固定
 | `decide_codex_session_action` | 强类型 `request`：历史读取状态、事实覆盖、保存限制和新增事实来源 | Decisions 的查询与持久化分支；不能用当前新事实更新历史摘要。 |
 | `start_issue_pr_draft` / `revise_issue_pr_draft` | 首轮完整draft；修订携带会话ID、版本、唯一请求ID、反馈及显式证据变更 | 进程内有界修订，生成与独立审查；反馈不等于证据，重启失效。详见[多轮协议](openai-workflow-tools.md#issuepr-多轮修订草稿)。 |
 | `get_issue_pr_draft` / `close_issue_pr_draft` | 草稿会话ID | 离线回读/释放进程状态，不发布或写Memory；运行中close拒绝。 |
-| `generate_git_commit_message` | user_request、当前选定提交全部改动的evidence及可选重点/格式；不接受kind或模型覆盖 | 复用commit_message生成，返回candidate和完整message、adoptable与本地校验范围；须审阅并check_commit_message，不执行Git。详见[提交信息](check-commit-message.md)。 |
+| `generate_git_commit_message` | 先暂存本次改动，只传 `repo_path` | 读取暂存差异并返回候选、`adoptable`、路径和指纹。须审阅并调用 `check_commit_message`。详见[提交信息](check-commit-message.md)。 |
 | `generate_skill_content` | 强类型 `request`，包含内容种类、用户目标/受众、分类型项目事实与来源，以及可选查询重点、格式和会话来源。Issue/PR/提交信息内置默认布局，自定义结构通过 `output_format` 提供。Issue/PR 其他语言须 `language_override` 引用用户原文。 | Responses 结构化候选；Issue/PR 生成后另做一次有界语义审查，须检查 `quality_status`/`adoptable` 与缺失项，`ok=true` 不等于可发布。不会自行读取仓库。 |
 
 `check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 先做本地硬校验，通过后调用 Decisions。采纳条件见 [判断工具与硬校验](openai-workflow-tools.md#判断工具与硬校验)。
@@ -66,7 +83,7 @@ CLI 退出码 `0` 表示 `ok=true`，`1` 表示请求失败。每次使用固定
 | `serena_memory_tail_read` | `memory_path`, `tail_lines` | 返回总行数、所读行号范围和尾部文本，保留 LF、CRLF 和 CR 行尾。 |
 | `serena_memory_write_check` | `memory_path`, `changed_content`, `tail_lines` | 在相同范围内做区分大小写的字面匹配，返回 `success` 和匹配偏移。匹配只能证明该范围包含预期文本。 |
 
-`tail_lines` 为 0–10000 的整数，0 返回空文本和总行数。所读尾部与 `changed_content` 各限 64000 字符。目录或文件缺失、不可读或超限时返回 `status=unavailable` 和 `reason_code`。两项均离线执行，不写入文件或 Memory，实际保存使用宿主可用并获准的 Memory 工具。
+`tail_lines` 为 0–10000 的整数，0 返回空文本和总行数。所读尾部与 `changed_content` 各限 64000 字符。目录或文件缺失、不可读或超限时返回 `status=unavailable` 和 `reason_code`。两项均离线只读。保存到 Serena 时，通过 Client CLI 调用已授权的 Serena Memory 工具。
 
 ## 检查与只读审计
 

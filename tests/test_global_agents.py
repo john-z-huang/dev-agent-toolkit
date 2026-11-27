@@ -378,6 +378,28 @@ class GlobalAgentsTests(unittest.TestCase):
         with self.assertRaisesRegex(self.global_agents.GlobalAgentsError, "普通文件"):
             self._manage(dry_run=True)
 
+    def test_checkout_cli_defaults_to_source_template_and_allows_override(self):
+        from dev_agent_toolkit_tools.cli import main
+
+        checkout = self.root / "checkout"
+        instructions = checkout / "instructions"
+        instructions.mkdir(parents=True)
+        template = instructions / "codex-global.md"
+        template.write_text(self._template("checkout template"), encoding="utf-8")
+        command = ["--source-root", str(checkout), "agents", "update"]
+
+        with patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(main(command), 0)
+        self.assertEqual(json.loads(output.getvalue())["source"], str(template))
+        self.assertEqual(self.target.read_bytes(), template.read_bytes())
+
+        with patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(main([*command, "--source", str(self.source)]), 0)
+        result = json.loads(output.getvalue())
+        self.assertEqual(result["source"], str(self.source))
+        self.assertEqual(Path(result["backup"]).read_bytes(), template.read_bytes())
+        self.assertEqual(self.target.read_bytes(), self.source.read_bytes())
+
     def test_cli_json_and_invalid_argument_combinations(self):
         from dev_agent_toolkit_tools.cli import main
 

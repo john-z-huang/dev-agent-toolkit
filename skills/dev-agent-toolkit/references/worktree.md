@@ -1,6 +1,6 @@
 # Git Worktree 开发与交付
 
-仅当用户明确要求 worktree 时使用。Git 仓库、remote、GitHub 交付或并行任务本身不触发该模式。下文操作优先使用 [`mcp-tools.md`](mcp-tools.md) 中的对应工具；未提供工具或功能未覆盖时按 [`cli-fallback.md`](cli-fallback.md) 补足，保留必要检查、授权及创建前同步门禁。只读细节见 [`read-only-queries.md`](read-only-queries.md)。
+仅当用户明确要求 worktree 时使用。Git 仓库、remote、GitHub 交付或并行任务本身不触发该模式。通过 [本地 MCP Client](mcp-tools.md#通过本地-mcp-client-调用) 调用下文的项目工具。功能未覆盖时按 [命令行补充](cli-fallback.md) 补足，保留必要检查、授权及创建前同步门禁。只读细节见 [Git/gh 只读查询](read-only-queries.md)。
 
 ## 工作区边界
 

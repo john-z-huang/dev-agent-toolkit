@@ -1,6 +1,6 @@
 # 公开网络搜索
 
-`web_search` 给没有原生联网能力的 coding agent 提供公开资料搜索，随 `dev_agent_toolkit` MCP 服务注册。无需 `repo_path`，不读取本地代码、私有文件或会话，不执行 Git/GitHub 或 Memory 写入。项目语义仍使用 Serena，普通候选内容生成使用 `generate_skill_content`。
+`web_search` 给没有原生联网能力的 Code Agent 提供公开资料搜索，通过 [本地 MCP Client](mcp-tools.md#通过本地-mcp-client-调用) 调用已配置的 Toolkit 服务。无需 `repo_path`，不读取本地代码、私有文件或会话，不执行 Git/GitHub 或 Memory 写入。项目语义查询用 Serena，普通候选内容生成用 `generate_skill_content`。
 
 ```json
 {

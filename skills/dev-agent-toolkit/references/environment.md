@@ -1,6 +1,6 @@
 # Git 写操作与宿主审批
 
-操作优先使用覆盖需求的 MCP 工具或已授权 Connector；没有对应工具、工具未暴露或功能未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 自行用 CLI 补足查询或已授权写入，无须仅因换入口再次请求授权。只读细节见 [`read-only-queries.md`](read-only-queries.md)。Codex MCP 配置使用 `default_tools_approval_mode="writes"`，让写工具在执行前进入 Codex 审批流程；CLI 遵守宿主命令审批和沙箱规则。执行层审批与用户意图授权独立；适用的宿主审批及用户授权均须满足。Pi 不提供 Codex 专属审批时按 [宿主兼容](../SKILL.md#宿主审批兼容) 执行，不安装或模拟 Codex 审批；实际权限门禁、扩展和校验仍须遵守。
+通过 [本地 MCP Client](mcp-tools.md#通过本地-mcp-client-调用) 执行项目 MCP 请求，按各自条件使用已授权的 Connector。能力缺口见 [命令行补充](cli-fallback.md)，只读细节见 [Git/gh 只读查询](read-only-queries.md)。终端调用受宿主命令审批和沙箱约束，写入还须有相应用户授权。宿主差异见 [宿主审批兼容](../SKILL.md#宿主审批兼容)。
 
 CLI 补足须保留必要检查的目的与通过条件，不在工具拒绝后更换路径或执行器绕过审批。实际执行失败、必要检查无法完成或效果不明时保留现场，说明已完成步骤、失败原因及缺少条件。`fetch`、index/refs/配置修改均为本地写入；只读也可以联网，仍受宿主审批和沙箱限制。
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
@@ -11,7 +13,6 @@ from ..services.ai_workflow import (
     SessionDecisionRequest,
 )
 from ..services.api_input_review import ApiInputReviewRequest
-from ..services.commit_content import CommitMessageRequest
 from ..services import commit_content
 from ._registration import _register_adapter
 from ..services.draft_sessions import (
@@ -32,9 +33,9 @@ async def generate_skill_content(request: ContentGenerationRequest) -> dict:
     return await ai_workflow.generate_skill_content(request)
 
 
-async def generate_git_commit_message(request: CommitMessageRequest) -> dict:
-    """通过既有内容生成链路起草完整提交信息，不执行Git。"""
-    return await commit_content.generate_git_commit_message(request)
+async def generate_git_commit_message(repo_path: str) -> dict[str, Any]:
+    """读取 Git 暂存差异并起草提交信息。"""
+    return await commit_content.generate_from_staged_diff(repo_path)
 
 
 async def check_api_input(request: ApiInputReviewRequest) -> dict:

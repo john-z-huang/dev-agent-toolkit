@@ -57,6 +57,37 @@ class SkillInstallationTests(unittest.TestCase):
         self.manage("install", dry_run=True)
         self.assertEqual(list(self.root.iterdir()), [])
 
+    def test_checkout_install_and_update_use_current_source(self):
+        checkout = self.root / "checkout"
+        project = checkout / "mcp-server"
+        source = checkout / "skills" / service.SKILL
+        project.mkdir(parents=True)
+        source.mkdir(parents=True)
+        (project / "pyproject.toml").write_text('[project]\nversion = "2.3.4"\n')
+        document = source / "SKILL.md"
+        document.write_bytes(b"# Checkout skill\n")
+
+        preview = self.manage("install", source_root=checkout, dry_run=True)
+        self.assertEqual(preview["package_version"], "2.3.4")
+        self.assertFalse(self.target.exists())
+        self.manage("install", source_root=checkout)
+        self.assertEqual((self.target / "SKILL.md").read_bytes(), document.read_bytes())
+
+        document.write_bytes(b"# Updated checkout skill\n")
+        self.assertEqual(
+            self.manage("update", source_root=checkout)["status"], "updated"
+        )
+        self.assertEqual((self.target / "SKILL.md").read_bytes(), document.read_bytes())
+        self.assertEqual(
+            self.manage("update", source_root=checkout)["status"], "unchanged"
+        )
+        document.write_bytes(b"# Checkout skill\n\n[broken](missing.md)\n")
+        with self.assertRaisesRegex(service.SkillError, "内部链接"):
+            self.manage("update", source_root=checkout)
+        self.assertEqual(
+            (self.target / "SKILL.md").read_bytes(), b"# Updated checkout skill\n"
+        )
+
     def test_existing_unknown_empty_and_nonempty_directories_are_preserved(self):
         self.target.mkdir(parents=True)
         with self.assertRaises(service.SkillError):

@@ -24,7 +24,7 @@
 | --- | --- | --- |
 | `playwright-cli/skills/playwright-cli/SKILL.md` | Playwright CLI 通用浏览器自动化；适用于导航、snapshot、用户流程、跨浏览器/视口检查、Console/Network、录制/trace，以及测试调试和生成。 | CLI 主 Skill。选择 Playwright CLI 时读取；遇到具体专题时再跟随其引用读取相应 `references/`（如测试、mock、session、storage、trace、video、test generation、element attributes、PR attachments）。 |
 | `chrome-devtools-mcp/skills/chrome-devtools-cli/SKILL.md` | `chrome-devtools` CLI 的命令工作流；适用于用 Chrome 页面 ID 和 snapshot UID 操作页面，以及 Console、Network、CSS、Lighthouse、Performance、截图等检查。 | CLI 主 Skill。选择 Chrome DevTools CLI 时读取。注意其文件保存/上传参数默认可访问较广的本地文件范围，涉及文件时按本指令的副作用与授权要求核实。 |
-| `chrome-devtools-mcp/skills/chrome-devtools/SKILL.md` | Chrome DevTools **MCP** 的通用浏览器调试、自动化、页面选择和工具选择指南，也涉及扩展调试。 | 面向 MCP，不是 `chrome-devtools` CLI Skill。仅在当前宿主实际暴露并使用该 MCP，且任务需要相关工具时加载；CLI 调用不能直接照搬 MCP 工具名、Schema 或配置步骤。 |
+| `chrome-devtools-mcp/skills/chrome-devtools/SKILL.md` | Chrome DevTools **MCP** 的通用浏览器调试、自动化、页面选择和工具选择指南，也涉及扩展调试。 | 任务选用已配置的本地 Chrome DevTools MCP 时加载，并通过 [本地 MCP Client](mcp-tools.md#通过本地-mcp-client-调用) 核对工具名和 Schema。 |
 | `chrome-devtools-mcp/skills/a11y-debugging/SKILL.md` | 使用 Chrome DevTools MCP 检查语义结构、ARIA/表单名称、键盘焦点、点击/触控目标、颜色对比和 Lighthouse 无障碍审计。 | 无障碍验收专题；仅当任务涉及可访问性时加载。内容针对 MCP 工具；用 CLI 时先确认 CLI 是否提供所需能力和实际参数，不声称 MCP 工作流已经执行。 |
 | `chrome-devtools-mcp/skills/cookie-debugging/SKILL.md` | 排查认证重定向/401/403、Cookie 与 Set-Cookie、HttpOnly、SameSite/Partitioned Cookie，以及 cookie consent/追踪行为。 | Cookie/认证专题；涉及会话凭据，只有在用户要求且授权范围明确时加载。Cookie 和请求头可能包含秘密，禁止不必要读取、输出或修改；用隔离上下文做清洁状态测试。 |
 | `chrome-devtools-mcp/skills/debug-optimize-lcp/SKILL.md` | 通过性能 trace、LCP insights、网络 waterfall 和元素定位分析 Largest Contentful Paint/Core Web Vitals 瓶颈，并核验优化。 | 页面性能/LCP 专题；只在任务涉及加载性能、LCP 或 CWV 时加载。它是 MCP 流程，CLI 能力应另按 CLI 文档核对。 |

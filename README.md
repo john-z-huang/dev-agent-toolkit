@@ -4,12 +4,13 @@
 
 ## 安装与构建
 
-构建发行包、安装或更新 uv tool 和 Skill、注册 Codex 或 Pi MCP，以及管理全局指令，见 [安装与构建指南](INSTALL.md)。
+构建发行包、安装或更新 uv tool 和 Skill、配置 MCP Client 注册表，以及管理全局指令，见 [安装与构建指南](INSTALL.md)。
 
 ## 使用
 
 从 [Skill 入口](skills/dev-agent-toolkit/SKILL.md) 和 [Hook 索引](skills/dev-agent-toolkit/hooks/index.md) 查找当前动作的合同。工具选择与参数见 [MCP 工具目录](skills/dev-agent-toolkit/references/mcp-tools.md)。
 
+- Code Agent 通过 [MCP Client CLI](skills/dev-agent-toolkit/references/mcp-tools.md#通过本地-mcp-client-调用) 调用已安装的 Toolkit 和其他本地 STDIO 服务。
 - 分支与 worktree 的场景见 [原地建分支](skills/dev-agent-toolkit/references/mcp-tools.md#原地创建工作分支)、[基线同步](skills/dev-agent-toolkit/references/worktree-base-sync.md) 和 [冲突恢复](skills/dev-agent-toolkit/references/worktree-recovery.md)。
 - 托管操作与 CLI 查询见 [GitHub](skills/dev-agent-toolkit/references/github.md)、[CLI 补充](skills/dev-agent-toolkit/references/cli-fallback.md) 和 [只读查询规约](skills/dev-agent-toolkit/references/read-only-queries.md)。
 
@@ -41,11 +42,11 @@ Decisions API（含出站审核）固定用 `gpt-6-luna`。Responses API 的生�
 
 ## Git commit 信息生成
 
-需要起草提交信息时调用 `generate_git_commit_message`，提交本次选定 patch/hunk 的事实与来源，复用现有内容生成链路返回完整 `message`。经审阅并用 `check_commit_message` 检查后，才在独立授权及其他检查满足时提交。工具不读取 Git、不执行提交；用户已有完整提交信息时保留原文。详见 [提交信息生成与检查](skills/dev-agent-toolkit/references/check-commit-message.md)。
+暂存本次改动后，用 `dev-agent-toolkit commit draft` 起草并保存候选。Toolkit 通过本地 MCP Client 调用生成工具，只传仓库绝对根路径 `repo_path`。审阅候选、完成项目检查并获得提交授权后，用 `dev-agent-toolkit commit apply` 复用同一草稿并执行提交检查。详见 [提交草稿](skills/dev-agent-toolkit/references/mcp-tools.md#提交草稿)。
 
 ## Issue/PR 多轮修订
 
-新增 `start_issue_pr_draft`、`revise_issue_pr_draft`、`get_issue_pr_draft`、`close_issue_pr_draft`：由外层 Agent 每轮反馈，MCP 保存受限进程内上下文，仍使用 Responses API 和独立质量审查，不引入 Agents SDK。重启或 `/reload` 会丢失草稿；不写文件或 Memory，不自动发布。协议、容量、错误和最小示例见 [多轮草稿](skills/dev-agent-toolkit/references/openai-workflow-tools.md#issuepr-多轮修订草稿)。
+通过 `start_issue_pr_draft`、`revise_issue_pr_draft`、`get_issue_pr_draft`、`close_issue_pr_draft` 多轮修订草稿。外层 Agent 提供每轮反馈，服务使用 Responses API 生成并独立审查。草稿保存在服务进程内，各轮使用同一个 CLI `--session`。进程退出后草稿失效。协议、容量、错误和最小示例见 [多轮草稿](skills/dev-agent-toolkit/references/openai-workflow-tools.md#issuepr-多轮修订草稿)。
 
 ## 开发本仓库
 

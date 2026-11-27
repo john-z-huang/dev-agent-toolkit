@@ -5,10 +5,11 @@ from typing import Any
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.mcpserver.server import Context
-from mcp.types import ToolAnnotations
+from mcp.types import Tool, ToolAnnotations
 from pydantic import ValidationError
 
 from . import SERVER_NAME
+from .infrastructure.openai_client import OPENAI_ENVIRONMENT_NAMES
 from .services.build_info import SERVER_VERSION, get_mcp_server_build_info
 from .services.local_mcp import call_updated_local_mcp
 from .tools._descriptions import SERVER_DESCRIPTION, SERVER_INSTRUCTIONS
@@ -21,21 +22,36 @@ from .tools.repository import register_repository_tools
 from .tools.serena_memory import register_serena_memory_tools
 from .tools.web_search import register_web_search_tools
 
+_COMMIT_MESSAGE_TOOL = "generate_git_commit_message"
+_INVALID_ARGUMENTS = "Invalid tool arguments; review the published input schema."
+
 
 class _SafeMCPServer(MCPServer):
     """Hide rejected argument values from tool errors and server logs."""
 
+    async def list_tools(self) -> list[Tool]:
+        tools = await super().list_tools()
+        for tool in tools:
+            if tool.name == _COMMIT_MESSAGE_TOOL:
+                tool.input_schema = {**tool.input_schema, "additionalProperties": False}
+        return tools
+
     async def call_tool(
         self, name: str, arguments: dict[str, Any], context: Context | None = None
     ) -> Any:
+        if name == _COMMIT_MESSAGE_TOOL and arguments.keys() != {"repo_path"}:
+            raise ToolError(_INVALID_ARGUMENTS)
         try:
             return await super().call_tool(name, arguments, context)
         except ToolError as error:
             if isinstance(error.__cause__, ValidationError):
-                raise ToolError(
-                    "Invalid tool arguments; review the published input schema."
-                ) from None
+                raise ToolError(_INVALID_ARGUMENTS) from None
             raise
+
+
+def get_mcp_environment() -> dict[str, list[str]]:
+    """返回本服务为联网调用所需的变量名称。可在仅有基础 STDIO 环境时调用。"""
+    return {"names": list(OPENAI_ENVIRONMENT_NAMES)}
 
 
 mcp = _SafeMCPServer(
@@ -52,6 +68,12 @@ register_codex_session_fact_tools(mcp)
 register_ai_workflow_tools(mcp)
 register_web_search_tools(mcp)
 register_serena_memory_tools(mcp)
+mcp.add_tool(
+    get_mcp_environment,
+    annotations=ToolAnnotations(
+        read_only_hint=True, destructive_hint=False, open_world_hint=False
+    ),
+)
 _register_adapter(
     mcp,
     get_mcp_server_build_info,

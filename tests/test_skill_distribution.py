@@ -220,10 +220,12 @@ class SkillDistributionTests(unittest.TestCase):
                     skill_text = shipped["SKILL.md"].decode()
                     self.assertIn("## 宿主审批兼容", skill_text)
                     self.assertIn("Pi Code Agent", skill_text)
-                    self.assertIn("## Pi 工具发现与能力边界", skill_text)
-                    self.assertIn("describeNamespace", skill_text)
+                    self.assertIn("## 项目 MCP 调用", skill_text)
+                    self.assertIn("dev_agent_toolkit_mcp_client_cli", skill_text)
+                    self.assertNotIn("hooks/install-codex-mcp.md", shipped)
+                    self.assertNotIn("hooks/install-pi-mcp.md", shipped)
                     self.assertIn(
-                        "### Pi stdio 环境传递与工具时限",
+                        "### 本地 MCP Client 环境传递与排查",
                         shipped["references/openai-workflow-tools.md"].decode(),
                     )
                     self.assertIn(

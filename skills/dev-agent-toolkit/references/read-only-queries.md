@@ -5,7 +5,7 @@
 ## 入口选择与失败处理
 
 - GitHub 查询同样先运行 `gh auth status --active`，按 [多账号核验](github.md#多账号核验) 确认实际身份及仓库读取权限。`gh auth switch` 会改变本地活动账号，适用写操作条件。
-- 专用 MCP 或当前已授权的 GitHub Connector/App 能满足查询时，优先使用。repo-bound MCP 调用仍须传入准确的绝对 `repo_path`。
+- 项目 MCP 查询通过 [本地 MCP Client](mcp-tools.md#通过本地-mcp-client-调用) 执行，仓库绑定工具传入准确的绝对 `repo_path`。已授权的 GitHub Connector/App 按托管资源条件使用。
 - 工具未覆盖所需的信息查询时，允许按本文执行只读 CLI；先核实本地根目录或远端 `owner/repo`，限定字段、路径和输出数量。CLI 用 `git -C` 或 `gh --repo` 等明确目标，不依赖偶然的启动目录。
 - 当前动作要求的 `audit_repository_state`、`check_branch_names`、`check_commit_message`、`check_staged_changes`、`audit_issue_pr_policy` 等门禁优先用规定工具；未暴露或功能未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 保留必要事实与通过条件。补充查询不等于完整门禁，也不把未执行或失败的 API 校验视为通过。
 - “查询未覆盖/工具未暴露”不同于工具或服务的实际执行失败。连接、权限、认证、网络、仓库状态或校验拒绝时，保留现场并按[恢复条件](../hooks/recovery.md)处理，不能换 CLI、旧结果或兼容脚本跳过失败条件；独立查询可继续。

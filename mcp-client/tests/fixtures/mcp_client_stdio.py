@@ -1,0 +1,277 @@
+"""Deterministic, offline MCP server for the standalone client tests."""
+
+import argparse
+import itertools
+import json
+import os
+import sys
+import time
+from pathlib import Path
+from uuid import uuid4
+
+
+def send(message):
+    print(json.dumps({"jsonrpc": "2.0", **message}), flush=True)
+
+
+def tool(name):
+    return {
+        "name": name,
+        "description": name,
+        "inputSchema": {"type": "object", "properties": {"label": {"type": "string"}}},
+    }
+
+
+def result(value, *, error=False):
+    return {
+        "content": [{"type": "text", "text": str(value)}],
+        "structuredContent": {"value": value},
+        "isError": error,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--marker", type=Path)
+    parser.add_argument("--hang-start", action="store_true")
+    parser.add_argument("--legacy-only", action="store_true")
+    parser.add_argument("--flavor", default="original")
+    parser.add_argument("--env-name", action="append", default=[])
+    options = parser.parse_args()
+    if options.marker:
+        with options.marker.open("a") as stream:
+            stream.write(f"{os.getpid()}\n")
+    if options.hang_start:
+        time.sleep(60)
+    modern = False
+    calls = itertools.count(1)
+    session = uuid4().hex
+    page_cursor = uuid4().hex
+    project = "original"
+    reply: dict[str, object]
+    capabilities: dict[str, object] = {
+        "tools": {"listChanged": True},
+        "resources": {"subscribe": True, "listChanged": True},
+        "prompts": {"listChanged": True},
+        "completions": {},
+    }
+    server = {"name": "offline-fixture", "version": "1"}
+    pending = {
+        "method": "elicitation/create",
+        "params": {
+            "mode": "form",
+            "message": "Choose a label",
+            "requestedSchema": {
+                "type": "object",
+                "properties": {"label": {"type": "string"}},
+                "required": ["label"],
+            },
+        },
+    }
+    for line in sys.stdin:
+        message = json.loads(line)
+        if "id" not in message:
+            continue
+        method = message["method"]
+        params = message.get("params", {})
+        request_id = message["id"]
+        if method == "server/discover" and not options.legacy_only:
+            modern = True
+            reply = {
+                "supportedVersions": ["2026-07-28"],
+                "capabilities": capabilities,
+                "_meta": {"io.modelcontextprotocol/serverInfo": server},
+            }
+        elif method == "initialize":
+            reply = {
+                "protocolVersion": "2025-11-25",
+                "capabilities": capabilities,
+                "serverInfo": server,
+            }
+        elif method == "tools/list":
+            cursor = params.get("cursor")
+            if cursor is None:
+                reply = {"tools": [tool("echo")], "nextCursor": page_cursor}
+            elif cursor == page_cursor:
+                tools = [
+                    tool(name)
+                    for name in (
+                        "state",
+                        "slow",
+                        "broken",
+                        "ask",
+                        "assist",
+                        "extra",
+                        "initial_instructions",
+                        "activate_project",
+                    )
+                ]
+                if options.env_name:
+                    tools.append(
+                        {
+                            **tool("get_mcp_environment"),
+                            "annotations": {"readOnlyHint": True},
+                        }
+                    )
+                reply = {"tools": tools}
+            else:
+                send(
+                    {
+                        "id": request_id,
+                        "error": {"code": -32602, "message": "Unknown session cursor"},
+                    }
+                )
+                continue
+        elif method == "tools/call":
+            name = params["name"]
+            if params.get("arguments", {}).get("label") == "rpc-error":
+                send(
+                    {
+                        "id": request_id,
+                        "error": {
+                            "code": -32602,
+                            "message": "Rejected fixture request",
+                        },
+                    }
+                )
+                continue
+            if name == "get_mcp_environment":
+                reply = result(options.env_name)
+                reply["structuredContent"] = {"names": options.env_name}
+            elif name == "slow":
+                token = params.get("_meta", {}).get("progressToken")
+                if token is not None:
+                    send(
+                        {
+                            "method": "notifications/progress",
+                            "params": {
+                                "progressToken": token,
+                                "progress": 1,
+                                "total": 2,
+                            },
+                        }
+                    )
+                time.sleep(0.6)
+                reply = result("finished")
+            elif name == "state":
+                reply = result(
+                    {
+                        "pid": os.getpid(),
+                        "calls": next(calls),
+                        "cwd": os.getcwd(),
+                        "flavor": options.flavor,
+                        "project": project,
+                        "environment": os.environ.get("MCP_CLIENT_SESSION_FIXTURE"),
+                    }
+                )
+            elif name == "initial_instructions":
+                reply = result(session)
+                reply["content"] = [
+                    {"type": "text", "text": f"Your Serena session id is `{session}`."}
+                ]
+            elif name == "activate_project":
+                arguments = params["arguments"]
+                if arguments["session"] != session:
+                    reply = result("Unknown downstream session", error=True)
+                else:
+                    project = arguments["project"]
+                    reply = result(project)
+            elif name == "broken":
+                reply = result("tool failed", error=True)
+            elif name in {"ask", "assist"}:
+                needed = (
+                    {"label": pending}
+                    if name == "ask"
+                    else {
+                        "roots": {"method": "roots/list"},
+                        "sample": {
+                            "method": "sampling/createMessage",
+                            "params": {
+                                "messages": [
+                                    {
+                                        "role": "user",
+                                        "content": {"type": "text", "text": "Test"},
+                                    }
+                                ],
+                                "maxTokens": 16,
+                            },
+                        },
+                    }
+                )
+                if modern:
+                    if "inputResponses" not in params:
+                        send(
+                            {
+                                "id": request_id,
+                                "result": {
+                                    "resultType": "input_required",
+                                    "inputRequests": needed,
+                                    "requestState": "opaque-state",
+                                },
+                            }
+                        )
+                        continue
+                    assert params["requestState"] == "opaque-state"
+                    responses = params["inputResponses"]
+                else:
+                    responses = {}
+                    for key, request in needed.items():
+                        send({"id": key, **request})
+                        responses[key] = json.loads(sys.stdin.readline())["result"]
+                if name == "ask":
+                    reply = result(responses["label"]["content"]["label"])
+                else:
+                    reply = result(
+                        {
+                            "root": responses["roots"]["roots"][0]["uri"],
+                            "sample": responses["sample"]["content"]["text"],
+                        }
+                    )
+            else:
+                reply = result(params.get("arguments", {}).get("label", "echo"))
+        elif method == "resources/list":
+            reply = {"resources": [{"uri": "fixture://entry", "name": "Entry"}]}
+        elif method == "resources/templates/list":
+            reply = {
+                "resourceTemplates": [
+                    {"uriTemplate": "fixture://{name}", "name": "Entries"}
+                ]
+            }
+        elif method == "resources/read":
+            reply = {"contents": [{"uri": params["uri"], "text": "offline fixture"}]}
+        elif method == "prompts/list":
+            reply = {"prompts": [{"name": "welcome"}]}
+        elif method == "prompts/get":
+            reply = {
+                "messages": [
+                    {"role": "user", "content": {"type": "text", "text": "Welcome"}}
+                ]
+            }
+        elif method == "completion/complete":
+            reply = {"completion": {"values": ["Alice"], "total": 1}}
+        elif method in {"ping", "resources/subscribe", "resources/unsubscribe"}:
+            reply = {}
+        else:
+            send(
+                {
+                    "id": request_id,
+                    "error": {"code": -32601, "message": "Unknown method"},
+                }
+            )
+            continue
+        if modern:
+            reply["resultType"] = "complete"
+            if method in {
+                "tools/list",
+                "tools/call",
+                "resources/list",
+                "resources/templates/list",
+                "resources/read",
+                "prompts/list",
+            }:
+                reply.update(cacheScope="private", ttlMs=0)
+        send({"id": request_id, "result": reply})
+
+
+if __name__ == "__main__":
+    main()

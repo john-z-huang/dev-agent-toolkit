@@ -9,7 +9,8 @@
 
 ## 项目绑定与能力确认
 
-- 本次 Session 尚未读取 Serena 使用说明时，先调用 `initial_instructions`，保存返回的 Serena session id；按当前工具 Schema 向需要它的工具传入 `session`。已读取且上下文仍有效时复用，不为每次查询重复调用或自行编造 id。
+- 通过 [本地 MCP Client](mcp-tools.md#通过本地-mcp-client-调用) 连接注册表中的 Serena。先用 `session open <Serena 服务 ID>` 建立 CLI 会话。项目激活、配置核对和后续查询复用同一个 `--session <ID>`，完成后关闭。
+- 新会话先调用 `initial_instructions`。按当前 Schema 将返回的 Serena session ID 传给需要 `session` 参数的工具。这个参数由 Serena 提供，CLI 的 `--session` 由 `session open` 提供。
 - 通常以目标仓库/worktree 的绝对根路径调用 `activate_project`；monorepo 中的独立语言项目按下一节选择子项目根目录。核对返回的项目路径、语言/后端及激活提示；若当前说明已经确认准确项目处于激活状态，无须重复激活。单项目启动上下文可能不暴露该工具，此时核对启动绑定，不能仅因工具缺席判定 Serena 不可用。项目不匹配且无法切换时，停止依赖该项目上下文的查询。
 - `activate_project` 可隐式创建项目配置、初始化语言后端，并可能执行项目配置的 `activation_command`。激活前核对相应权限与项目信任。首次创建和接手已有配置时按[项目配置](#项目配置)处理，普通查询只需核对相关项目与能力。
 - 工具清单随版本、context、mode、项目配置及语言后端变化。以当前可见的说明和 Schema 为准；必要时调用已暴露的 `get_current_config` 核对。LSP 和 JetBrains 后端的工具名及能力可能不同，不要求未暴露的同名工具，也不因某个可选工具缺失放弃其余可用能力。

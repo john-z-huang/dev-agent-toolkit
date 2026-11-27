@@ -1,6 +1,6 @@
 # GitHub 操作策略
 
-下文操作优先使用 [`mcp-tools.md`](mcp-tools.md) 中对应工具或当前已授权的 GitHub Connector/App；未提供工具或功能未覆盖时，按 [`cli-fallback.md`](cli-fallback.md) 补足查询或已授权写入，保留必要检查。只读细节见 [`read-only-queries.md`](read-only-queries.md)。禁止浏览器和浏览器自动化。服务器调用本机 `gh` 身份，不收集、不输出令牌。
+通过 [本地 MCP Client](mcp-tools.md#通过本地-mcp-client-调用) 调用下文的项目 MCP 工具，或按授权使用 GitHub Connector/App。功能未覆盖时，按 [命令行补充](cli-fallback.md) 补足查询或已授权写入，保留必要检查。只读细节见 [Git/gh 只读查询](read-only-queries.md)。禁止浏览器和浏览器自动化。服务器使用本机 `gh` 身份，令牌由 `gh` 管理。
 
 ## 授权、网络与身份
 
