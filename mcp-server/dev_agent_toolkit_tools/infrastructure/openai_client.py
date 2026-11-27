@@ -449,15 +449,21 @@ async def create_decision(
     )
 
 
-async def _create_policy_review_decision(
-    *, purpose: str, content: str, questions: list[dict[str, Any]]
-) -> Any:
-    """审核专用私有入口：保留统一配置和本地检测，仅避免再次触发语义审核。"""
-    payload: DecisionCreateParams = {
+def _policy_review_payload(
+    content: str, questions: list[dict[str, Any]]
+) -> DecisionCreateParams:
+    return {
         "model": DECISIONS_MODEL_NAME,
         "input": [{"role": "user", "content": content}],
         "questions": json.loads(_payload_text(questions)),
     }
+
+
+async def _create_policy_review_decision(
+    *, purpose: str, content: str, questions: list[dict[str, Any]]
+) -> Any:
+    """审核专用私有入口：保留统一配置和本地检测，仅避免再次触发语义审核。"""
+    payload = _policy_review_payload(content, questions)
     return await _invoke(
         payload,
         lambda client: client.decisions.create(
@@ -468,6 +474,47 @@ async def _create_policy_review_decision(
         purpose=purpose,
         _skip_semantic_review=True,
     )
+
+
+def _structured_response_payload(
+    instructions: str,
+    input_text: str,
+    schema: dict[str, Any],
+    reasoning_effort: str,
+    max_output_tokens: int,
+) -> _StructuredResponsePayload:
+    return {
+        "model": RESPONSES_MODEL_NAME,
+        "instructions": str(instructions),
+        "input": str(input_text),
+        "text_format": schema,
+        "reasoning": {"effort": cast("ReasoningEffort", str(reasoning_effort))},
+        "store": False,
+        "max_output_tokens": int(max_output_tokens),
+        "truncation": "disabled",
+    }
+
+
+def structured_response_fits(
+    *,
+    instructions: str,
+    input: str,
+    text_format: type[BaseModel],
+    reasoning_effort: str,
+    max_output_tokens: int,
+    purpose: str,
+) -> bool:
+    """Measure the generation and nested audit envelopes without issuing a request."""
+    from ..services.api_input_review import review_request_fits
+
+    payload = _structured_response_payload(
+        instructions,
+        input,
+        text_format.model_json_schema(),
+        reasoning_effort,
+        max_output_tokens,
+    )
+    return review_request_fits(purpose, _payload_text(payload))
 
 
 async def parse_response(
@@ -503,16 +550,9 @@ async def parse_response(
         (text_format,),
         {"model_json_schema": classmethod(frozen_model_json_schema)},
     )
-    payload: _StructuredResponsePayload = {
-        "model": RESPONSES_MODEL_NAME,
-        "instructions": str(instructions),
-        "input": str(input),
-        "text_format": schema,
-        "reasoning": {"effort": cast("ReasoningEffort", str(reasoning_effort))},
-        "store": False,
-        "max_output_tokens": int(max_output_tokens),
-        "truncation": "disabled",
-    }
+    payload = _structured_response_payload(
+        instructions, input, schema, reasoning_effort, max_output_tokens
+    )
     return await _invoke(
         payload,
         lambda client: client.responses.parse(

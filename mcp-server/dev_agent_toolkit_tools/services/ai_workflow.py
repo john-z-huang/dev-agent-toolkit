@@ -962,6 +962,28 @@ def _generation_facts(
     return facts, None
 
 
+def _generation_parameters(
+    kind: str, instructions: str, input_text: str
+) -> dict[str, Any]:
+    return {
+        "instructions": instructions,
+        "input": input_text,
+        "text_format": GeneratedContent,
+        "reasoning_effort": _effort_for_kind(kind),
+        "max_output_tokens": _MAX_OUTPUT_TOKENS[kind],
+        "purpose": f"依据已提供的请求和证据，生成结构化的 {kind} 候选。",
+    }
+
+
+def commit_request_fits(request: ContentGenerationRequest) -> bool:
+    kind = "commit_message"
+    return openai_client.structured_response_fits(
+        **_generation_parameters(
+            kind, _generation_instruction(kind), _json(request.model_dump(mode="json"))
+        )
+    )
+
+
 async def generate_skill_content(
     request: ContentGenerationRequest, *, revision_context: dict[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -1002,12 +1024,7 @@ async def generate_skill_content(
     effort = _effort_for_kind(request.kind)
     try:
         response = await openai_client.parse_response(
-            instructions=instructions,
-            input=input_text,
-            text_format=GeneratedContent,
-            reasoning_effort=effort,
-            max_output_tokens=_MAX_OUTPUT_TOKENS[request.kind],
-            purpose=f"依据已提供的请求和证据，生成结构化的 {request.kind} 候选。",
+            **_generation_parameters(request.kind, instructions, input_text)
         )
     except openai_client.OpenAIWorkflowError as error:
         return {"ok": False, **error.as_result(), "requires_agent_review": True}

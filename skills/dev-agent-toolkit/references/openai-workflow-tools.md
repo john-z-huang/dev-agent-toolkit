@@ -119,17 +119,9 @@ PR 最小合成示例（路径、编号和验证须替换为真实事实）：
 
 提交前需要起草时使用 `generate_git_commit_message`，由工具复用既有 `generate_skill_content(kind="commit_message")` 的 Responses.parse、指令、输出Schema、出站审核及本地格式/署名校验。推理强度沿用 `low`；不添加模型参数或新客户端。用户已指定完整 message 时保留原文，只执行检查。
 
-已暂存时传 `repo_path`，可选传简短的实际 `verification`。工具读取暂存区，记录全部路径与 hunk 范围，并将有界变更摘录交给出站审核与生成。生成完成后再次核对暂存指纹。返回 `message`、`staged_paths`、`staged_sha256`、`missing_facts` 和 `review_notes`。通过 MCP Client CLI 调用时，从 `result.structuredContent` 读取。暂存为空、超出采集上限或生成时发生变化，会返回错误。
+先暂存本次改动，只传绝对仓库根路径 `repo_path`。工具在本地读取暂存区，保留全部暂存路径和 hunk 范围，并验证序列化后的生成请求和嵌套审核请求都在预算内，再发出审核和生成请求。候选只描述证据能支持的主要变更，省略无法核实的实现细节和测试结果。
 
-尚未暂存时，用 `request` 提供选定提交的 patch/hunk、原因、实际验证和来源。分多个提交时分别提供各自范围。以下是手工证据模式的示例。
-
-```json
-{"request":{"user_request":"概述本次空输入修复","evidence":[{"reference_id":"D1","origin":"current_observation","content":"拟提交范围仅src/report.py空输入分支：原抛错，现返回空列表；测试未运行。"}]}}
-```
-
-以上路径和事实为合成示例。输入不含kind/source/language_override；focus_questions/output_format可选，重点/结构优先默认但不覆盖固定规则。默认正文仅在需要补充动机或重要改动时填写。返回candidate、used_evidence_refs、missing_facts、review_notes及完整message；正文为空时message只有标题，否则标题后空行加正文。ok=true与validation_scope=local_format_and_attribution只说明本地引用/格式/署名通过，不代表语义或Git范围已校验。adoptable=false或缺口存在不可直接采用；Agent审阅后调用check_commit_message检查最终完整文本，暂存范围变更需重新核对生成依据。生成失败不默认为通过，不自动转手写绕过。
-
-两个模式都只生成候选。提交仍需用户授权及分支、暂存等适用检查。
+生成完成后再次核对暂存指纹。通过 MCP Client CLI 调用时，从 `result.structuredContent` 读取 `message`、`staged_paths`、`staged_sha256`、`adoptable`、`missing_facts` 和 `review_notes`。暂存为空、最小证据超限或生成期间内容变化时返回错误。根据实际暂存改动审阅候选，再调用 `check_commit_message` 检查最终消息。提交仍需用户授权及分支、暂存等适用检查。
 
 ## Issue/PR 多轮修订草稿
 

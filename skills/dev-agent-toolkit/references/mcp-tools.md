@@ -34,7 +34,7 @@ CLI 退出码 `0` 表示 `ok=true`，`1` 表示请求失败。每次使用固定
 | `decide_codex_session_action` | 强类型 `request`：历史读取状态、事实覆盖、保存限制和新增事实来源 | Decisions 的查询与持久化分支；不能用当前新事实更新历史摘要。 |
 | `start_issue_pr_draft` / `revise_issue_pr_draft` | 首轮完整draft；修订携带会话ID、版本、唯一请求ID、反馈及显式证据变更 | 进程内有界修订，生成与独立审查；反馈不等于证据，重启失效。详见[多轮协议](openai-workflow-tools.md#issuepr-多轮修订草稿)。 |
 | `get_issue_pr_draft` / `close_issue_pr_draft` | 草稿会话ID | 离线回读/释放进程状态，不发布或写Memory；运行中close拒绝。 |
-| `generate_git_commit_message` | 已暂存时传 `repo_path`，可选 `verification`；未暂存手工模式传 `request` | 返回完整提交候选和 `adoptable`。仓库路径模式只读暂存差异并返回路径和指纹。须审阅并调用 `check_commit_message`。详见[提交信息](check-commit-message.md)。 |
+| `generate_git_commit_message` | 先暂存本次改动，只传 `repo_path` | 读取暂存差异并返回候选、`adoptable`、路径和指纹。须审阅并调用 `check_commit_message`。详见[提交信息](check-commit-message.md)。 |
 | `generate_skill_content` | 强类型 `request`，包含内容种类、用户目标/受众、分类型项目事实与来源，以及可选查询重点、格式和会话来源。Issue/PR/提交信息内置默认布局，自定义结构通过 `output_format` 提供。Issue/PR 其他语言须 `language_override` 引用用户原文。 | Responses 结构化候选；Issue/PR 生成后另做一次有界语义审查，须检查 `quality_status`/`adoptable` 与缺失项，`ok=true` 不等于可发布。不会自行读取仓库。 |
 
 `check_branch_names`、`check_commit_message`、`audit_issue_pr_policy` 先做本地硬校验，通过后调用 Decisions。采纳条件见 [判断工具与硬校验](openai-workflow-tools.md#判断工具与硬校验)。

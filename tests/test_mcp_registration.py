@@ -242,7 +242,7 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             ("revise_issue_pr_draft", "draft_revision_conflict"),
             (
                 "generate_git_commit_message",
-                "validation_scope=local_format_and_attribution",
+                "staged_sha256",
             ),
             ("web_search", "search_evidence_missing"),
         ):
@@ -282,6 +282,9 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
         self.assertIn("cached diff", commit_tool.description)
         self.assertIn("单行中文标题与按需正文", commit_tool.description)
         self.assertIn("无需传通用模板", commit_tool.description)
+        self.assertEqual(set(commit_tool.input_schema["properties"]), {"repo_path"})
+        self.assertEqual(commit_tool.input_schema["required"], ["repo_path"])
+        self.assertFalse(commit_tool.input_schema["additionalProperties"])
         self.assertTrue(commit_tool.annotations.read_only_hint)
         self.assertTrue(commit_tool.annotations.open_world_hint)
         self.assert_described_properties(commit_tool.input_schema, commit_tool.name)

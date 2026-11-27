@@ -42,7 +42,7 @@ Decisions API（含出站审核）固定用 `gpt-6-luna`。Responses API 的生�
 
 ## Git commit 信息生成
 
-需要起草已暂存改动的提交信息时，调用 `generate_git_commit_message`，传入仓库绝对根路径 `repo_path`。工具直接读取暂存区并返回候选。未暂存时可传 `request` 提供手工证据。经审阅并用 `check_commit_message` 检查后，才在独立授权及其他检查满足时提交。详见 [提交信息生成与检查](skills/dev-agent-toolkit/references/check-commit-message.md)。
+需要起草提交信息时，先暂存本次改动，再调用 `generate_git_commit_message`，只传仓库绝对根路径 `repo_path`。工具读取暂存区并返回候选。经审阅并用 `check_commit_message` 检查后，才在独立授权及其他检查满足时提交。详见 [提交信息生成与检查](skills/dev-agent-toolkit/references/check-commit-message.md)。
 
 ## Issue/PR 多轮修订
 

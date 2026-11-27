@@ -607,32 +607,26 @@ for _name, _detail in {
             "draft_session_id": "start返回的当前进程草稿ID；非空且最多120字符，未知或过期失败；不是用户身份。"
         }
 _COMMIT_GENERATION_CONTRACT = (
-    "已暂存时只传 repo_path，工具读取真实 cached diff，无需在调用里复述本次选定提交的文件、hunk 或差异摘要。"
-    "有实际验证结果时可选传 verification。未暂存或需显式指定另一组证据时，使用 request 提供已选范围。"
+    "先暂存本次选定提交，只传 repo_path。工具读取真实 cached diff，调用方无需提供差异、证据、验证摘要或格式参数。"
     "工具复用 generate_skill_content(kind=commit_message) 的默认布局，生成单行中文标题与按需正文，无需传通用模板或先写 message。"
-    "分多个 commit 时分别按各自范围生成，"
-    "不能用整个PR、未选中改动或最后一次历史commit代替。用户已给完整message时保留原文并check_commit_message，不强制重写。"
-    "repo_path 模式返回完整 message、staged_paths、staged_sha256、missing_facts 和 review_notes。"
-    "request 模式保留 candidate 和本地校验范围。"
-    "ok=true表示生成与本地引用/格式/署名校验成功，validation_scope=local_format_and_attribution不是语义通过；"
-    "adoptable=false或缺口存在不得直接采用，补证后重新生成。通过仍须Agent按实际暂存diff审阅，并用check_commit_message检查最终完整message；"
-    "提交还需分支/暂存检查及独立用户授权，修改message或暂存范围后重查受影响条件，不自动提交。"
+    "分多个 commit 时分别暂存各自范围。用户已给完整 message 时保留原文并调用 check_commit_message。"
+    "返回 message、staged_paths、staged_sha256、missing_facts 和 review_notes。"
+    "adoptable=true 的候选仍须按实际暂存 diff 审阅，再用 check_commit_message 检查最终完整文本。"
+    "提交还需分支、暂存检查和独立用户授权。"
 )
 TOOL_DESCRIPTIONS["generate_git_commit_message"] = (
     "起草单个Git commit的中文标题和可选正文，区别于check_commit_message只检查文本、commit_repository_changes执行提交，"
     "以及Issue/PR多轮工具：本工具是一次性无会话生成，仅固定commit_message，不接受kind/source/language_override或模型配置。"
     + _COMMIT_GENERATION_CONTRACT
     + "通过统一客户端联网调用 OpenAI Responses.parse，推理强度 low，store=False，复用本地引用和提交规则校验。"
-    "repo_path 模式只读本地暂存差异，将各 hunk 范围和有界摘录交给出站审核，生成后核对暂存指纹。"
-    "暂存为空、差异过大或生成中变化时返回 error_code。工具不修改暂存区、不提交或调用 GitHub。"
+    "只读本地暂存差异，依据实际审核请求大小调整摘录，保留各暂存路径及 hunk 范围。生成后核对暂存指纹。"
+    "暂存为空、最小证据超限或生成中变化时返回 error_code。工具不修改暂存区、不提交或调用 GitHub。"
     + _RESPONSES_MODEL_DESCRIPTION
     + _OPENAI_TOOL_CONFIGURATION
     + '合成示例：{"repo_path":"/workspace/repo"}。'
 )
 PARAMETER_DESCRIPTIONS["generate_git_commit_message"] = {
-    "request": "手工证据模式的严格请求对象。与 repo_path 和 verification 互斥，已暂存时通常省略。",
-    "repo_path": "直接读取的 Git 仓库或 worktree 绝对根路径。与 request 二选一。",
-    "verification": "仅 repo_path 模式可用。调用方已观察到的简短验证结果，最多 2000 字符，省略或 null 表示未提供。",
+    "repo_path": "要读取暂存区的 Git 仓库或 worktree 绝对根路径。",
 }
 _WEB_SEARCH_CONTRACT = (
     "web_search 为缺少原生联网能力的 coding agent 检索公开资料、当前版本和官方文档。"
