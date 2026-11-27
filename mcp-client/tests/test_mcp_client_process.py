@@ -11,8 +11,8 @@ from unittest.mock import patch
 
 from mcp.client import Client
 
-from mcp_client import process
-from mcp_client.registry import ServerConfig
+from dev_agent_toolkit_mcp_client import process
+from dev_agent_toolkit_mcp_client.registry import ServerConfig
 
 
 _STDIO_SERVER = """

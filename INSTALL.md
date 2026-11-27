@@ -55,7 +55,7 @@
 
 ## 独立 MCP Client
 
-在 macOS 或 Linux 上，从仓库根目录安装 `mcp-client` 项目，再检查 CLI 入口。
+在 macOS 或 Linux 上，从仓库根目录安装 `dev_agent_toolkit_mcp_client` 项目，再检查 CLI 入口。
 
 ```bash
 /bin/bash -c 'exec uv tool install --managed-python ./mcp-client'

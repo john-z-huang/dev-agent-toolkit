@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mcp_client import (
+from dev_agent_toolkit_mcp_client import (
     ClientError,
     Registry,
     ServerConfig,

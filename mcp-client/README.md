@@ -1,6 +1,6 @@
-# mcp-client
+# dev_agent_toolkit_mcp_client
 
-`mcp-client` 是一个独立的 Python MCP Client 项目，支持 macOS、Linux 和 Python 3.11 及更新版本。`dev_agent_toolkit_mcp_client` 为 Shell、脚本和 Code Agent 提供本地 STDIO Server 调用入口，Python 程序通过 `mcp_client` 使用同一套请求和会话逻辑。
+`dev_agent_toolkit_mcp_client` 是一个独立的 Python MCP Client 项目，支持 macOS、Linux 和 Python 3.11 及更新版本。Shell、脚本和 Code Agent 通过同名 CLI 调用本地 STDIO Server，Python 程序通过同名包使用同一套请求和会话逻辑。
 
 ## 安装
 
@@ -11,7 +11,7 @@
 /bin/bash -c 'exec dev_agent_toolkit_mcp_client --help'
 ```
 
-使用 Python API 时，在调用方的 Python 环境中安装 `mcp-client` 发行包，再从 `mcp_client` 导入。
+使用 Python API 时，在调用方的 Python 环境中安装 `dev_agent_toolkit_mcp_client` 发行包，再从同名包导入。
 
 ## 注册 Server
 
@@ -53,7 +53,7 @@
 ## Python API
 
 ```python
-from mcp_client import Registry, open_session
+from dev_agent_toolkit_mcp_client import Registry, open_session
 
 
 async def discover(registry_path):

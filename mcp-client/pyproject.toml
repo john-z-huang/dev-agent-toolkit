@@ -1,5 +1,5 @@
 [project]
-name = "mcp_client"
+name = "dev_agent_toolkit_mcp_client"
 version = "0.2.0"
 description = "Standalone STDIO MCP client and Python API"
 readme = "README.md"
@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dev_agent_toolkit_mcp_client = "mcp_client.cli:main"
+dev_agent_toolkit_mcp_client = "dev_agent_toolkit_mcp_client.cli:main"
 
 [project.urls]
 Repository = "https://github.com/john-z-huang/dev-agent-toolkit"
@@ -26,10 +26,10 @@ build-backend = "hatchling.build"
 dev = ["ruff>=0.17.4", "ty>=0.0.96"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mcp_client"]
+packages = ["dev_agent_toolkit_mcp_client", "mcp_client.py"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/mcp_client", "pyproject.toml", "README.md"]
+include = ["dev_agent_toolkit_mcp_client", "mcp_client.py", "pyproject.toml", "README.md"]
 
 [tool.ruff]
 target-version = "py311"
