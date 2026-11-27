@@ -28,7 +28,9 @@ _REAP_TIMEOUT = 0.5
 
 
 @asynccontextmanager
-async def managed_stdio(config: ServerConfig) -> AsyncGenerator[TransportStreams, None]:
+async def managed_stdio(
+    config: ServerConfig, *, environment: dict[str, str] | None = None
+) -> AsyncGenerator[TransportStreams, None]:
     """Use the SDK's STDIO framing with an independent process group supervisor."""
     from mcp.client.stdio import StdioServerParameters, stdio_client
 
@@ -39,13 +41,13 @@ async def managed_stdio(config: ServerConfig) -> AsyncGenerator[TransportStreams
             "unsupported_platform", "Managed STDIO requires macOS or Linux."
         )
 
-    # Pass explicit environment values to the server only. They must not affect
+    # Pass the configured environment to the server only. Values must not affect
     # interpreter startup in the supervisor or appear in its command line.
     parameters = StdioServerParameters(
         command=sys.executable,
         args=["-I", "-S", str(Path(__file__).resolve()), config.command, *config.args],
         cwd=config.cwd,
-        env={_SERVER_ENV: json.dumps(config.env)},
+        env={_SERVER_ENV: json.dumps(environment)} if environment else None,
     )
     async with stdio_client(parameters) as streams:
         yield streams

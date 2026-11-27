@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from dev_agent_toolkit_mcp_client import (
     ClientError,
@@ -29,9 +30,8 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
         self.marker = self.root / "launches"
         self.config = ServerConfig(
             command=sys.executable,
-            args=["-B", str(FIXTURE)],
+            args=["-B", str(FIXTURE), "--marker", str(self.marker)],
             cwd=self.root,
-            env={"TEST_MARKER": str(self.marker)},
         )
         self.registry.add("fixture", self.config)
 
@@ -63,7 +63,9 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_standard_methods_on_both_versions_and_pagination(self):
         self.registry.add(
             "legacy",
-            self.config.model_copy(update={"env": {"TEST_LEGACY_ONLY": "yes"}}),
+            self.config.model_copy(
+                update={"args": [*self.config.args, "--legacy-only"]}
+            ),
         )
         for name, version in (("fixture", "2026-07-28"), ("legacy", "2025-11-25")):
             async with open_session(self.registry, name) as session:
@@ -132,7 +134,9 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((a["calls"], b["calls"]), (1, 1))
             self.registry.update(
                 "fixture",
-                self.config.model_copy(update={"env": {"TEST_FLAVOR": "updated"}}),
+                self.config.model_copy(
+                    update={"args": [*self.config.args, "--flavor", "updated"]}
+                ),
             )
             old = await first.request("tools/call", {"name": "state"})
             new = await execute(
@@ -295,7 +299,10 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_startup_request_and_session_deadlines(self):
         hanging = self.config.model_copy(
-            update={"startup_timeout": 0.25, "env": {"TEST_HANG_START": "yes"}}
+            update={
+                "startup_timeout": 0.25,
+                "args": [*self.config.args, "--hang-start"],
+            }
         )
         self.registry.update("fixture", hanging)
         with self.assertRaises(ClientError) as failure:
@@ -316,7 +323,12 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(session.closed)
 
     async def test_cli_json_inputs_and_session_reuse_across_processes(self):
-        legacy_config = {**self.config.model_dump(mode="json"), "allowed_tools": []}
+        obsolete = {
+            "allowed_tools": [],
+            "env": {"OBSOLETE_VARIABLE": "old-value"},
+            "env_vars": ["LEGACY_VARIABLE"],
+        }
+        legacy_config = {**self.config.model_dump(mode="json"), **obsolete}
         added = (
             await self.cli(
                 "registry",
@@ -330,8 +342,8 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.registry.list(), ["cli", "fixture"])
         registry_data = json.loads(self.registry.path.read_text(encoding="utf-8"))
         cli_config = registry_data["servers"]["cli"]["config"]
-        self.assertNotIn("allowed_tools", cli_config)
-        cli_config["allowed_tools"] = []
+        self.assertFalse(cli_config.keys() & obsolete.keys())
+        cli_config.update(obsolete)
         self.registry.path.write_text(json.dumps(registry_data), encoding="utf-8")
         response = (
             await self.cli(
@@ -344,6 +356,8 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
             )
         )[0]
         self.assertEqual(response["result"]["structuredContent"]["value"], "CLI")
+        registered = (await self.cli("registry", "get", "cli"))[0]["result"]["config"]
+        self.assertFalse(registered.keys() & obsolete.keys())
         opened = (await self.cli("session", "open", "fixture"))[0]["result"]
         token = opened["session_id"]
 
@@ -376,6 +390,52 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
         await self.cli("session", "close", token)
         with self.assertRaises(ProcessLookupError):
             os.kill(values[0]["pid"], 0)
+
+    async def test_cli_forwards_named_environment_to_calls_and_sessions(self):
+        variable = "MCP_CLIENT_SESSION_FIXTURE"
+        self.registry.update(
+            "fixture",
+            self.config.model_copy(
+                update={"args": [*self.config.args, "--env-name", variable]}
+            ),
+        )
+        with patch.dict(os.environ, {variable: "at-open"}):
+            registered = (await self.cli("registry", "get", "fixture"))[0]["result"]
+            self.assertFalse(registered["config"].keys() & {"env", "env_vars"})
+            self.assertNotIn("at-open", self.registry.path.read_text(encoding="utf-8"))
+            one_shot = (await self.cli("call", "fixture", "state"))[0]["result"]
+            opened = (await self.cli("session", "open", "fixture"))[0]["result"]
+        session_id = opened["session_id"]
+        try:
+            with patch.dict(os.environ, {variable: "after-open"}):
+                batch = (
+                    await self.cli("batch", "fixture", "--json", '[{"tool":"state"}]')
+                )[0]["items"][0]["result"]
+                session = (
+                    await self.cli("call", "fixture", "state", "--session", session_id)
+                )[0]["result"]
+        finally:
+            await self.cli("session", "close", session_id)
+        self.assertEqual(
+            one_shot["structuredContent"]["value"]["environment"], "at-open"
+        )
+        self.assertEqual(
+            batch["structuredContent"]["value"]["environment"], "after-open"
+        )
+        self.assertEqual(
+            session["structuredContent"]["value"]["environment"], "at-open"
+        )
+
+    async def test_rejects_malformed_server_environment_declaration(self):
+        self.registry.update(
+            "fixture",
+            self.config.model_copy(
+                update={"args": [*self.config.args, "--env-name", "invalid=name"]}
+            ),
+        )
+        with self.assertRaises(ClientError) as failure:
+            await execute(self.registry, "fixture", "tools/call", {"name": "state"})
+        self.assertEqual(failure.exception.code, "invalid_environment_declaration")
 
     async def test_cli_request_reuses_project_state_and_cursor_in_explicit_session(
         self,

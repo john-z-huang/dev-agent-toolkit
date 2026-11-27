@@ -56,7 +56,6 @@ class ServerConfig(BaseModel):
     command: str
     args: list[str] = Field(default_factory=list)
     cwd: Path | None = None
-    env: dict[str, str] = Field(default_factory=dict)
     mode: Literal["auto", "legacy"] = "auto"
     startup_timeout: float = Field(default=15, gt=0)
     request_timeout: float = Field(default=120, gt=0)
@@ -70,9 +69,10 @@ class ServerConfig(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def discard_legacy_allowlist(cls, value: Any) -> Any:
-        if isinstance(value, dict) and "allowed_tools" in value:
-            return {key: item for key, item in value.items() if key != "allowed_tools"}
+    def discard_legacy_settings(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            obsolete = {"allowed_tools", "env", "env_vars"}
+            return {key: item for key, item in value.items() if key not in obsolete}
         return value
 
     @field_validator("command")
@@ -98,15 +98,6 @@ class ServerConfig(BaseModel):
         if any("\0" in arg for arg in args):
             raise ValueError("arguments cannot contain NUL")
         return args
-
-    @field_validator("env")
-    @classmethod
-    def valid_environment(cls, env: dict[str, str]) -> dict[str, str]:
-        if any(
-            not key or "=" in key or "\0" in key + value for key, value in env.items()
-        ):
-            raise ValueError("invalid environment entry")
-        return env
 
 
 class RegisteredServer(BaseModel):

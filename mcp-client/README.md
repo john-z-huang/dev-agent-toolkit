@@ -30,7 +30,7 @@
 
 ## 注册 Server
 
-默认注册表为 `$XDG_CONFIG_HOME/dev-agent-toolkit/mcp-servers.json`，未设置时使用 `~/.config/dev-agent-toolkit/mcp-servers.json`。`--registry` 可指定独立文件。注册可信的可执行文件后，服务公布的所有工具均可调用。已有注册表可以直接使用，旧的 `allowed_tools` 字段会被忽略。
+默认注册表为 `$XDG_CONFIG_HOME/dev-agent-toolkit/mcp-servers.json`，未设置时使用 `~/.config/dev-agent-toolkit/mcp-servers.json`。`--registry` 可指定独立文件。只注册可信的可执行文件。已有注册表可直接读取，旧字段 `allowed_tools`、`env` 和 `env_vars` 会被忽略，下次写入注册表时移除。
 
 例如，将配置保存为 `server.json`，填入已安装 Server 的路径与参数。运行下方命令时，把示例中的 `lookup` 改成目标工具名。
 
@@ -59,10 +59,24 @@
 
 按项目使用 Serena 时，可在配置中把 `cwd` 设为项目绝对路径。
 
-- `registry list` 列出 Server ID。`registry get` 显示配置和环境变量名。`registry update` 使用完整配置替换该项，`registry remove` 删除该项。
-- `cwd` 可指定绝对工作目录，默认使用创建会话时的工作目录。`env` 可以为 Server 显式设置环境变量并保存到用户注册表。Server 进程会收到基本环境和显式配置的变量。
+- `registry list` 列出 Server ID。`registry get` 显示启动配置。`registry update` 使用完整配置替换该项，`registry remove` 删除该项。
+- `cwd` 可指定绝对工作目录，默认使用创建会话时的工作目录。
 - `startup_timeout`、`request_timeout`、`input_timeout`、`idle_timeout` 和 `max_session_age` 的单位为秒，默认分别为 15、120、60、60 和 3600。执行中和等待输入期间，空闲计时暂停。
 - 更新只影响新会话。删除会使旧会话拒绝尚未发出的请求。已经发出的请求可以完成，同名重新注册会得到新的身份。
+
+### 服务环境发现
+
+客户端先在基础 STDIO 环境中查找服务公布的只读工具 `get_mcp_environment`。支持此约定的服务应接受空参数，并在 MCP 工具响应的 `structuredContent` 中返回变量名。
+
+```json
+{
+  "names": ["MY_SERVICE_TOKEN"]
+}
+```
+
+发现工具须能在基础 STDIO 环境中完成查询。客户端从自己的进程环境读取声明的名称，跳过未设置的变量并保留已设置的空字符串。取到值时，客户端关闭初始连接并带着这些值启动处理请求的进程。服务未公布该工具或没有取到值时，客户端复用初始连接。变量值只供该下游进程使用，无需写入注册表。
+
+`dev-agent-toolkit-tools` 的发现工具会返回 OpenAI 凭据、端点、重试和代理所需的变量名。持久会话从执行 `session open` 的进程继承环境。变量值变化后，开启新会话可让下游取到新值。
 
 ## 执行请求
 

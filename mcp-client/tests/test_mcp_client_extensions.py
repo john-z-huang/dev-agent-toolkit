@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import sys
 import tempfile
 import unittest
@@ -110,7 +109,7 @@ def _serve_fixture(mode):
                 label = params["inputResponses"]["question"]["content"]["label"]
                 reply = _complete()
             case "tasks/cancel":
-                Path(os.environ["CANCEL_MARKER"]).write_text(params["taskId"])
+                Path("cancelled").write_text(params["taskId"])
                 reply = _complete()
             case "subscriptions/listen":
                 assert params["notifications"] == {"toolsListChanged": True}
@@ -143,7 +142,6 @@ class MCPClientExtensionTests(unittest.IsolatedAsyncioTestCase):
                 command=sys.executable,
                 args=["-B", str(Path(__file__).resolve()), "--fixture", mode],
                 cwd=self.root,
-                env={"CANCEL_MARKER": str(self.root / "cancelled")},
                 tasks=tasks,
                 elicitation=True,
                 request_timeout=5,

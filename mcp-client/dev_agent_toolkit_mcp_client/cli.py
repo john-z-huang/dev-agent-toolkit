@@ -134,11 +134,7 @@ def _registry_command(args: argparse.Namespace, registry: Registry) -> dict[str,
         return {"server": args.server}
     if args.action == "get":
         config = registry.get(args.server).config
-        return {
-            "server": args.server,
-            "config": config.model_dump(mode="json", exclude={"env"}),
-            "environment_keys": sorted(config.env),
-        }
+        return {"server": args.server, "config": config.model_dump(mode="json")}
     try:
         config = ServerConfig.model_validate(_read_json(args))
     except ValidationError as error:

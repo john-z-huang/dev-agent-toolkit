@@ -1,5 +1,6 @@
 """Deterministic, offline MCP server for the standalone client tests."""
 
+import argparse
 import itertools
 import json
 import os
@@ -30,20 +31,25 @@ def result(value, *, error=False):
 
 
 def main():
-    if marker := os.environ.get("TEST_MARKER"):
-        with Path(marker).open("a") as stream:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--marker", type=Path)
+    parser.add_argument("--hang-start", action="store_true")
+    parser.add_argument("--legacy-only", action="store_true")
+    parser.add_argument("--flavor", default="original")
+    parser.add_argument("--env-name", action="append", default=[])
+    options = parser.parse_args()
+    if options.marker:
+        with options.marker.open("a") as stream:
             stream.write(f"{os.getpid()}\n")
-    if os.environ.get("TEST_HANG_START"):
+    if options.hang_start:
         time.sleep(60)
-    legacy_only = os.environ.get("TEST_LEGACY_ONLY") == "yes"
-    flavor = os.environ.get("TEST_FLAVOR", "original")
     modern = False
     calls = itertools.count(1)
     session = uuid4().hex
     page_cursor = uuid4().hex
     project = "original"
     reply: dict[str, object]
-    capabilities = {
+    capabilities: dict[str, object] = {
         "tools": {"listChanged": True},
         "resources": {"subscribe": True, "listChanged": True},
         "prompts": {"listChanged": True},
@@ -69,7 +75,7 @@ def main():
         method = message["method"]
         params = message.get("params", {})
         request_id = message["id"]
-        if method == "server/discover" and not legacy_only:
+        if method == "server/discover" and not options.legacy_only:
             modern = True
             reply = {
                 "supportedVersions": ["2026-07-28"],
@@ -87,21 +93,27 @@ def main():
             if cursor is None:
                 reply = {"tools": [tool("echo")], "nextCursor": page_cursor}
             elif cursor == page_cursor:
-                reply = {
-                    "tools": [
-                        tool(name)
-                        for name in (
-                            "state",
-                            "slow",
-                            "broken",
-                            "ask",
-                            "assist",
-                            "extra",
-                            "initial_instructions",
-                            "activate_project",
-                        )
-                    ]
-                }
+                tools = [
+                    tool(name)
+                    for name in (
+                        "state",
+                        "slow",
+                        "broken",
+                        "ask",
+                        "assist",
+                        "extra",
+                        "initial_instructions",
+                        "activate_project",
+                    )
+                ]
+                if options.env_name:
+                    tools.append(
+                        {
+                            **tool("get_mcp_environment"),
+                            "annotations": {"readOnlyHint": True},
+                        }
+                    )
+                reply = {"tools": tools}
             else:
                 send(
                     {
@@ -123,7 +135,10 @@ def main():
                     }
                 )
                 continue
-            if name == "slow":
+            if name == "get_mcp_environment":
+                reply = result(options.env_name)
+                reply["structuredContent"] = {"names": options.env_name}
+            elif name == "slow":
                 token = params.get("_meta", {}).get("progressToken")
                 if token is not None:
                     send(
@@ -144,8 +159,9 @@ def main():
                         "pid": os.getpid(),
                         "calls": next(calls),
                         "cwd": os.getcwd(),
-                        "flavor": flavor,
+                        "flavor": options.flavor,
                         "project": project,
+                        "environment": os.environ.get("MCP_CLIENT_SESSION_FIXTURE"),
                     }
                 )
             elif name == "initial_instructions":

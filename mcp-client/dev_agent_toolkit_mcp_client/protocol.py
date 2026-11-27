@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any, TypeVar
@@ -28,6 +29,7 @@ InputHandler = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 
 LEGACY_VERSION = "2025-11-25"
 MODERN_VERSION = "2026-07-28"
+ENVIRONMENT_TOOL = "get_mcp_environment"
 _VERSIONS = {LEGACY_VERSION, MODERN_VERSION}
 _LIST_METHODS = {
     "tools/list": "list_tools",
@@ -436,27 +438,25 @@ class ProtocolConnection:
 
 
 @asynccontextmanager
-async def connect(
+async def _connected_client(
     config: ServerConfig,
-    on_event: EventHandler | None = None,
-    on_input: InputHandler | None = None,
-) -> AsyncGenerator[ProtocolConnection, None]:
-    """Open a managed local transport and negotiate supported MCP capabilities."""
-    callbacks = _Callbacks(config, on_event, on_input)
+    callbacks: _Callbacks,
+    environment: dict[str, str] | None = None,
+) -> AsyncGenerator[Client, None]:
     pending: Exception | None = None
     async with AsyncExitStack() as stack:
         try:
             client = await stack.enter_async_context(
                 Client(
-                    managed_stdio(config),
+                    managed_stdio(config, environment=environment),
                     mode=config.mode,
                     cache=None,
                     message_handler=callbacks.notification,
                     elicitation_callback=callbacks.elicit
-                    if config.elicitation and on_input is not None
+                    if config.elicitation and callbacks.on_input is not None
                     else None,
                     sampling_callback=callbacks.sample
-                    if config.sampling and on_input is not None
+                    if config.sampling and callbacks.on_input is not None
                     else None,
                     list_roots_callback=callbacks.roots if config.roots else None,
                     extensions=[TasksExtension(callbacks.emit)]
@@ -475,9 +475,67 @@ async def connect(
             )
         else:
             try:
-                yield ProtocolConnection(client, callbacks)
+                yield client
             except Exception as error:
                 # Close the SDK's task groups before returning the caller's exception.
                 pending = error
     if pending is not None:
         raise pending
+
+
+async def _requested_environment(connection: ProtocolConnection) -> dict[str, str]:
+    try:
+        tool = await connection.request("tools/schema", {"name": ENVIRONMENT_TOOL})
+    except ClientError as error:
+        if error.code not in {"tool_not_found", "unsupported_capability"}:
+            raise
+        return {}
+
+    annotations = tool.get("annotations") or {}
+    if annotations.get("readOnlyHint") is not True:
+        raise ClientError(
+            "invalid_environment_declaration",
+            "Environment discovery must be declared read-only",
+        )
+    try:
+        result = await connection.request("tools/call", {"name": ENVIRONMENT_TOOL})
+    except ClientError as error:
+        raise ClientError(error.code, str(error), rpc_code=error.rpc_code) from None
+    declaration = result.get("structuredContent")
+    if result.get("isError") or not isinstance(declaration, dict):
+        raise ClientError(
+            "invalid_environment_declaration",
+            "Environment discovery did not return a structured result",
+        )
+    names = declaration.get("names")
+    if not isinstance(names, list) or any(
+        not isinstance(name, str) or not name or "=" in name or "\0" in name
+        for name in names
+    ):
+        raise ClientError(
+            "invalid_environment_declaration",
+            "Server declared invalid environment variable names",
+        )
+    return {
+        name: value for name in names if (value := os.environ.get(name)) is not None
+    }
+
+
+@asynccontextmanager
+async def connect(
+    config: ServerConfig,
+    on_event: EventHandler | None = None,
+    on_input: InputHandler | None = None,
+) -> AsyncGenerator[ProtocolConnection, None]:
+    """Discover a server's environment needs before sending application requests."""
+    callbacks = _Callbacks(config, on_event, on_input)
+    async with _connected_client(config, callbacks) as probe:
+        connection = ProtocolConnection(probe, callbacks)
+        environment = await _requested_environment(connection)
+        if not environment:
+            yield connection
+            return
+
+    callbacks.known_tools.clear()
+    async with _connected_client(config, callbacks, environment) as client:
+        yield ProtocolConnection(client, callbacks)
