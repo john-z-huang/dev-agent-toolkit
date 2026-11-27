@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .batch import parse_steps, prepare_step
 from .registry import ClientError, RegisteredServer, Registry
 
 EventHandler = Callable[[dict[str, Any]], Awaitable[None]]
@@ -92,28 +93,12 @@ class Session:
         return await result
 
     async def batch(self, requests: list[dict[str, Any]]) -> dict[str, Any]:
-        if (
-            not isinstance(requests, list)
-            or not requests
-            or any(
-                not isinstance(item, dict)
-                or set(item) - {"method", "params"}
-                or not isinstance(item.get("method"), str)
-                or not item["method"]
-                or ("params" in item and not isinstance(item["params"], dict))
-                for item in requests
-            )
-        ):
-            raise ClientError(
-                "invalid_request", "Expected a nonempty array of requests"
-            )
+        steps = parse_steps(requests)
         items: list[dict[str, Any]] = []
-        for index, item in enumerate(requests):
-            method = item["method"]
+        for index, step in enumerate(steps):
             try:
-                reply = request_outcome(
-                    method, await self.request(method, item.get("params"))
-                )
+                method, params = prepare_step(step, items)
+                reply = request_outcome(method, await self.request(method, params))
             except ClientError as error:
                 reply = {"ok": False, "error": error.as_dict()}
             items.append({"index": index, **reply})
@@ -121,7 +106,7 @@ class Session:
                 return {
                     "ok": False,
                     "items": items,
-                    "skipped": len(requests) - len(items),
+                    "skipped": len(steps) - len(items),
                 }
         return {"ok": True, "items": items, "skipped": 0}
 

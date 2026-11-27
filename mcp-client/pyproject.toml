@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dev_agent_toolkit_mcp_client = "dev_agent_toolkit_mcp_client.cli:main"
+dev_agent_toolkit_mcp_client_cli = "dev_agent_toolkit_mcp_client.cli:main"
 
 [project.urls]
 Repository = "https://github.com/john-z-huang/dev-agent-toolkit"

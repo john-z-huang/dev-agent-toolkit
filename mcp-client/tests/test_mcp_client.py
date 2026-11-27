@@ -32,18 +32,17 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
             args=["-B", str(FIXTURE)],
             cwd=self.root,
             env={"TEST_MARKER": str(self.marker)},
-            allowed_tools=["echo", "state", "slow", "broken", "ask"],
         )
         self.registry.add("fixture", self.config)
 
-    async def cli(self, *args, expected=0, stdin=None):
+    async def cli(self, *args, expected=0, stdin=None, registry_path=None):
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-B",
             "-m",
             "dev_agent_toolkit_mcp_client.cli",
             "--registry",
-            str(self.registry.path),
+            str(registry_path or self.registry.path),
             *args,
             stdin=asyncio.subprocess.PIPE
             if stdin is not None
@@ -71,12 +70,13 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
                 info = await session.request("server/info")
                 self.assertEqual(info["protocolVersion"], version)
                 listing = await session.request("tools/list")
-                self.assertEqual(listing["nextCursor"], "more")
+                self.assertTrue(listing["nextCursor"])
                 schema = await session.request("tools/schema", {"name": "state"})
                 self.assertEqual(schema["inputSchema"]["type"], "object")
-                with self.assertRaises(ClientError) as failed:
-                    await session.request("tools/call", {"name": "denied"})
-                self.assertEqual(failed.exception.code, "tool_not_allowed")
+                extra = await session.request(
+                    "tools/call", {"name": "extra", "arguments": {"label": "available"}}
+                )
+                self.assertEqual(extra["structuredContent"]["value"], "available")
                 with self.assertRaises(ClientError) as rpc:
                     await session.request(
                         "tools/call",
@@ -165,6 +165,70 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((a["calls"], b["calls"]), (1, 2))
         self.assertEqual(len(self.marker.read_text().splitlines()), 1)
 
+    async def test_cli_batch_binds_session_token_and_pagination_cursor(self):
+        steps = [
+            {"tool": "initial_instructions"},
+            {
+                "tool": "activate_project",
+                "arguments": {"project": "other-project"},
+                "bind": {
+                    "session": {
+                        "path": [0, "content", 0, "text"],
+                        "between": ["Your Serena session id is `", "`"],
+                    }
+                },
+            },
+            {"method": "tools/list"},
+            {"method": "tools/list", "bind": {"cursor": {"path": [2, "nextCursor"]}}},
+            {"tool": "state"},
+        ]
+        reply = (
+            await self.cli(
+                "batch", "fixture", "--stdin", stdin=json.dumps(steps).encode()
+            )
+        )[0]
+        self.assertTrue(reply["ok"], reply)
+        items = reply["items"]
+        self.assertNotIn("nextCursor", items[3]["result"])
+        self.assertIn("state", [tool["name"] for tool in items[3]["result"]["tools"]])
+        state = items[4]["result"]["structuredContent"]["value"]
+        self.assertEqual(state["project"], "other-project")
+        self.assertEqual(len(self.marker.read_text().splitlines()), 1)
+
+    async def test_batch_validates_bindings_and_preserves_completed_results(self):
+        with self.assertRaises(ClientError) as invalid:
+            await execute_batch(
+                self.registry,
+                "fixture",
+                [
+                    {"tool": "state"},
+                    {"tool": "echo", "bind": {"label": {"path": [1, "result"]}}},
+                ],
+            )
+        self.assertEqual(invalid.exception.code, "invalid_request")
+        self.assertFalse(self.marker.exists())
+
+        reply = await execute_batch(
+            self.registry,
+            "fixture",
+            [
+                {"tool": "echo"},
+                {
+                    "tool": "echo",
+                    "bind": {
+                        "label": {
+                            "path": [0, "content", 0, "text"],
+                            "between": ["missing start", "missing end"],
+                        }
+                    },
+                },
+                {"tool": "state"},
+            ],
+        )
+        self.assertTrue(reply["items"][0]["ok"])
+        self.assertEqual(reply["items"][1]["error"]["code"], "invalid_binding")
+        self.assertEqual(reply["skipped"], 1)
+
     async def test_progress_ignores_idle_timeout_and_pending_request_cancels(self):
         self.registry.update(
             "fixture", self.config.model_copy(update={"idle_timeout": 0.3})
@@ -199,7 +263,6 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
                         "elicitation": True,
                         "sampling": True,
                         "roots": [self.root],
-                        "allowed_tools": ["ask", "assist"],
                     }
                 ),
             )
@@ -253,24 +316,31 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(session.closed)
 
     async def test_cli_json_inputs_and_session_reuse_across_processes(self):
+        legacy_config = {**self.config.model_dump(mode="json"), "allowed_tools": []}
         added = (
             await self.cli(
                 "registry",
                 "add",
                 "cli",
                 "--stdin",
-                stdin=self.config.model_dump_json().encode(),
+                stdin=json.dumps(legacy_config).encode(),
             )
         )[0]
         self.assertTrue(added["ok"])
         self.assertEqual(self.registry.list(), ["cli", "fixture"])
+        registry_data = json.loads(self.registry.path.read_text(encoding="utf-8"))
+        cli_config = registry_data["servers"]["cli"]["config"]
+        self.assertNotIn("allowed_tools", cli_config)
+        cli_config["allowed_tools"] = []
+        self.registry.path.write_text(json.dumps(registry_data), encoding="utf-8")
         response = (
             await self.cli(
-                "request",
+                "call",
                 "cli",
-                "tools/call",
-                "--json",
-                '{"name":"echo","arguments":{"label":"CLI"}}',
+                "echo",
+                "--arg",
+                "label",
+                "CLI",
             )
         )[0]
         self.assertEqual(response["result"]["structuredContent"]["value"], "CLI")
@@ -306,3 +376,75 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
         await self.cli("session", "close", token)
         with self.assertRaises(ProcessLookupError):
             os.kill(values[0]["pid"], 0)
+
+    async def test_cli_request_reuses_project_state_and_cursor_in_explicit_session(
+        self,
+    ):
+        self.registry.update(
+            "fixture", self.config.model_copy(update={"mode": "legacy"})
+        )
+        opened = (await self.cli("session", "open", "fixture"))[0]
+        session_id = opened["result"]["session_id"]
+        session_option = ("--session", session_id)
+
+        async def request(method, params):
+            response = await self.cli(
+                "request",
+                "fixture",
+                method,
+                *session_option,
+                "--json",
+                json.dumps(params),
+            )
+            return response[0]["result"]
+
+        try:
+            instructions = await request("tools/call", {"name": "initial_instructions"})
+            activated = await request(
+                "tools/call",
+                {
+                    "name": "activate_project",
+                    "arguments": {
+                        "project": "other-project",
+                        "session": instructions["structuredContent"]["value"],
+                    },
+                },
+            )
+            self.assertEqual(activated["structuredContent"]["value"], "other-project")
+            page = await request("tools/list", {})
+            following = await request("tools/list", {"cursor": page["nextCursor"]})
+            self.assertIn("state", [tool["name"] for tool in following["tools"]])
+            observed = (await self.cli("call", "fixture", "state", *session_option))[0][
+                "result"
+            ]
+            self.assertEqual(
+                observed["structuredContent"]["value"]["project"], "other-project"
+            )
+
+            other_registry = Registry(self.root / "other-servers.json")
+            other_registry.add("fixture", self.config)
+            self.registry.add("other-server", self.config)
+            for server, registry_path in (
+                ("other-server", self.registry.path),
+                ("fixture", other_registry.path),
+            ):
+                mismatch = await self.cli(
+                    "request",
+                    server,
+                    "tools/list",
+                    *session_option,
+                    registry_path=registry_path,
+                    expected=1,
+                )
+                self.assertEqual(
+                    mismatch[0]["error"]["code"], "session_target_mismatch"
+                )
+            self.assertEqual(len(self.marker.read_text().splitlines()), 1)
+        finally:
+            await self.cli("session", "close", session_id)
+
+        closed = await self.cli(
+            "request", "fixture", "tools/list", *session_option, expected=1
+        )
+        self.assertEqual(closed[0]["error"]["code"], "session_unavailable")
+        self.assertEqual(len(self.marker.read_text().splitlines()), 1)

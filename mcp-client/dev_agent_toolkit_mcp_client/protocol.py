@@ -304,10 +304,6 @@ class ProtocolConnection:
                 tool = _checked(
                     types.CallToolRequestParams, params, "name", "arguments"
                 )
-                if tool.name not in self._callbacks.config.allowed_tools:
-                    raise ClientError(
-                        "tool_not_allowed", "Tool is not in the configured allowlist"
-                    )
                 if tool.name not in self._callbacks.known_tools:
                     await self._tool_schema(tool.name)
                 progress = (

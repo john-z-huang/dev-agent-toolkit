@@ -59,7 +59,7 @@ case "${1:-}" in
     --mcp-client)
         shift
         tool_bin="$(uv tool dir --bin)" || exit $?
-        client="$tool_bin/dev_agent_toolkit_mcp_client"
+        client="$tool_bin/dev_agent_toolkit_mcp_client_cli"
         if [[ ! -x "$client" ]]; then
             printf '找不到已安装的 MCP Client，请先运行 /bin/bash ./dev-agent-toolkit --codex-mcp-client-install 或 --mcp-client-install。\n' >&2
             exit 1
@@ -94,12 +94,12 @@ dev_agent_toolkit_tools（MCP Server）
   --env-only [--dry-run]  修复 Codex 中已注册服务的环境变量转发
   --uv-build 和 --uv-tool-install 分别是服务端构建和安装的别名
 
-dev_agent_toolkit_mcp_client（MCP Client）
+dev_agent_toolkit_mcp_client（MCP Client CLI）
   --mcp-client-build  构建 mcp-client 发行包，输出到仓库的 dist/
   --mcp-client-install [--force]  安装 dist/ 中与客户端版本匹配的 wheel
   --mcp-client-install [uv 选项] <wheel 路径>  安装指定客户端 wheel
   --codex-mcp-client-install [--force] [--dry-run]  从当前源码安装并验证供 Codex 调用的 CLI
-  --mcp-client [CLI 参数]  调用已安装的 dev_agent_toolkit_mcp_client
+  --mcp-client [CLI 参数]  调用已安装的 dev_agent_toolkit_mcp_client_cli
 
 Skill 与全局指令
   --skills-install  安装技能（Skill）

@@ -42,7 +42,6 @@ class MCPClientWorkerTests(unittest.IsolatedAsyncioTestCase):
                 command=sys.executable,
                 args=["-B", str(FIXTURE)],
                 cwd=self.project,
-                allowed_tools=["ask", "state"],
                 **options,
             ),
         )

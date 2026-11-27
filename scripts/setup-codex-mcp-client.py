@@ -16,7 +16,7 @@ from pathlib import Path
 
 SOURCE = Path(__file__).resolve().parents[1] / "mcp-client"
 PACKAGE = "dev-agent-toolkit-mcp-client"
-EXECUTABLE = "dev_agent_toolkit_mcp_client"
+EXECUTABLE = "dev_agent_toolkit_mcp_client_cli"
 
 
 def _run(argv: list[str], *, timeout: int = 30) -> str:
@@ -52,23 +52,22 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         tool_bin = Path(_run([uv, "tool", "dir", "--bin"]).rstrip("\n"))
-        executable = tool_bin / EXECUTABLE
-        if (
-            not tool_bin.is_absolute()
-            or not executable.is_file()
-            or not os.access(executable, os.X_OK)
-        ):
-            print(
-                "MCP Client 已安装，但 uv tool 目录中找不到可执行入口。",
-                file=sys.stderr,
-            )
+        if not tool_bin.is_absolute():
+            print("uv tool 可执行文件目录必须是绝对路径。", file=sys.stderr)
             return 1
-        _run([str(executable), "--help"])
+        executable = tool_bin / EXECUTABLE
+        if not executable.is_file() or not os.access(executable, os.X_OK):
+            print(f"uv tool 目录中找不到可执行入口 {EXECUTABLE}。", file=sys.stderr)
+            return 1
+        usage = _run([str(executable), "--help"])
+        if not usage.lstrip().startswith(f"usage: {EXECUTABLE} "):
+            print(f"入口 {EXECUTABLE} 的帮助输出与命令名不符。", file=sys.stderr)
+            return 1
     except (OSError, subprocess.SubprocessError):
-        print("MCP Client 已安装，但 CLI 验证失败。", file=sys.stderr)
+        print("MCP Client 已安装，但可执行入口验证失败。", file=sys.stderr)
         return 1
 
-    print(f"MCP Client 已安装并通过 --help 验证：{executable}")
+    print(f"已安装并通过 --help 验证：{executable}")
     return 0
 
 

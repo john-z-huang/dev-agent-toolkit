@@ -144,7 +144,6 @@ class MCPClientExtensionTests(unittest.IsolatedAsyncioTestCase):
                 args=["-B", str(Path(__file__).resolve()), "--fixture", mode],
                 cwd=self.root,
                 env={"CANCEL_MARKER": str(self.root / "cancelled")},
-                allowed_tools=["demo"],
                 tasks=tasks,
                 elicitation=True,
                 request_timeout=5,

@@ -1,19 +1,19 @@
 # dev_agent_toolkit_mcp_client
 
-`dev_agent_toolkit_mcp_client` 是一个独立的 Python MCP Client 项目，支持 macOS、Linux 和 Python 3.11 及更新版本。Shell、脚本和 Code Agent 通过同名 CLI 调用本地 STDIO Server，Python 程序通过同名包使用同一套请求和会话逻辑。
+`dev_agent_toolkit_mcp_client` 是面向本地 STDIO MCP Server 的客户端，支持 macOS、Linux 和 Python 3.11 及更新版本。Shell、脚本和 Code Agent 通过 `dev_agent_toolkit_mcp_client_cli` 发起请求。Python 程序可导入同名发行包的客户端 API，两种方式共用注册表和请求逻辑。
 
 ## 安装
 
-在本项目目录执行以下命令，安装 CLI 并验证入口。
+在本项目目录执行以下命令，安装并验证 CLI。旧版本中以 `dev_agent_toolkit_mcp_client` 开头的 CLI 命令须换用 `dev_agent_toolkit_mcp_client_cli`。
 
 ```bash
 /bin/bash -c 'exec uv tool install --managed-python .'
-/bin/bash -c 'exec dev_agent_toolkit_mcp_client --help'
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli --help'
 ```
 
 使用 Python API 时，在调用方的 Python 环境中安装 `dev_agent_toolkit_mcp_client` 发行包，再从同名包导入。
 
-要在 Codex 中通过终端调用 CLI，从完整源码仓库的根目录执行以下命令，从当前源码安装并验证入口。加 `--dry-run` 可预览，加 `--force` 可强制重装。
+也可以从完整源码仓库的根目录刷新已有 uv tool 安装。加 `--dry-run` 可预览，加 `--force` 可强制重装。
 
 ```bash
 /bin/bash ./dev-agent-toolkit --codex-mcp-client-install
@@ -30,25 +30,34 @@
 
 ## 注册 Server
 
-默认注册表为 `$XDG_CONFIG_HOME/dev-agent-toolkit/mcp-servers.json`，未设置时使用 `~/.config/dev-agent-toolkit/mcp-servers.json`。`--registry` 可指定独立文件。仅注册可信的可执行文件。`allowed_tools` 由用户列出获准的只读工具，默认列表为空。
+默认注册表为 `$XDG_CONFIG_HOME/dev-agent-toolkit/mcp-servers.json`，未设置时使用 `~/.config/dev-agent-toolkit/mcp-servers.json`。`--registry` 可指定独立文件。注册可信的可执行文件后，服务公布的所有工具均可调用。已有注册表可以直接使用，旧的 `allowed_tools` 字段会被忽略。
 
-例如，将配置保存为 `server.json`，填入已安装 Server 的路径与参数，并把 `lookup` 改成该 Server 的只读工具名。
+例如，将配置保存为 `server.json`，填入已安装 Server 的路径与参数。运行下方命令时，把示例中的 `lookup` 改成目标工具名。
 
 ```json
 {
   "transport": "stdio",
   "command": "/absolute/path/to/mcp-server",
-  "args": [],
-  "allowed_tools": ["lookup"]
+  "args": []
 }
 ```
 
 ```bash
-/bin/bash -c 'exec dev_agent_toolkit_mcp_client registry add local --file "$1"' _ 'server.json'
-/bin/bash -c 'exec dev_agent_toolkit_mcp_client server info local'
-/bin/bash -c 'exec dev_agent_toolkit_mcp_client request local tools/list'
-/bin/bash -c 'exec dev_agent_toolkit_mcp_client request local tools/schema --json "$1"' _ '{"name":"lookup"}'
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli registry add local --file "$1"' _ 'server.json'
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli server info local'
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli request local tools/list'
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli request local tools/schema --json "$1"' _ '{"name":"lookup"}'
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli call local lookup'
 ```
+
+对于 uv tool 安装的服务，先用 `uv tool dir --bin` 查询可执行文件目录，把下表中命令的绝对路径填到 `command`。按上面的命令登记为各自的服务 ID。
+
+| 服务 ID 示例 | 可执行文件 | `args` |
+| --- | --- | --- |
+| `serena` | `serena` | `["start-mcp-server", "--context", "codex", "--project-from-cwd", "--open-web-dashboard", "false"]` |
+| `dev_agent_toolkit` | `dev-agent-toolkit-tools` | `[]` |
+
+按项目使用 Serena 时，可在配置中把 `cwd` 设为项目绝对路径。
 
 - `registry list` 列出 Server ID。`registry get` 显示配置和环境变量名。`registry update` 使用完整配置替换该项，`registry remove` 删除该项。
 - `cwd` 可指定绝对工作目录，默认使用创建会话时的工作目录。`env` 可以为 Server 显式设置环境变量并保存到用户注册表。Server 进程会收到基本环境和显式配置的变量。
@@ -57,11 +66,52 @@
 
 ## 执行请求
 
-`request <server> <method>` 执行一次并回收连接及进程。`batch <server>` 接收 `[{"method":"tools/list"}, {"method":"tools/call","params":{"name":"lookup"}}]`，在同一连接顺序执行，首次失败时保留已完成结果并返回跳过数量。`--json`、`--stdin` 和 `--file` 接收请求参数或批量数组。
+`call <server> <tool>` 直接调用已登记服务的工具。省略参数时使用空对象。重复传入 `--arg NAME VALUE` 可设置字符串参数，有数字、布尔值或嵌套对象时，用 `--json`、`--stdin` 或 `--file` 直接传入工具参数对象。
 
-`session open <server>` 返回 `session_id`，首次请求时启动 Server。使用 `session request <id> <method>` 发起后续请求，`session status <id>` 查看状态与待答输入，`session cancel <id>` 取消正在执行的请求，`session close <id>` 停止会话并回收进程。每个显式会话拥有独立的临时 Worker 与用户私有 Unix socket。请求进程断连时取消当前工作，空闲到期、总寿命到期或主动关闭时回收 Worker 及 Server。进程树回收覆盖 Server 和留在受管进程组的后代。
+```bash
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli call serena get_current_config'
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli call serena get_symbols_overview --arg relative_path "$1"' _ 'src/app.py'
+```
 
-每条命令默认输出一个带 `schema_version` 的 JSON 结果。成功时退出码为 `0`，操作失败为 `1`，CLI 参数、JSON 或配置输入错误为 `2`，中断为 `130`。`tools/call` 返回 `isError` 时保留原结果并附 `tool_error`。JSON-RPC 错误带 `rpc_code`。发出调用后断连或超时且结果无法得知时标记 `outcome_unknown`。`--events` 放在子命令前，以 JSON Lines 输出工具调用进度、通知、输入请求、Tasks 状态及最终结果，诊断走 stderr。
+`request <server> <method>` 适用于直接发出 MCP 方法请求。`call` 和 `request` 默认执行一次并回收连接及进程。加 `--session <id>` 可复用指定会话的下游连接。
+
+`session open <server>` 返回 `session_id`，首次请求时启动 Server。使用 `call` 或 `request` 加 `--session <id>` 发起后续请求，也可以用 `session request <id> <method>`。`--session` 要求与创建会话时使用同一注册表和服务 ID。会话关闭或过期时，请求会返回会话错误。
+
+使用 `session status <id>` 查看状态与待答输入，`session cancel <id>` 取消正在执行的请求，`session close <id>` 停止会话并回收进程。每个显式会话拥有独立的临时 Worker 与用户私有 Unix socket。请求进程断连时取消当前工作，空闲到期、总寿命到期或主动关闭时回收 Worker 及 Server。进程树回收覆盖 Server 和留在受管进程组的后代。
+
+对 Serena，先执行 `session open serena`，随后在同一个 CLI 会话里调用 `initial_instructions`、`activate_project` 和需要该项目的工具。`activate_project` 的 `arguments.session` 使用 Serena 返回的会话标识，CLI 的 `--session` 使用 `session open` 返回的 `session_id`。
+
+分页时也保留同一个 CLI 会话。以下示例从第一页的 `result.nextCursor` 取得游标，作为下一页请求的 `cursor`。
+
+```bash
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli request local tools/list --session "$1"' _ '<session_id>'
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli request local tools/list --session "$1" --json "$2"' _ '<session_id>' '{"cursor":"<nextCursor>"}'
+```
+
+### 用 JSON 执行多步调用
+
+`batch <server>` 从 `--json`、`--stdin` 或 `--file` 读取步骤数组，在同一连接中按顺序执行，退出时关闭该连接。每步使用 `tool` 和可选的 `arguments`，或者使用 `method` 和可选的 `params`。
+
+`bind` 将前面某一步返回的数据填入此步的参数。每个绑定的 `path` 以从零开始的步骤序号开头，从该步的 `result` 读取。用字符串访问对象字段，用从零开始的数字访问数组元素。绑定保留原来的 JSON 类型。设定 `between` 时，从文本中取第一个起始标记和其后第一个结束标记之间的内容。
+
+例如，在已登记的 Serena 中切换到指定项目并查看活动配置。将 `project` 替换为目标项目的绝对路径。
+
+```bash
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client_cli batch serena --stdin' <<'JSON'
+[
+  {"tool":"initial_instructions"},
+  {"tool":"activate_project","arguments":{"project":"/absolute/path/to/project"},
+   "bind":{"session":{"path":[0,"content",0,"text"],"between":["Your Serena session id is `","`"]}}},
+  {"tool":"get_current_config"}
+]
+JSON
+```
+
+分页也可以直接组成两步。在可分页的服务上，用 `[{"method":"tools/list"},{"method":"tools/list","bind":{"cursor":{"path":[0,"nextCursor"]}}}]` 获取前两页。
+
+批处理先校验步骤结构和绑定来源。绑定的参数名必须与该步骤的固定参数不同。调用失败、字段缺失或文本标记不匹配时，结果保留已完成步骤，以及失败步骤和跳过数量。
+
+每条命令默认输出一个带 `schema_version` 的 JSON 结果。成功时退出码为 `0`，操作失败为 `1`，CLI 参数、JSON 或配置输入错误为 `2`，中断为 `130`。`tools/call` 返回 `isError` 时保留原结果并附 `tool_error`。JSON-RPC 错误带 `rpc_code`。发出调用后断连或超时且结果无法得知时标记 `outcome_unknown`，应先核实下游状态再考虑重试。`--events` 放在子命令前，以 JSON Lines 输出工具调用进度、通知、输入请求、Tasks 状态及最终结果，诊断走 stderr。
 
 显式会话需要提交输入时，从事件流或 `session status` 取得 `input_id`，再从另一个终端执行 `session respond <id>` 并提供 `{"input_id":"…","response":{"action":"accept","content":{"label":"示例"}}}`。使用 `decline` 或 `cancel` 可以拒绝或取消表单输入。
 

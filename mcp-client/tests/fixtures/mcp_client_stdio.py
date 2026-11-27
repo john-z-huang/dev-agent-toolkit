@@ -6,6 +6,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from uuid import uuid4
 
 
 def send(message):
@@ -38,6 +39,10 @@ def main():
     flavor = os.environ.get("TEST_FLAVOR", "original")
     modern = False
     calls = itertools.count(1)
+    session = uuid4().hex
+    page_cursor = uuid4().hex
+    project = "original"
+    reply: dict[str, object]
     capabilities = {
         "tools": {"listChanged": True},
         "resources": {"subscribe": True, "listChanged": True},
@@ -78,7 +83,10 @@ def main():
                 "serverInfo": server,
             }
         elif method == "tools/list":
-            if params.get("cursor") == "more":
+            cursor = params.get("cursor")
+            if cursor is None:
+                reply = {"tools": [tool("echo")], "nextCursor": page_cursor}
+            elif cursor == page_cursor:
                 reply = {
                     "tools": [
                         tool(name)
@@ -88,12 +96,20 @@ def main():
                             "broken",
                             "ask",
                             "assist",
-                            "denied",
+                            "extra",
+                            "initial_instructions",
+                            "activate_project",
                         )
                     ]
                 }
             else:
-                reply = {"tools": [tool("echo")], "nextCursor": "more"}
+                send(
+                    {
+                        "id": request_id,
+                        "error": {"code": -32602, "message": "Unknown session cursor"},
+                    }
+                )
+                continue
         elif method == "tools/call":
             name = params["name"]
             if params.get("arguments", {}).get("label") == "rpc-error":
@@ -129,8 +145,21 @@ def main():
                         "calls": next(calls),
                         "cwd": os.getcwd(),
                         "flavor": flavor,
+                        "project": project,
                     }
                 )
+            elif name == "initial_instructions":
+                reply = result(session)
+                reply["content"] = [
+                    {"type": "text", "text": f"Your Serena session id is `{session}`."}
+                ]
+            elif name == "activate_project":
+                arguments = params["arguments"]
+                if arguments["session"] != session:
+                    reply = result("Unknown downstream session", error=True)
+                else:
+                    project = arguments["project"]
+                    reply = result(project)
             elif name == "broken":
                 reply = result("tool failed", error=True)
             elif name in {"ask", "assist"}:

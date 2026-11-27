@@ -110,7 +110,7 @@ async def worker_request(
             )
         try:
             async with asyncio.timeout(
-                None if action == "request" else _CONTROL_SECONDS
+                None if action in {"request", "request_for"} else _CONTROL_SECONDS
             ):
                 attempted = True
                 await _send(writer, {"action": action, "payload": payload})
@@ -200,9 +200,10 @@ async def open_worker(registry: Registry, server: str) -> dict[str, Any]:
 
 
 class _Worker:
-    def __init__(self, session_id: str, server: str) -> None:
+    def __init__(self, session_id: str, server: str, registry_path: Path) -> None:
         self.session_id = session_id
         self.server = server
+        self.registry_path = str(registry_path)
         self.session: Session | None = None
         self.stopping = asyncio.Event()
         self.finished = asyncio.Event()
@@ -329,6 +330,16 @@ class _Worker:
                 return self.status()
             case "request":
                 return await self.request(payload, reader, writer)
+            case "request_for":
+                if (
+                    payload.get("server") != self.server
+                    or payload.get("registry") != self.registry_path
+                ):
+                    raise ClientError(
+                        "session_target_mismatch",
+                        "Session was opened for a different server or registry",
+                    )
+                return await self.request(payload, reader, writer)
             case "respond":
                 return self.respond(payload)
             case "cancel":
@@ -380,7 +391,7 @@ async def _serve(session_id: str, path: Path, server: str, identity: str) -> Non
             raise ClientError(
                 "server_removed", "Server registration changed during startup"
             )
-        worker = _Worker(session_id, server)
+        worker = _Worker(session_id, server, registry.path)
         loop = asyncio.get_running_loop()
         for signum in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(signum, worker.stopping.set)

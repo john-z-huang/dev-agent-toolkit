@@ -163,7 +163,7 @@ class SetupLauncherTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         server_help, client_help = result.stdout.split(
-            "dev_agent_toolkit_mcp_client（MCP Client）", 1
+            "dev_agent_toolkit_mcp_client（MCP Client CLI）", 1
         )
         self.assertIn("dev_agent_toolkit_tools（MCP Server）", server_help)
         self.assertIn("--mcp-server-build", server_help)
@@ -194,9 +194,10 @@ class SetupLauncherTests(unittest.TestCase):
                 "esac\n",
                 encoding="utf-8",
             )
-            cli = bin_dir / "dev_agent_toolkit_mcp_client"
+            cli = bin_dir / "dev_agent_toolkit_mcp_client_cli"
             cli.write_text(
-                '#!/bin/bash\nprintf "%s\\0" "$@" >> "$CALL_LOG"\n',
+                '#!/bin/bash\nprintf "%s\\0" "${0##*/}" "$@" >> "$CALL_LOG"\n'
+                'printf "usage: %s [-h]\\n" "${0##*/}"\n',
                 encoding="utf-8",
             )
             for path in (uv, cli):
@@ -213,7 +214,7 @@ class SetupLauncherTests(unittest.TestCase):
             source = str(LAUNCHER.parent / "mcp-client")
             install = ["tool", "install", "--managed-python"]
             package = ["--reinstall-package", "dev-agent-toolkit-mcp-client", source]
-            verify = ["tool", "dir", "--bin", "--help"]
+            verify = ["tool", "dir", "--bin", cli.name, "--help"]
             for options, install_status, status, expected in (
                 (["--help"], 0, 0, []),
                 (["--dry-run"], 0, 0, []),
@@ -257,7 +258,7 @@ class SetupLauncherTests(unittest.TestCase):
                 'printf "%s\\n" "$TOOL_BIN"\n',
                 encoding="utf-8",
             )
-            executable = "dev_agent_toolkit_mcp_client"
+            executable = "dev_agent_toolkit_mcp_client_cli"
             decoy = root / executable
             decoy.write_text("#!/bin/bash\nexit 98\n", encoding="utf-8")
             for path in (uv, decoy):

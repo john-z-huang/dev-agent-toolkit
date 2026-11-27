@@ -21,16 +21,26 @@ class _Parser(argparse.ArgumentParser):
         raise ClientError("invalid_arguments", "Invalid CLI arguments. See --help.")
 
 
-def _json_options(parser: argparse.ArgumentParser) -> None:
+def _json_options(
+    parser: argparse.ArgumentParser, *, string_arguments: bool = False
+) -> None:
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--json", help="read JSON from a command argument")
     source.add_argument("--file", type=Path, help="read JSON from a UTF-8 file")
     source.add_argument("--stdin", action="store_true", help="read JSON from stdin")
+    if string_arguments:
+        source.add_argument(
+            "--arg",
+            action="append",
+            nargs=2,
+            metavar=("NAME", "VALUE"),
+            help="set a string tool argument (repeatable)",
+        )
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = _Parser(
-        prog="dev_agent_toolkit_mcp_client",
+        prog="dev_agent_toolkit_mcp_client_cli",
         description="Call explicitly configured local MCP servers",
     )
     parser.add_argument("--registry", type=Path, help="use this server registry file")
@@ -55,14 +65,22 @@ def _parser() -> argparse.ArgumentParser:
     server.add_subparsers(dest="action", required=True).add_parser("info").add_argument(
         "server"
     )
-    request = groups.add_parser(
-        "request", help="send one request and close the connection"
-    )
-    request.add_argument("server")
-    request.add_argument("method")
-    _json_options(request)
+    for group, target, summary in (
+        ("request", "method", "send an MCP request"),
+        ("call", "tool", "call a tool with its arguments"),
+    ):
+        command = groups.add_parser(group, help=summary)
+        command.add_argument("server")
+        command.add_argument(target)
+        command.add_argument(
+            "--session",
+            dest="session_id",
+            metavar="ID",
+            help="reuse a session opened for this server",
+        )
+        _json_options(command, string_arguments=group == "call")
     batch = groups.add_parser(
-        "batch", help="execute a JSON array of requests in one connection"
+        "batch", help="execute method or tool steps in one connection"
     )
     batch.add_argument("server")
     _json_options(batch)
@@ -95,6 +113,13 @@ def _read_json(args: argparse.Namespace, default: Any = None) -> Any:
 
 
 def _params(args: argparse.Namespace) -> dict[str, Any]:
+    if args.group == "call" and args.arg is not None:
+        arguments = dict(args.arg)
+        if "" in arguments or len(arguments) != len(args.arg):
+            raise ClientError(
+                "invalid_request", "Argument names must be nonempty and unique"
+            )
+        return arguments
     params = _read_json(args, {})
     if not isinstance(params, dict):
         raise ClientError("invalid_request", "Request parameters must be a JSON object")
@@ -153,11 +178,30 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             "ok": True,
             "result": await execute(registry, args.server, "server/info"),
         }
-    if args.group == "request":
-        result = await execute(
-            registry, args.server, args.method, _params(args), on_event=callback
-        )
-        return request_outcome(args.method, result)
+    if args.group in {"request", "call"}:
+        params = _params(args)
+        method = "tools/call" if args.group == "call" else args.method
+        if args.group == "call":
+            params = {"name": args.tool, "arguments": params}
+        if args.session_id is None:
+            result = await execute(
+                registry, args.server, method, params, on_event=callback
+            )
+        else:
+            from .worker import worker_request
+
+            result = await worker_request(
+                args.session_id,
+                "request_for",
+                {
+                    "server": args.server,
+                    "registry": str(registry.path),
+                    "method": method,
+                    "params": params,
+                },
+                on_event=callback,
+            )
+        return request_outcome(method, result)
     if args.group == "batch":
         return await execute_batch(
             registry, args.server, _read_json(args), on_event=callback

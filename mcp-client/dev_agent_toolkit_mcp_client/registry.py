@@ -12,7 +12,14 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 
 class ClientError(Exception):
@@ -41,7 +48,7 @@ class ClientError(Exception):
 
 
 class ServerConfig(BaseModel):
-    """The caller vouches for the executable and the tools in allowed_tools."""
+    """Configuration for an explicitly trusted local executable."""
 
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
@@ -50,7 +57,6 @@ class ServerConfig(BaseModel):
     args: list[str] = Field(default_factory=list)
     cwd: Path | None = None
     env: dict[str, str] = Field(default_factory=dict)
-    allowed_tools: list[str] = Field(default_factory=list)
     mode: Literal["auto", "legacy"] = "auto"
     startup_timeout: float = Field(default=15, gt=0)
     request_timeout: float = Field(default=120, gt=0)
@@ -61,6 +67,13 @@ class ServerConfig(BaseModel):
     roots: list[Path] = Field(default_factory=list)
     sampling: bool = False
     tasks: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_allowlist(cls, value: Any) -> Any:
+        if isinstance(value, dict) and "allowed_tools" in value:
+            return {key: item for key, item in value.items() if key != "allowed_tools"}
+        return value
 
     @field_validator("command")
     @classmethod
