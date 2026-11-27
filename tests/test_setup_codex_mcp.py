@@ -19,7 +19,7 @@ class EnvOnlyTests(unittest.TestCase):
             path = config(
                 Path(directory) / "config.toml",
                 '# keep comment\n[other]\nvalue = "untouched"\n\n'
-                '[mcp_servers.dev-workflow-standards-tools]\ncommand = "/installed/server"\n'
+                '[mcp_servers.dev_agent_toolkit]\ncommand = "/installed/server"\n'
                 'args = []\napproval = "writes"\nenv = { EXISTING = "kept" }\n'
                 'env_vars = ["KEEP"]\n',
             )

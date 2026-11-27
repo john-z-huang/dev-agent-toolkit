@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from unittest.mock import patch
 
 import httpx2
-from dev_workflow_standards_tools.infrastructure import openai_client
+from dev_agent_toolkit_tools.infrastructure import openai_client
 from pydantic import BaseModel
 
 
@@ -45,7 +45,9 @@ class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
         for api in ("decisions", "responses"):
             requests = []
             expected_model = (
-                openai_client.GPT_LUNA_MODEL if api == "decisions" else openai_client.GPT_SOL_MODEL
+                openai_client.GPT_LUNA_MODEL
+                if api == "decisions"
+                else openai_client.GPT_SOL_MODEL
             )
 
             def handler(request, requests=requests, api=api):
@@ -84,7 +86,7 @@ class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
                 self.subTest(api=api),
                 self.transport(handler) as clients,
                 patch(
-                    "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+                    "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
                     return_value={"passed": True},
                 ) as review,
             ):

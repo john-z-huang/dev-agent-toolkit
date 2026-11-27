@@ -6,6 +6,8 @@
 
 # 由安装器生成的本机 Codex Hooks 快照（包含绝对路径）
 /.codex/hooks.json
+/.codex/hooks/dev_agent_toolkit.manifest.json
+# 保留历史本机 Hooks 脚本的忽略规则，避免将其纳入版本控制
 /.codex/hooks/dev_workflow.py
 
 # IDE

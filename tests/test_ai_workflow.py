@@ -13,9 +13,9 @@ from ai_workflow_fixtures import (
     configured_env,
     decision_response,
 )
-from dev_workflow_standards_tools.infrastructure import openai_client
-from dev_workflow_standards_tools.services import ai_workflow
-from dev_workflow_standards_tools.services.ai_workflow import (
+from dev_agent_toolkit_tools.infrastructure import openai_client
+from dev_agent_toolkit_tools.services import ai_workflow
+from dev_agent_toolkit_tools.services.ai_workflow import (
     SessionDecisionRequest,
     audit_issue_pr_policy,
     check_branch_names,

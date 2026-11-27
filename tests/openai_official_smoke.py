@@ -9,7 +9,7 @@ import os
 import sys
 from typing import Any, Literal
 
-from dev_workflow_standards_tools.infrastructure.openai_client import (
+from dev_agent_toolkit_tools.infrastructure.openai_client import (
     OpenAIWorkflowError,
     RESPONSES_MODEL_NAME,
     parse_response,
@@ -119,7 +119,11 @@ async def _call_live() -> dict[str, Any]:
     response_error = _official_response_error(response)
     if response_error:
         return _failure(response_error)
-    return {"status": "success", "model": RESPONSES_MODEL_NAME, "usage": _usage_counts(response)}
+    return {
+        "status": "success",
+        "model": RESPONSES_MODEL_NAME,
+        "usage": _usage_counts(response),
+    }
 
 
 def main(argv: list[str] | None = None) -> int:

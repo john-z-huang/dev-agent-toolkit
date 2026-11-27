@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-LAUNCHER = Path(__file__).resolve().parents[1] / "dws"
+LAUNCHER = Path(__file__).resolve().parents[1] / "dev-agent-toolkit"
 
 
 @unittest.skipUnless(Path("/bin/bash").is_file(), "requires Bash")
@@ -61,23 +61,23 @@ class SetupLauncherTests(unittest.TestCase):
             shutil.copy2(LAUNCHER, launcher)
             uv = root / "uv"
             uv.write_text(
-                '#!/bin/bash\n'
+                "#!/bin/bash\n"
                 'if [ "$1" = version ]; then\n'
                 '    printf "2.3.4rc1\\n"\n'
-                'else\n'
+                "else\n"
                 '    printf "%s\\0" "$@"\n'
-                'fi\n',
+                "fi\n",
                 encoding="utf-8",
             )
             uv.chmod(0o755)
-            (dist / "dev_workflow_standards_tools-2.3.3-py3-none-any.whl").touch()
-            wheel = dist / "dev_workflow_standards_tools-2.3.4rc1-py3-none-any.whl"
+            (dist / "dev_agent_toolkit_tools-2.3.3-py3-none-any.whl").touch()
+            wheel = dist / "dev_agent_toolkit_tools-2.3.4rc1-py3-none-any.whl"
             command = [str(launcher), "--uv-tool-install"]
             env = {**os.environ, "PATH": f"{root}:/usr/bin:/bin"}
 
             result = subprocess.run(command, cwd=root, env=env, capture_output=True)
             self.assertEqual(result.returncode, 1)
-            self.assertIn(b"./dws --uv-build", result.stderr)
+            self.assertIn(b"./dev-agent-toolkit --uv-build", result.stderr)
             self.assertEqual(result.stdout, b"")
 
             wheel.touch()
@@ -98,7 +98,7 @@ class SetupLauncherTests(unittest.TestCase):
             uv = root / "uv"
             uv.write_text("#!/bin/bash\nexit 19\n", encoding="utf-8")
             uv.chmod(0o755)
-            cli = root / "dev-workflow-standards"
+            cli = root / "dev-agent-toolkit"
             cli.write_text("#!/bin/bash\nexit 99\n", encoding="utf-8")
             cli.chmod(0o755)
             result = subprocess.run(
@@ -127,7 +127,7 @@ class SetupLauncherTests(unittest.TestCase):
                 'printf "%s\\n" "${0%/*}"\n',
                 encoding="utf-8",
             )
-            cli = root / "dev-workflow-standards"
+            cli = root / "dev-agent-toolkit"
             cli.write_text(
                 "#!/bin/bash\nprintf '%s\\0' \"$@\"\nexit 24\n", encoding="utf-8"
             )
@@ -153,16 +153,16 @@ class SetupLauncherTests(unittest.TestCase):
             root = Path(directory)
             uv = root / "uv"
             uv.write_text(
-                '#!/bin/bash\n'
+                "#!/bin/bash\n"
                 'printf "%s\\0" "$@" >> "$CALL_LOG"\n'
                 'if [[ "$2" == install ]]; then\n'
                 '    printf "build output\\n"\n'
                 '    exit "$INSTALL_STATUS"\n'
-                'fi\n'
+                "fi\n"
                 'printf "%s\\n" "${0%/*}"\n',
                 encoding="utf-8",
             )
-            cli = root / "dev-workflow-standards"
+            cli = root / "dev-agent-toolkit"
             cli.write_text('#!/bin/bash\nprintf "%s\\0" "$@"\n', encoding="utf-8")
             for executable in (uv, cli):
                 executable.chmod(0o755)
@@ -177,7 +177,7 @@ class SetupLauncherTests(unittest.TestCase):
                 "install",
                 "--managed-python",
                 "--reinstall-package",
-                "dev-workflow-standards-tools",
+                "dev-agent-toolkit-tools",
                 str(LAUNCHER.parent / "mcp-server"),
             ]
             lookup = ["tool", "dir", "--bin"]
@@ -205,7 +205,9 @@ class SetupLauncherTests(unittest.TestCase):
                         check=False,
                     )
                     self.assertEqual(result.returncode, status, result.stderr)
-                    self.assertEqual(log.read_bytes().decode().split("\0")[:-1], uv_args)
+                    self.assertEqual(
+                        log.read_bytes().decode().split("\0")[:-1], uv_args
+                    )
                     self.assertEqual(result.stdout.decode().split("\0")[:-1], cli_args)
 
     def test_explicit_mcp_operations_select_install_or_update(self) -> None:

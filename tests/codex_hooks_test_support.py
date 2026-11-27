@@ -62,7 +62,7 @@ def install_hooks_wheel(wheel: Path, root: Path) -> Path:
         capture_output=True,
         timeout=60,
     )
-    return root / "bin/dev-workflow-standards-hooks"
+    return root / "bin/dev-agent-toolkit-hooks"
 
 
 @contextmanager

@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
 from unittest.mock import AsyncMock, patch
 
-from dev_workflow_standards_tools.infrastructure import openai_client
+from dev_agent_toolkit_tools.infrastructure import openai_client
 from pydantic import BaseModel
 
 
@@ -170,6 +170,24 @@ class OpenAIProxyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(_OriginHandler.requests), 1)
         self.assertEqual(_ProxyHandler.requests, [])
 
+    async def test_socks_proxy_environment_initializes_sdk_client(self) -> None:
+        env = {
+            "OPENAI_API_KEY": "sk-test-proxy-key-value",
+            "OPENAI_BASE_URL": "https://api.synthetic.invalid/v1",
+            "ALL_PROXY": "socks5h://127.0.0.1:1080",
+        }
+        operation = AsyncMock(return_value={"ok": True})
+        with (
+            patch.dict(os.environ, env, clear=True),
+            patch(
+                "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
+                return_value={"passed": True},
+            ),
+        ):
+            result = await openai_client._invoke({"ok": True}, operation)
+        self.assertEqual(result, {"ok": True})
+        operation.assert_awaited_once()
+
     async def test_sdk_closes_transport_after_success_and_request_failures(
         self,
     ) -> None:
@@ -185,7 +203,7 @@ class OpenAIProxyTests(unittest.IsolatedAsyncioTestCase):
             ),
             client_patch,
             patch(
-                "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+                "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
                 return_value={"passed": True},
             ),
         ):

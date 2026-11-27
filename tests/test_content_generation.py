@@ -11,15 +11,15 @@ from ai_workflow_fixtures import (
     THREAD,
     ContentGenerationTestCase,
 )
-from dev_workflow_standards_tools.infrastructure import openai_client
-from dev_workflow_standards_tools.services import ai_workflow
-from dev_workflow_standards_tools.services.ai_workflow import (
+from dev_agent_toolkit_tools.infrastructure import openai_client
+from dev_agent_toolkit_tools.services import ai_workflow
+from dev_agent_toolkit_tools.services.ai_workflow import (
     ContentGenerationRequest,
     EvidenceItem,
     GeneratedContent,
     generate_skill_content,
 )
-from dev_workflow_standards_tools.services.codex_session_facts import CodexSessionSource
+from dev_agent_toolkit_tools.services.codex_session_facts import CodexSessionSource
 from pydantic import ValidationError
 
 
@@ -120,7 +120,7 @@ class ContentGenerationTests(ContentGenerationTestCase):
                     asset = (
                         Path(__file__).resolve().parents[1]
                         / "skills"
-                        / "dev-workflow-standards"
+                        / "dev-agent-toolkit"
                         / "assets"
                         / f"{kind}.md"
                     )

@@ -18,26 +18,59 @@ from pydantic import ValidationError
 
 from ai_workflow_fixtures import choice_answer, configured_env, decision_response
 from codex_session_fixtures import tool_json
-from dev_workflow_standards_tools.infrastructure import openai_client
-from dev_workflow_standards_tools.server import mcp
-from dev_workflow_standards_tools.services import web_search as service
+from dev_agent_toolkit_tools.infrastructure import openai_client
+from dev_agent_toolkit_tools.server import mcp
+from dev_agent_toolkit_tools.services import web_search as service
 
 
 def search_response():
     return {
-        "id": "resp_synthetic", "created_at": 1, "model": openai_client.GPT_SOL_MODEL,
-        "object": "response", "status": "completed",
+        "id": "resp_synthetic",
+        "created_at": 1,
+        "model": openai_client.GPT_SOL_MODEL,
+        "object": "response",
+        "status": "completed",
         "output": [
-            {"id": "ws_synthetic", "type": "web_search_call", "status": "completed",
-             "action": {"type": "search", "query": "asyncio docs", "sources": [
-                 {"type": "url", "url": "https://docs.python.org/3/library/asyncio.html"},
-                 {"type": "url", "url": "https://docs.python.org/3/library/asyncio.html"},
-             ]}},
-            {"id": "msg_synthetic", "type": "message", "status": "completed", "role": "assistant",
-             "content": [{"type": "output_text", "text": "官方文档提供 asyncio 说明。", "annotations": [
-                 {"type": "url_citation", "start_index": 0, "end_index": 4,
-                  "url": "https://docs.python.org/3/library/asyncio.html", "title": "asyncio"},
-             ]}]},
+            {
+                "id": "ws_synthetic",
+                "type": "web_search_call",
+                "status": "completed",
+                "action": {
+                    "type": "search",
+                    "query": "asyncio docs",
+                    "sources": [
+                        {
+                            "type": "url",
+                            "url": "https://docs.python.org/3/library/asyncio.html",
+                        },
+                        {
+                            "type": "url",
+                            "url": "https://docs.python.org/3/library/asyncio.html",
+                        },
+                    ],
+                },
+            },
+            {
+                "id": "msg_synthetic",
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "output_text",
+                        "text": "官方文档提供 asyncio 说明。",
+                        "annotations": [
+                            {
+                                "type": "url_citation",
+                                "start_index": 0,
+                                "end_index": 4,
+                                "url": "https://docs.python.org/3/library/asyncio.html",
+                                "title": "asyncio",
+                            },
+                        ],
+                    }
+                ],
+            },
         ],
     }
 
@@ -52,10 +85,14 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
                     payload = json.loads(request.content)
                     requests.append((request.url.path, payload))
                     if request.url.path.endswith("/decisions"):
-                        answer = decision_response(choice_answer(
-                            "search_effort", effort, ("low", "medium", "high")
-                        ))
-                        data = json.loads(json.dumps(answer, default=lambda value: vars(value)))
+                        answer = decision_response(
+                            choice_answer(
+                                "search_effort", effort, ("low", "medium", "high")
+                            )
+                        )
+                        data = json.loads(
+                            json.dumps(answer, default=lambda value: vars(value))
+                        )
                     else:
                         data = search_response()
                     return httpx2.Response(200, json=data)
@@ -64,19 +101,32 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
 
                 class CapturedClient(client_type):
                     def __init__(self, **kwargs):
-                        super().__init__(transport=httpx2.MockTransport(handler), **kwargs)
+                        super().__init__(
+                            transport=httpx2.MockTransport(handler), **kwargs
+                        )
                         clients.append(self)
 
                 review = AsyncMock(return_value={"passed": True})
                 with (
                     patch.dict(os.environ, configured_env(), clear=True),
                     patch.object(openai_client.httpx2, "AsyncClient", CapturedClient),
-                    patch("dev_workflow_standards_tools.services.api_input_review.review_api_input", review),
+                    patch(
+                        "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
+                        review,
+                    ),
                 ):
                     async with Client(mcp) as client:
-                        result = tool_json(await client.call_tool("web_search", {"request": {
-                            "query": "查找 asyncio 官方文档", "allowed_domains": ["DOCS.python.org"]
-                        }}))
+                        result = tool_json(
+                            await client.call_tool(
+                                "web_search",
+                                {
+                                    "request": {
+                                        "query": "查找 asyncio 官方文档",
+                                        "allowed_domains": ["DOCS.python.org"],
+                                    }
+                                },
+                            )
+                        )
                 self.assertTrue(result["ok"], result)
                 self.assertEqual(result["model"], openai_client.GPT_SOL_MODEL)
                 self.assertEqual(result["reasoning_effort"], effort)
@@ -90,12 +140,18 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(decision["model"], openai_client.GPT_LUNA_MODEL)
                 self.assertNotIn("reasoning", decision)
                 self.assertEqual(decision["questions"][0]["type"], "choice")
-                self.assertEqual(json.loads(decision["input"][0]["content"]), json.loads(search["input"]))
+                self.assertEqual(
+                    json.loads(decision["input"][0]["content"]),
+                    json.loads(search["input"]),
+                )
                 self.assertEqual(search["model"], openai_client.GPT_SOL_MODEL)
                 self.assertEqual(search["reasoning"], {"effort": effort})
                 self.assertEqual(search["tool_choice"], "required")
                 self.assertEqual(search["include"], ["web_search_call.action.sources"])
-                self.assertEqual(search["tools"][0]["filters"], {"allowed_domains": ["docs.python.org"]})
+                self.assertEqual(
+                    search["tools"][0]["filters"],
+                    {"allowed_domains": ["docs.python.org"]},
+                )
                 self.assertTrue(search["tools"][0]["external_web_access"])
                 self.assertFalse(search["store"])
                 self.assertEqual(json.loads(review.call_args_list[1].args[1]), search)
@@ -107,15 +163,23 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(refusal="refused", answers=[]),
         ):
             with (
-                patch.object(openai_client, "create_decision", AsyncMock(return_value=response)),
-                patch.object(openai_client, "create_web_search_response", AsyncMock()) as search,
+                patch.object(
+                    openai_client, "create_decision", AsyncMock(return_value=response)
+                ),
+                patch.object(
+                    openai_client, "create_web_search_response", AsyncMock()
+                ) as search,
             ):
-                result = await service.web_search(service.WebSearchRequest(query="公开问题"))
+                result = await service.web_search(
+                    service.WebSearchRequest(query="公开问题")
+                )
             self.assertFalse(result["ok"])
             self.assertEqual(result["stage"], "effort_selection")
             search.assert_not_awaited()
 
-    async def test_missing_configuration_and_rejected_review_send_zero_search_requests(self):
+    async def test_missing_configuration_and_rejected_review_send_zero_search_requests(
+        self,
+    ):
         for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL"):
             for value in (None, "", "   "):
                 env = configured_env()
@@ -125,23 +189,33 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
                 with (
                     patch.dict(os.environ, env, clear=True),
                     patch.object(openai_client, "AsyncOpenAI") as sdk,
-                    patch("dev_workflow_standards_tools.services.api_input_review.review_api_input",
-                          AsyncMock(return_value={"passed": True})),
+                    patch(
+                        "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
+                        AsyncMock(return_value={"passed": True}),
+                    ),
                 ):
                     with self.assertRaises(openai_client.OpenAIWorkflowError):
                         await openai_client.create_web_search_response(
-                            instructions="搜索公开资料", input="asyncio", allowed_domains=[], reasoning_effort="low"
+                            instructions="搜索公开资料",
+                            input="asyncio",
+                            allowed_domains=[],
+                            reasoning_effort="low",
                         )
                     sdk.assert_not_called()
         with (
             patch.dict(os.environ, configured_env(), clear=True),
             patch.object(openai_client, "AsyncOpenAI") as sdk,
-            patch("dev_workflow_standards_tools.services.api_input_review.review_api_input",
-                  AsyncMock(return_value={"passed": False, "status": "needs_revision"})),
+            patch(
+                "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
+                AsyncMock(return_value={"passed": False, "status": "needs_revision"}),
+            ),
         ):
             with self.assertRaises(openai_client.OpenAIWorkflowError):
                 await openai_client.create_web_search_response(
-                    instructions="公开搜索", input="公开问题", allowed_domains=[], reasoning_effort="low"
+                    instructions="公开搜索",
+                    input="公开问题",
+                    allowed_domains=[],
+                    reasoning_effort="low",
                 )
             sdk.assert_not_called()
 
@@ -161,30 +235,51 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
         cases.append((data, "search_refused"))
         for url, end in (("javascript:alert(1)", 4), ("https://example.com", 999)):
             data = search_response()
-            data["output"][1]["content"][0]["annotations"][0].update(url=url, end_index=end)
+            data["output"][1]["content"][0]["annotations"][0].update(
+                url=url, end_index=end
+            )
             cases.append((data, "invalid_search_citation"))
         for data, code in cases:
-            result = service._search_result(SimpleNamespace(model_dump=lambda **kwargs: data))
+            result = service._search_result(
+                SimpleNamespace(model_dump=lambda **kwargs: data)
+            )
             self.assertEqual(result, {"ok": False, "error_code": code})
         data = copy.deepcopy(search_response())
         data["output"][0]["action"]["sources"] = None
-        self.assertTrue(service._search_result(SimpleNamespace(model_dump=lambda **kwargs: data))["ok"])
+        self.assertTrue(
+            service._search_result(SimpleNamespace(model_dump=lambda **kwargs: data))[
+                "ok"
+            ]
+        )
 
     def test_input_constraints(self):
         for changes in (
-            {"query": " "}, {"query": "x" * 8001}, {"allowed_domains": None},
-            {"response_language": " "}, {"model": "other"}, {"reasoning_effort": "high"},
-            *({"allowed_domains": [domain]} for domain in (
-                "https://example.com", "example.com/path", "example.com:443", "*.example.com", "127.0.0.1"
-            )),
+            {"query": " "},
+            {"query": "x" * 8001},
+            {"allowed_domains": None},
+            {"response_language": " "},
+            {"model": "other"},
+            {"reasoning_effort": "high"},
+            *(
+                {"allowed_domains": [domain]}
+                for domain in (
+                    "https://example.com",
+                    "example.com/path",
+                    "example.com:443",
+                    "*.example.com",
+                    "127.0.0.1",
+                )
+            ),
         ):
             with self.subTest(changes=changes), self.assertRaises(ValidationError):
                 service.WebSearchRequest(**({"query": "公开问题"} | changes))
 
     async def test_real_stdio_initialize_and_search_discovery(self):
         params = StdioServerParameters(
-            command=sys.executable, args=["-m", "dev_workflow_standards_tools.server"],
-            cwd=Path(__file__).resolve().parents[1] / "mcp-server", env={},
+            command=sys.executable,
+            args=["-m", "dev_agent_toolkit_tools.server"],
+            cwd=Path(__file__).resolve().parents[1] / "mcp-server",
+            env={},
         )
         async with asyncio.timeout(20), Client(params) as client:
             self.assertIn("公开网络搜索", client.instructions)
@@ -207,7 +302,9 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
             request = schema["$defs"]["WebSearchRequest"]
             self.assertFalse(request["additionalProperties"])
             self.assertEqual(request["required"], ["query"])
-            self.assertTrue(all(field["description"] for field in request["properties"].values()))
+            self.assertTrue(
+                all(field["description"] for field in request["properties"].values())
+            )
 
 
 if __name__ == "__main__":

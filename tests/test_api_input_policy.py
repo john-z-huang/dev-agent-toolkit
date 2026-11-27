@@ -5,7 +5,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from dev_workflow_standards_tools.infrastructure import api_input_policy as policy
+from dev_agent_toolkit_tools.infrastructure import api_input_policy as policy
 
 
 class ApiInputPolicyTests(unittest.TestCase):

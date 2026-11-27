@@ -20,7 +20,7 @@ class RegistrationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.config = self.root / "codex-home" / "config.toml"
-        self.exe = self.root / "bin" / "dev-workflow-standards-tools"
+        self.exe = self.root / "bin" / "dev-agent-toolkit-tools"
         self.exe.parent.mkdir(parents=True)
         self.exe.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
         self.exe.chmod(0o755)
@@ -335,7 +335,7 @@ class RegistrationTests(unittest.TestCase):
         )
 
     def test_install_precedes_registration_and_force_is_forwarded(self) -> None:
-        install_exe = self.root / "tool-bin" / "dev-workflow-standards-tools"
+        install_exe = self.root / "tool-bin" / "dev-agent-toolkit-tools"
 
         def run(argv, **kwargs):
             self.calls.append((argv, kwargs.get("env")))
@@ -379,7 +379,7 @@ class RegistrationTests(unittest.TestCase):
             self.calls[install_index][0][-3:],
             [
                 "--reinstall-package",
-                setup.DEFAULT_SERVER,
+                "dev-agent-toolkit-tools",
                 str(Path(setup.__file__).resolve().parents[1] / "mcp-server"),
             ],
         )

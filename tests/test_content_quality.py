@@ -7,9 +7,9 @@ from unittest.mock import patch
 from ai_workflow_fixtures import (
     ContentGenerationTestCase,
 )
-from dev_workflow_standards_tools.infrastructure import openai_client
-from dev_workflow_standards_tools.services import ai_workflow
-from dev_workflow_standards_tools.services.ai_workflow import (
+from dev_agent_toolkit_tools.infrastructure import openai_client
+from dev_agent_toolkit_tools.services import ai_workflow
+from dev_agent_toolkit_tools.services.ai_workflow import (
     ContentGenerationRequest,
     ContentQualityReview,
     EvidenceItem,

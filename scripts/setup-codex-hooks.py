@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TOOL = "dev-workflow-standards-hooks"
+TOOL = "dev-agent-toolkit-hooks"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -32,7 +32,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--merge", action="store_true", help="首次注册时显式备份并合并已有 Hooks"
     )
     parser.add_argument(
-        "--reconcile", action="store_true", help="更新时核验受管组，备份并保留当前其他 Hooks"
+        "--reconcile",
+        action="store_true",
+        help="更新时核验受管组，备份并保留当前其他 Hooks",
     )
     return parser
 

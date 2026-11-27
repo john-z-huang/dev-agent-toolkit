@@ -1,6 +1,6 @@
 # MCP Server 工具开发原则
 
-本文件适用于本仓库 Python MCP Server 的工具、输入协议、模型指令、测试和文档。开发操作按 [Skill Hook 合同](skills/dev-workflow-standards/hooks/index.md) 选择适用条件。[宿主审批兼容](skills/dev-workflow-standards/SKILL.md#宿主审批兼容) 适用于本仓库及发布的 Skill 和 MCP 说明。每项写入须有对应用户授权并满足实际宿主审批及本地校验。
+本文件适用于本仓库 Python MCP Server 的工具、输入协议、模型指令、测试和文档。开发操作按 [Skill Hook 合同](skills/dev-agent-toolkit/hooks/index.md) 选择适用条件。[宿主审批兼容](skills/dev-agent-toolkit/SKILL.md#宿主审批兼容) 适用于本仓库及发布的 Skill 和 MCP 说明。每项写入须有对应用户授权并满足实际宿主审批及本地校验。
 
 ## Python 代码格式化与静态检查
 
@@ -13,7 +13,7 @@
 - Decisions 为每个问题列出所有合法选项、含义、触发和排除条件、优先顺序，以及信息不足、来源冲突、拒绝或异常时的处理。必要时补充正反例和边界例。
 - 生成请求说明内容类型、受众、语言、证据引用和结构。采用用户明确提供的查询重点、字段、模板及详略。将缺失信息标为缺口，禁止编造项目、验证、远端或历史会话事实。
 - 返回可核对的枚举结果或候选内容及必要来源、缺口和审阅提示。省略完整输入、原始 SDK 响应、私有推理及冗长过程。只有实际测量后才能报告 Token 节省幅度。
-- 路径、格式、权限和外部操作由本地代码校验。模型结果不能放宽本地失败、替代真实验证或授权写入。API 错误、无效结果或输出不完整时停止受影响动作。具体协议见 [OpenAI 辅助判断与内容生成](skills/dev-workflow-standards/references/openai-workflow-tools.md)。
+- 路径、格式、权限和外部操作由本地代码校验。模型结果不能放宽本地失败、替代真实验证或授权写入。API 错误、无效结果或输出不完整时停止受影响动作。具体协议见 [OpenAI 辅助判断与内容生成](skills/dev-agent-toolkit/references/openai-workflow-tools.md)。
 
 ## OpenAI 客户端
 
@@ -26,7 +26,7 @@
 
 - 在客户端可见的服务指令、工具描述和参数 Schema 中提供完成调用所需的信息。服务指令负责职责、工具分组及选择、共用前置条件、真实数据依赖和宿主区别。发布的 Skill 和 MCP 元数据都须说明宿主限制。
 - 工具描述说明用途、适用边界、与相近工具的区别、前置工具及其产物。描述与 Schema 共同说明参数含义、类型、必填与默认值、合法值及限制、字段间约束，特别是 `false` 和 `null`、目标路径与来源、证据和自定义格式。对复杂输入提供合成示例。
-- 解释关键返回字段、状态和采用条件，以及缺失信息、拒绝、部分成功或失败后的处理。明确联网、OpenAI 调用、文件、仓库、托管平台、会话和 Memory 副作用及授权要求，使描述和注解与实现一致。详见 [MCP 工具目录](skills/dev-workflow-standards/references/mcp-tools.md)。
+- 解释关键返回字段、状态和采用条件，以及缺失信息、拒绝、部分成功或失败后的处理。明确联网、OpenAI 调用、文件、仓库、托管平台、会话和 Memory 副作用及授权要求，使描述和注解与实现一致。详见 [MCP 工具目录](skills/dev-agent-toolkit/references/mcp-tools.md)。
 - 工具变更须同步维护说明，并通过标准 MCP 初始化和工具发现核对实际服务指令、工具描述、参数 Schema 及注解。
 
 ## Codex App Server 测试

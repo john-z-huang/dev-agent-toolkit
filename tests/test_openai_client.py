@@ -17,8 +17,8 @@ from ai_workflow_fixtures import (
     decision_response,
     sdk_client,
 )
-from dev_workflow_standards_tools.infrastructure import openai_client
-from dev_workflow_standards_tools.services.ai_workflow import (
+from dev_agent_toolkit_tools.infrastructure import openai_client
+from dev_agent_toolkit_tools.services.ai_workflow import (
     GeneratedContent,
 )
 
@@ -105,7 +105,7 @@ class OpenAIClientTests(unittest.IsolatedAsyncioTestCase):
                 side_effect=[transport_a, transport_b],
             ) as transport_factory,
             patch(
-                "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+                "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
                 return_value={"passed": True},
             ),
         ):
@@ -169,7 +169,7 @@ class OpenAIClientTests(unittest.IsolatedAsyncioTestCase):
             patch.dict(os.environ, configured_env(), clear=True),
             patch.object(openai_client, "AsyncOpenAI", return_value=fake),
             patch(
-                "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+                "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
                 return_value={"passed": True},
             ),
             self.assertRaises(openai_client.OpenAIWorkflowError) as raised,
@@ -186,7 +186,7 @@ class OpenAIClientTests(unittest.IsolatedAsyncioTestCase):
             patch.dict(os.environ, configured_env(), clear=True),
             patch.object(openai_client, "AsyncOpenAI", return_value=fake),
             patch(
-                "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+                "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
                 return_value={"passed": True},
             ),
             self.assertRaises(openai_client.OpenAIWorkflowError) as raised,
@@ -296,7 +296,7 @@ class OpenAIClientTests(unittest.IsolatedAsyncioTestCase):
             patch.dict(os.environ, configured_env(), clear=True),
             patch.object(openai_client, "AsyncOpenAI", return_value=fake),
             patch(
-                "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+                "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
                 return_value={"passed": True},
             ),
         ):
@@ -318,7 +318,7 @@ class OpenAIClientTests(unittest.IsolatedAsyncioTestCase):
             patch.dict(os.environ, configured_env(), clear=True),
             patch.object(openai_client, "AsyncOpenAI", return_value=fake),
             patch(
-                "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+                "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
                 return_value={"passed": True},
             ),
         ):

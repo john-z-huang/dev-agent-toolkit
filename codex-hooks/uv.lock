@@ -3,7 +3,7 @@ revision = 5
 requires-python = ">=3.11"
 
 [[package]]
-name = "dev-workflow-standards-hooks"
+name = "dev-agent-toolkit-hooks"
 version = "0.2.0"
 source = { editable = "." }
 

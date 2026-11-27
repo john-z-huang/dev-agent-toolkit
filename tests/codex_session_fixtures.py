@@ -3,15 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from dev_workflow_standards_tools.services.codex_session_facts import (
+from dev_agent_toolkit_tools.services.codex_session_facts import (
     CodexSessionSource,
 )
 
 ROOT = Path(__file__).parents[1]
 
-DOC = (
-    ROOT / "skills" / "dev-workflow-standards" / "references" / "codex-session-facts.md"
-)
+DOC = ROOT / "skills" / "dev-agent-toolkit" / "references" / "codex-session-facts.md"
 
 
 def tool_json(result) -> dict:
