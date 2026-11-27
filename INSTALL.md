@@ -53,6 +53,10 @@
 
 `/bin/bash ./dev-agent-toolkit --uv-build` 在 `dist/` 生成 sdist 和 wheel。`/bin/bash ./dev-agent-toolkit --uv-tool-install` 安装与项目当前版本匹配的 wheel。缺少匹配的 wheel 时，安装命令会退出，先执行构建再重试。重装时加 `--force`。见 [项目工具合同](skills/dev-agent-toolkit/hooks/install-tooling.md)。
 
+## 独立 MCP Client
+
+完成首次安装的构建和发行包安装步骤即可获得 `dev-agent-toolkit-mcp`。在 macOS 或 Linux 上从 Shell 使用该入口时，按 [独立 MCP Client](docs/mcp-client.md) 配置要调用的本地 STDIO Server。
+
 ## 独立安装 Skill
 
 选择 `/bin/bash ./dev-agent-toolkit --skills-install` 或 `/bin/bash ./dev-agent-toolkit --skills-update`。默认目标为 `~/.agents/skills/dev-agent-toolkit`，也可选择独立的仓库外目录。见 [Skill 合同](skills/dev-agent-toolkit/hooks/install-skill.md)。
