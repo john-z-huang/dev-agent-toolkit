@@ -25,7 +25,7 @@
 /bin/bash -c 'exec uv run --managed-python -- "$1" --local --exposure deferred' _ '/absolute/path/to/source/scripts/setup-pi-mcp.py'
 ```
 
-Pi stdio 继承启动环境，使用 `timeout`（秒）。按需让 Pi 主进程持有非空的 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和所需代理变量。[Pi 环境传递和工具发现](../references/openai-workflow-tools.md#pi-stdio-环境传递与工具时限) 说明时限与 codemode 行为。Codex 全局指令、原生 Hooks 和 `env_vars` 属于 Codex。
+Pi stdio 继承启动环境，使用 `timeout`（秒）。按需让 Pi 主进程持有非空的 `OPENAI_API_KEY`、`OPENAI_BASE_URL` 和所需代理变量。[Pi 环境传递和工具发现](../references/openai-workflow-tools.md#pi-stdio-环境传递与工具时限) 说明时限与 codemode 行为。Codex 全局指令和 `env_vars` 属于 Codex。
 
 ## 离开条件
 

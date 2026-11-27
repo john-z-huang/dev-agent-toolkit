@@ -70,7 +70,7 @@ def installed_hooks_tool() -> Generator[tuple[str, str], None, None]:
     """显式管理测试工具目录，构建失败或测试结束时均清理临时资源。"""
     with tempfile.TemporaryDirectory(prefix="installed hooks ' ") as temporary:
         root = Path(temporary).resolve()
-        wheel = build_hooks_distribution(ROOT / "codex-hooks", root / "wheels", "wheel")
+        wheel = build_hooks_distribution(ROOT, root / "wheels", "wheel")
         executable = install_hooks_wheel(wheel, root)
         yield str(executable), "configure"
 

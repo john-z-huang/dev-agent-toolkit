@@ -2,7 +2,7 @@
 
 ## 进入条件
 
-需要构建发行包，或只刷新 dev-agent-toolkit 的 uv tool。若目标是更新已安装 Skill、全局指令、MCP 注册或原生 Hooks，直接使用 [对应合同](index.md)。
+需要构建发行包，或只刷新 dev-agent-toolkit 的 uv tool。若目标是更新已安装 Skill、全局指令或 MCP 注册，直接使用 [对应合同](index.md)。
 
 ## 执行条件
 

@@ -106,7 +106,7 @@ def main() -> int:
     install_command = ["uv", "tool", "install", "--python", sys.executable]
     if args.update:
         install_command.append("--force")
-    install_command.extend(["--reinstall-package", TOOL, str(ROOT / "codex-hooks")])
+    install_command.extend(["--reinstall-package", TOOL, str(ROOT)])
     configure = registration_arguments(args)
     if args.dry_run or not (args.install or args.update):
         print("预览：不构建或安装软件包、不注册配置；以下为执行计划，未验证目标冲突。")

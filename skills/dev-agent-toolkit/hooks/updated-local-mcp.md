@@ -22,7 +22,7 @@ JSON
 JSON
 ```
 
-调用只在当前请求期间保留子进程，结果及失败状态见 [MCP 工具目录](../references/mcp-tools.md#更新后临时本地-mcp)。该声明式 Hook 由 Agent 按事实进入，不依赖原生 Codex Hooks 或自动检测命令输出。
+调用只在当前请求期间保留子进程，结果及失败状态见 [MCP 工具目录](../references/mcp-tools.md#更新后临时本地-mcp)。该声明式 Hook 由 Agent 按事实进入。
 
 ## 离开条件
 
