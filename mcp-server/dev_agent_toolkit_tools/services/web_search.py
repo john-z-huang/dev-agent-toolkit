@@ -17,15 +17,19 @@ class WebSearchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     query: str = Field(
-        min_length=1, max_length=8000,
+        min_length=1,
+        max_length=8000,
         description="必填公开搜索问题，1–8000 字符，不能全为空白；可写版本、日期、比较重点和输出格式，不传凭据或私有材料。",
     )
     allowed_domains: list[Annotated[str, Field(min_length=1, max_length=253)]] = Field(
-        default_factory=list, max_length=100,
+        default_factory=list,
+        max_length=100,
         description="可选域名白名单，默认 [] 不限制，最多100个；仅域名（含其子域），不含协议、路径、端口、通配符或 IP；null 非法。",
     )
     response_language: str = Field(
-        default="简体中文", min_length=1, max_length=80,
+        default="简体中文",
+        min_length=1,
+        max_length=80,
         description="摘要语言，默认简体中文，1–80字符且非空白；技术标识符保持原文；null 非法。",
     )
 
@@ -47,8 +51,13 @@ class WebSearchRequest(BaseModel):
                 raise ValueError("invalid domain") from None
             labels = domain.split(".")
             if (
-                len(domain) > 253 or len(labels) < 2 or labels[-1].isdigit()
-                or any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in labels)
+                len(domain) > 253
+                or len(labels) < 2
+                or labels[-1].isdigit()
+                or any(
+                    not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+                    for label in labels
+                )
             ):
                 raise ValueError("domain only; no scheme, path, port, wildcard or IP")
             if domain not in domains:
@@ -69,8 +78,14 @@ low：单一明确事实、官方链接、简单语法或单个版本/日期查�
 这里仅分类，不执行搜索，不给答案，不添加选项；无法分类、拒绝或接口异常不得假装分类成功。""",
     "choices": [
         {"value": "low", "description": "单一事实或链接查证，不需要综合分析。"},
-        {"value": "medium", "description": "多问题、比较、排障或多来源整合；含糊问题的默认强度。"},
-        {"value": "high", "description": "复杂研究、冲突证据、因果分析、迁移取舍或高风险决策；优先级最高。"},
+        {
+            "value": "medium",
+            "description": "多问题、比较、排障或多来源整合；含糊问题的默认强度。",
+        },
+        {
+            "value": "high",
+            "description": "复杂研究、冲突证据、因果分析、迁移取舍或高风险决策；优先级最高。",
+        },
     ],
 }
 
@@ -90,7 +105,11 @@ def _is_web_url(value: Any) -> bool:
         return False
     try:
         url = urlsplit(value)
-        return url.scheme in {"http", "https"} and bool(url.hostname) and not (url.username or url.password)
+        return (
+            url.scheme in {"http", "https"}
+            and bool(url.hostname)
+            and not (url.username or url.password)
+        )
     except ValueError:
         return False
 
@@ -103,7 +122,8 @@ def _search_result(response: Any) -> dict[str, Any]:
         return {"ok": False, "error_code": "search_response_incomplete"}
     if any(
         content.get("type") == "refusal"
-        for item in output if item.get("type") == "message"
+        for item in output
+        if item.get("type") == "message"
         for content in item.get("content", [])
     ):
         return {"ok": False, "error_code": "search_refused"}
@@ -126,14 +146,20 @@ def _search_result(response: Any) -> dict[str, Any]:
                 start, end = annotation.get("start_index"), annotation.get("end_index")
                 if (
                     not _is_web_url(annotation.get("url"))
-                    or type(start) is not int or type(end) is not int
+                    or type(start) is not int
+                    or type(end) is not int
                     or not 0 <= start < end <= len(text)
                 ):
                     return {"ok": False, "error_code": "invalid_search_citation"}
-                citations.append({
-                    "block_index": block_index, "start_index": start, "end_index": end,
-                    "url": annotation["url"], "title": annotation.get("title", ""),
-                })
+                citations.append(
+                    {
+                        "block_index": block_index,
+                        "start_index": start,
+                        "end_index": end,
+                        "url": annotation["url"],
+                        "title": annotation.get("title", ""),
+                    }
+                )
     for call in calls:
         for source in (call.get("action") or {}).get("sources") or []:
             if _is_web_url(source.get("url")) and source["url"] not in sources:
@@ -141,8 +167,12 @@ def _search_result(response: Any) -> dict[str, Any]:
     if not any(block.strip() for block in blocks) or not citations:
         return {"ok": False, "error_code": "search_evidence_missing"}
     return {
-        "ok": True, "answer": "\n\n".join(blocks), "text_blocks": blocks,
-        "citations": citations, "sources": sources, "search_call_count": len(calls),
+        "ok": True,
+        "answer": "\n\n".join(blocks),
+        "text_blocks": blocks,
+        "citations": citations,
+        "sources": sources,
+        "search_call_count": len(calls),
     }
 
 
@@ -150,7 +180,8 @@ async def web_search(request: WebSearchRequest) -> dict[str, Any]:
     # 分类和搜索共用冻结事实，不允许等待期间更改查询或域名限制。
     facts = request.model_dump(mode="json")
     decision = await _decisions(
-        [_EFFORT_QUESTION], facts,
+        [_EFFORT_QUESTION],
+        facts,
         purpose="为公开网络搜索选择 low、medium 或 high 推理强度，不执行搜索。",
     )
     if "error_code" in decision:
@@ -160,9 +191,20 @@ async def web_search(request: WebSearchRequest) -> dict[str, Any]:
         response = await openai_client.create_web_search_response(
             instructions=_SEARCH_INSTRUCTIONS,
             input=json.dumps(facts, ensure_ascii=False),
-            allowed_domains=facts["allowed_domains"], reasoning_effort=effort,
+            allowed_domains=facts["allowed_domains"],
+            reasoning_effort=effort,
         )
     except openai_client.OpenAIWorkflowError as error:
-        return {"ok": False, "stage": "search", "reasoning_effort": effort, **error.as_result()}
+        return {
+            "ok": False,
+            "stage": "search",
+            "reasoning_effort": effort,
+            **error.as_result(),
+        }
     result = _search_result(response)
-    return {"stage": "search", "model": openai_client.RESPONSES_MODEL_NAME, "reasoning_effort": effort, **result}
+    return {
+        "stage": "search",
+        "model": openai_client.RESPONSES_MODEL_NAME,
+        "reasoning_effort": effort,
+        **result,
+    }

@@ -45,7 +45,9 @@ class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
         for api in ("decisions", "responses"):
             requests = []
             expected_model = (
-                openai_client.GPT_LUNA_MODEL if api == "decisions" else openai_client.GPT_SOL_MODEL
+                openai_client.GPT_LUNA_MODEL
+                if api == "decisions"
+                else openai_client.GPT_SOL_MODEL
             )
 
             def handler(request, requests=requests, api=api):

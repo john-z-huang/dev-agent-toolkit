@@ -6,7 +6,7 @@ import os
 import re
 import stat
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -425,7 +425,7 @@ def _common_dir(root: str) -> Path:
 
 
 @contextmanager
-def _sync_lock(root: str) -> Iterator[None]:
+def _sync_lock(root: str) -> Generator[None, None, None]:
     if fcntl is None:
         raise _SyncFailure(
             "sync_lock_unavailable", "当前平台不支持 worktree 同步协作锁"

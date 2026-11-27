@@ -599,9 +599,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser._optionals.title = "选项"
     parser.add_argument("-h", "--help", action="help", help="显示帮助信息并退出")
-    parser.add_argument(
-        "--server", default=DEFAULT_SERVER, help="Codex MCP 服务名称"
-    )
+    parser.add_argument("--server", default=DEFAULT_SERVER, help="Codex MCP 服务名称")
     parser.add_argument("--config", type=Path, help="Codex config.toml 配置文件路径")
     parser.add_argument(
         "--env-only", action="store_true", help="仅修复已注册服务的环境变量转发声明"

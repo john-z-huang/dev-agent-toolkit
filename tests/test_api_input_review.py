@@ -435,7 +435,10 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertTrue(
-            all(kwargs["model"] == openai_client.GPT_LUNA_MODEL for kwargs in decision_calls)
+            all(
+                kwargs["model"] == openai_client.GPT_LUNA_MODEL
+                for kwargs in decision_calls
+            )
         )
         self.assertTrue(
             all(
@@ -577,7 +580,10 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
         second_audit = json.loads(policy_calls[1]["input"][0]["content"])
         self.assertIn("修复空列表处理", second_audit["content"])
         self.assertTrue(
-            all(kwargs["model"] == openai_client.GPT_LUNA_MODEL for kwargs in policy_calls)
+            all(
+                kwargs["model"] == openai_client.GPT_LUNA_MODEL
+                for kwargs in policy_calls
+            )
         )
         response_calls = [
             kwargs
@@ -585,7 +591,10 @@ class ApiOutboundBoundaryTests(unittest.IsolatedAsyncioTestCase):
             if not args and "text_format" in kwargs
         ]
         self.assertTrue(
-            all(kwargs["model"] == openai_client.GPT_SOL_MODEL for kwargs in response_calls)
+            all(
+                kwargs["model"] == openai_client.GPT_SOL_MODEL
+                for kwargs in response_calls
+            )
         )
         self.assertTrue(
             all(kwargs["reasoning"]["effort"] == "medium" for kwargs in response_calls)

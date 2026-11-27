@@ -5,7 +5,7 @@ from pathlib import Path
 from .process import _run_fixed
 
 
-def _validated_repo_path(repo_path: str) -> tuple[str | None, str | None]:
+def _validated_repo_path(repo_path: str) -> tuple[str, None] | tuple[None, str]:
     requested = Path(repo_path).expanduser()
     if not requested.is_absolute() or ".." in requested.parts:
         return None, "repo_path 必须是绝对路径且不能包含 '..' 路径段"

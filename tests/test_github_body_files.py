@@ -20,11 +20,18 @@ class GitHubDraftFilesTests(unittest.TestCase):
                 with self.subTest(kind=kind):
                     body = Path(temp) / f"{kind}.md"
                     title = body.with_suffix(".title.txt")
-                    command = [sys.executable, str(SKILL / "scripts" / "github_draft.py")]
+                    command = [
+                        sys.executable,
+                        str(SKILL / "scripts" / "github_draft.py"),
+                    ]
                     create = [*command, "create", kind, str(body)]
                     check = [*command, "check", kind, str(body)]
-                    result = subprocess.run(create, capture_output=True, text=True, check=True)
-                    self.assertEqual(result.stdout.splitlines(), [str(body), str(title)])
+                    result = subprocess.run(
+                        create, capture_output=True, text=True, check=True
+                    )
+                    self.assertEqual(
+                        result.stdout.splitlines(), [str(body), str(title)]
+                    )
                     self.assertEqual(title.read_bytes(), b"")
                     template = (SKILL / "assets" / f"{kind}.md").read_bytes()
                     self.assertEqual(body.read_bytes(), template)
@@ -51,7 +58,9 @@ class GitHubDraftFilesTests(unittest.TestCase):
 
 class GitHubBodyFileTests(unittest.TestCase):
     def setUp(self):
-        directory = self.enterContext(tempfile.TemporaryDirectory(prefix="草稿 with spaces "))
+        directory = self.enterContext(
+            tempfile.TemporaryDirectory(prefix="草稿 with spaces ")
+        )
         self.root = Path(directory)
         self.repo = self.root / "repo"
         self.repo.mkdir()
@@ -85,7 +94,9 @@ class GitHubBodyFileTests(unittest.TestCase):
             self.assertEqual(upload.read_bytes(), body)
             uploads[args[1]] = upload
             resource = "issues/12" if args[1] == "issue" else "pull/13"
-            return CompletedProcess(args, 0, f"https://github.com/owner/repo/{resource}")
+            return CompletedProcess(
+                args, 0, f"https://github.com/owner/repo/{resource}"
+            )
 
         issue = {
             "state": "OPEN",
@@ -103,7 +114,9 @@ class GitHubBodyFileTests(unittest.TestCase):
             patch.object(workflows, "_issue_label_error", return_value=None),
             patch.object(workflows, "_gh_current_login", return_value=("tester", None)),
             patch.object(
-                workflows, "_gh_object", side_effect=[(issue, None), (issue, None), (pr, None)]
+                workflows,
+                "_gh_object",
+                side_effect=[(issue, None), (issue, None), (pr, None)],
             ),
             patch.object(workflows, "_run_fixed", side_effect=run),
         ):

@@ -157,8 +157,8 @@ class SerenaMemoryReadService:
         ):
             return self._failure("tail_lines_invalid")
         try:
-            name, path, content, total, returned, start, end, ends_with_newline = self._read_tail(
-                memory_path, tail_lines
+            name, path, content, total, returned, start, end, ends_with_newline = (
+                self._read_tail(memory_path, tail_lines)
             )
             return {
                 "status": "available",
@@ -187,12 +187,16 @@ class SerenaMemoryReadService:
             return self._check_failure("changed_content_too_large")
         result = self.tail_read(memory_path, tail_lines)
         if result.get("status") != "available":
-            return self._check_failure(str(result.get("reason_code", "memory_read_failed")))
+            return self._check_failure(
+                str(result.get("reason_code", "memory_read_failed"))
+            )
         position = result["content"].find(changed_content)
         return {
             "status": "available",
             "reason": "memory_tail_match" if position >= 0 else "memory_tail_no_match",
-            "reason_code": "memory_tail_match" if position >= 0 else "memory_tail_no_match",
+            "reason_code": "memory_tail_match"
+            if position >= 0
+            else "memory_tail_no_match",
             "success": position >= 0,
             "memory_name": result["memory_name"],
             "requested_tail_lines": result["requested_tail_lines"],

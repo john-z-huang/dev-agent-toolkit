@@ -86,9 +86,12 @@ async def call_updated_local_mcp(
     try:
         with open(os.devnull, "w") as stderr:
             transport = stdio_client(params, errlog=stderr)
-            async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS), Client(
-                transport, mode="legacy", input_required_max_rounds=0, cache=None
-            ) as client:
+            async with (
+                asyncio.timeout(REQUEST_TIMEOUT_SECONDS),
+                Client(
+                    transport, mode="legacy", input_required_max_rounds=0, cache=None
+                ) as client,
+            ):
                 server = client.server_info
                 if server is None or server.name != SERVER_NAME:
                     return _failure("server_mismatch")
@@ -96,14 +99,18 @@ async def call_updated_local_mcp(
                 if listing.next_cursor is not None:
                     # This service publishes a complete catalog in one response.
                     return _failure("incomplete_discovery")
-                available = {tool.name: tool for tool in listing.tools if _eligible(tool)}
+                available = {
+                    tool.name: tool for tool in listing.tools if _eligible(tool)
+                }
                 if tool_name is None:
                     return {
                         "ok": True,
                         "status": "listed",
                         "server_version": server.version,
                         "tools": [
-                            tool.model_dump(mode="json", by_alias=True, exclude_none=True)
+                            tool.model_dump(
+                                mode="json", by_alias=True, exclude_none=True
+                            )
                             for tool in available.values()
                         ],
                     }
@@ -118,7 +125,9 @@ async def call_updated_local_mcp(
                     "status": "target_failed" if target_failed else "called",
                     "server_version": server.version,
                     "tool_name": tool_name,
-                    "result": result.model_dump(mode="json", by_alias=True, exclude_none=True),
+                    "result": result.model_dump(
+                        mode="json", by_alias=True, exclude_none=True
+                    ),
                 }
     except TimeoutError:
         return _failure("timeout")

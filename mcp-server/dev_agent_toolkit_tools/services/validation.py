@@ -167,36 +167,39 @@ def audit_issue_pr_policy(
 
     通过固定的 gh repo view / gh api 只读请求；不创建、修改、关闭或合并 GitHub 资源。
     """
-    root, path_error = _validated_repo_path(repo_path)
-    if path_error:
-        return {"passed": False, "errors": [path_error]}
+    path_result = _validated_repo_path(repo_path)
+    if path_result[1] is not None:
+        return {"passed": False, "errors": [path_result[1]]}
+    root = path_result[0]
     request_error = _issue_pr_request_error(
         issue_number, pr_number, expected_base, expected_head
     )
     if request_error:
         return {"passed": False, "errors": [request_error]}
-    resolved_repo, error = _resolve_repo(repo, cwd=root)
-    if error:
-        return {"passed": False, "errors": [error]}
+    repo_result = _resolve_repo(repo, cwd=root)
+    if repo_result[1] is not None:
+        return {"passed": False, "errors": [repo_result[1]]}
+    resolved_repo = repo_result[0]
 
     errors: list[str] = []
     if issue_number is not None:
-        issue, error = _gh_api_json(
+        issue_result = _gh_api_json(
             f"repos/{resolved_repo}/issues/{issue_number}", cwd=root
         )
-        if error:
-            return {"passed": False, "repo": resolved_repo, "errors": [error]}
+        if issue_result[1] is not None:
+            return {"passed": False, "repo": resolved_repo, "errors": [issue_result[1]]}
+        issue = issue_result[0]
         if issue.get("state") != "open":
             errors.append(
                 f"Issue #{issue_number}: Issue 当前不是开放状态: {issue.get('state', '未知')}"
             )
     if pr_number is not None:
-        pr, error = _gh_api_json(f"repos/{resolved_repo}/pulls/{pr_number}", cwd=root)
-        if error:
-            return {"passed": False, "repo": resolved_repo, "errors": [error]}
+        pr_result = _gh_api_json(f"repos/{resolved_repo}/pulls/{pr_number}", cwd=root)
+        if pr_result[1] is not None:
+            return {"passed": False, "repo": resolved_repo, "errors": [pr_result[1]]}
         errors.extend(
             _pull_request_policy_errors(
-                pr, pr_number, expected_base, expected_head, issue_number
+                pr_result[0], pr_number, expected_base, expected_head, issue_number
             )
         )
     return {"passed": not errors, "repo": resolved_repo, "errors": errors}
@@ -204,25 +207,22 @@ def audit_issue_pr_policy(
 
 def _cleanup_branches(
     info: dict[str, Any], branch_name: str | None, root: str
-) -> tuple[str | None, str | None, str | None]:
+) -> tuple[str, str, None] | tuple[None, None, str]:
     """只有已合并 PR 的确切 head 可以成为本地删除目标。"""
     if info.get("state") != "MERGED":
         return None, None, f"PR 尚未合并（状态: {info.get('state', '未知')}）"
     base = info.get("baseRefName")
     head = info.get("headRefName")
-    target_branch = branch_name or head
-    if not base or not head:
+    if not isinstance(base, str) or not base or not isinstance(head, str) or not head:
         return None, None, "PR 缺少 base/head 分支信息"
     if branch_name is not None and branch_name != head:
         return None, None, "指定 branch_name 与 PR head 不一致"
-    if target_branch == base:
+    if head == base:
         return None, None, "PR head 不能与 base 分支相同"
-    ref_check = _run_fixed(
-        ["git", "check-ref-format", "--branch", target_branch], cwd=root
-    )
+    ref_check = _run_fixed(["git", "check-ref-format", "--branch", head], cwd=root)
     if ref_check.returncode != 0:
         return None, None, "PR head 不是有效的本地分支名"
-    return base, target_branch, None
+    return base, head, None
 
 
 def _delete_merged_branch(
@@ -257,22 +257,23 @@ def _delete_merged_branch(
 
 def _cleanup_pr_preflight(
     repo_path: str, pr_number: int, repo: str | None, merged_head_oid: str | None
-) -> tuple[str | None, dict[str, Any] | None, str | None]:
+) -> tuple[str, dict[str, Any], None] | tuple[None, None, str]:
     """在切换和删除分支前校验输入、干净状态及远端 PR 事实。"""
     if pr_number <= 0:
         return None, None, "pr_number 必须为正数"
     if merged_head_oid is not None and not OID_PATTERN.fullmatch(merged_head_oid):
         return None, None, "merged_head_oid 格式无效"
-    root, path_error = _validated_repo_path(repo_path)
-    if path_error:
-        return None, None, path_error
+    path_result = _validated_repo_path(repo_path)
+    if path_result[1] is not None:
+        return None, None, path_result[1]
+    root = path_result[0]
     clean_error = _require_clean_worktree(root)
     if clean_error:
         return None, None, clean_error
-    info, error = _gh_pr_for_cleanup(pr_number, repo, cwd=root)
-    if error:
-        return None, None, error
-    return root, info, None
+    pr_result = _gh_pr_for_cleanup(pr_number, repo, cwd=root)
+    if pr_result[1] is not None:
+        return None, None, pr_result[1]
+    return root, pr_result[0], None
 
 
 def cleanup_merged_pr_local_branch(
@@ -291,12 +292,10 @@ def cleanup_merged_pr_local_branch(
     a remote branch or merges a PR. Side effects: local branch switch, fast-forward pull, local
     head branch deletion. The supplied OID must have been recorded before merge.
     """
-    root, info, preflight_error = _cleanup_pr_preflight(
-        repo_path, pr_number, repo, merged_head_oid
-    )
-    if preflight_error:
-        return {"completed": False, "actions": [], "error": preflight_error}
-    assert root is not None and info is not None
+    preflight = _cleanup_pr_preflight(repo_path, pr_number, repo, merged_head_oid)
+    if preflight[2] is not None:
+        return {"completed": False, "actions": [], "error": preflight[2]}
+    root, info, _ = preflight
     result = _cleanup_local_branch(root, info, branch_name, merged_head_oid)
     if result["completed"]:
         result.update(repo=repo, pr_number=pr_number)
@@ -310,10 +309,10 @@ def _cleanup_local_branch(
     merged_head_oid: str | None,
 ) -> dict[str, Any]:
     """远端事实已核实后，共用本地快进与 OID 保护删除逻辑。"""
-    base, target_branch, branch_error = _cleanup_branches(info, branch_name, root)
-    if branch_error:
-        return {"completed": False, "actions": [], "error": branch_error}
-    assert base is not None and target_branch is not None
+    branches = _cleanup_branches(info, branch_name, root)
+    if branches[2] is not None:
+        return {"completed": False, "actions": [], "error": branches[2]}
+    base, target_branch, _ = branches
 
     actions: list[str] = []
     switched = _run_fixed(["git", "switch", "--", base], cwd=root)

@@ -61,12 +61,12 @@ class SetupLauncherTests(unittest.TestCase):
             shutil.copy2(LAUNCHER, launcher)
             uv = root / "uv"
             uv.write_text(
-                '#!/bin/bash\n'
+                "#!/bin/bash\n"
                 'if [ "$1" = version ]; then\n'
                 '    printf "2.3.4rc1\\n"\n'
-                'else\n'
+                "else\n"
                 '    printf "%s\\0" "$@"\n'
-                'fi\n',
+                "fi\n",
                 encoding="utf-8",
             )
             uv.chmod(0o755)
@@ -153,12 +153,12 @@ class SetupLauncherTests(unittest.TestCase):
             root = Path(directory)
             uv = root / "uv"
             uv.write_text(
-                '#!/bin/bash\n'
+                "#!/bin/bash\n"
                 'printf "%s\\0" "$@" >> "$CALL_LOG"\n'
                 'if [[ "$2" == install ]]; then\n'
                 '    printf "build output\\n"\n'
                 '    exit "$INSTALL_STATUS"\n'
-                'fi\n'
+                "fi\n"
                 'printf "%s\\n" "${0%/*}"\n',
                 encoding="utf-8",
             )
@@ -205,7 +205,9 @@ class SetupLauncherTests(unittest.TestCase):
                         check=False,
                     )
                     self.assertEqual(result.returncode, status, result.stderr)
-                    self.assertEqual(log.read_bytes().decode().split("\0")[:-1], uv_args)
+                    self.assertEqual(
+                        log.read_bytes().decode().split("\0")[:-1], uv_args
+                    )
                     self.assertEqual(result.stdout.decode().split("\0")[:-1], cli_args)
 
     def test_explicit_mcp_operations_select_install_or_update(self) -> None:

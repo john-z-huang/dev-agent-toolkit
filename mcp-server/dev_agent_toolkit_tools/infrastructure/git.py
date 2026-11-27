@@ -30,7 +30,7 @@ def _valid_remote_branch(name: str) -> bool:
     )
 
 
-def _absolute_new_path(path: str) -> tuple[str | None, str | None]:
+def _absolute_new_path(path: str) -> tuple[str, None] | tuple[None, str]:
     requested = Path(path).expanduser()
     if not requested.is_absolute() or ".." in requested.parts:
         return None, "路径必须是绝对路径且不能包含 '..' 路径段"
@@ -87,7 +87,7 @@ def _require_clean_worktree(cwd: str) -> str | None:
 
 def _requested_repo_paths(
     paths: list[str],
-) -> tuple[list[PurePosixPath] | None, str | None]:
+) -> tuple[list[PurePosixPath], None] | tuple[None, str]:
     if not paths:
         return None, "paths 不能为空"
     parsed: list[PurePosixPath] = []
@@ -126,7 +126,7 @@ def _validate_stage_path(root: str, rel: PurePosixPath) -> str | None:
     return None
 
 
-def _staged_path_names(root: str) -> tuple[list[str] | None, str | None]:
+def _staged_path_names(root: str) -> tuple[list[str], None] | tuple[None, str]:
     result = _run_fixed(
         ["git", "diff", "--cached", "--name-only", "--no-renames", "-z"], cwd=root
     )

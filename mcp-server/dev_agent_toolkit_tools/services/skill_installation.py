@@ -62,7 +62,11 @@ def _manifest(data: bytes) -> dict:
                 )
                 or (
                     path.suffix != ".md"
-                    and name not in {"scripts/github_draft.py", "scripts/validate_github_draft.py"}
+                    and name
+                    not in {
+                        "scripts/github_draft.py",
+                        "scripts/validate_github_draft.py",
+                    }
                 )
                 or len(name) > 240
                 or not isinstance(digest, str)
@@ -90,11 +94,7 @@ def _bundle() -> tuple[dict, dict[str, bytes]]:
 
 
 def _target(raw: str | None) -> Path:
-    raw = (
-        raw
-        if raw is not None
-        else str(Path.home() / ".agents" / "skills" / SKILL)
-    )
+    raw = raw if raw is not None else str(Path.home() / ".agents" / "skills" / SKILL)
     if not raw or "\x00" in raw or ".." in Path(raw).parts:
         raise SkillError("目标不能为空或含路径穿越")
     target = Path(os.path.abspath(Path(raw).expanduser()))

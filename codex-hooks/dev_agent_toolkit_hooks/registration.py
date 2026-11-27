@@ -150,7 +150,7 @@ def reconcile_base(
         ):
             raise HookSetupError("当前受管 Hooks 组有缺失、修改或顺序变化；请人工核对")
         hooks[event] = observed[:start]
-    base = {**current, "hooks": hooks}
+    base: HookConfiguration = {**current, "hooks": hooks}
     if merge_configuration(base, managed) != current:
         raise HookSetupError("当前配置包含重复受管 Hooks 组；请人工核对")
     return base

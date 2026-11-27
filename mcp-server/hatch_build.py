@@ -78,8 +78,14 @@ def _source_git_commit(root: Path) -> str | None:
             environment["GIT_NO_LAZY_FETCH"] = "1"
             result = subprocess.run(
                 [
-                    "git", "--no-pager", "--no-optional-locks",
-                    "-C", str(root.parent), "rev-parse", "--verify", "HEAD^{commit}",
+                    "git",
+                    "--no-pager",
+                    "--no-optional-locks",
+                    "-C",
+                    str(root.parent),
+                    "rev-parse",
+                    "--verify",
+                    "HEAD^{commit}",
                 ],
                 env=environment,
                 stdin=subprocess.DEVNULL,
@@ -142,7 +148,9 @@ class CustomBuildHook(BuildHookInterface):
         global_file = global_stage / "codex-global.md"
         global_file.write_bytes(global_data)
         if self.target_name == "wheel":
-            global_destination = "dev_agent_toolkit_tools/global_instructions/codex-global.md"
+            global_destination = (
+                "dev_agent_toolkit_tools/global_instructions/codex-global.md"
+            )
         else:
             global_destination = "global-instructions-source.md"
         build_data["force_include"][str(global_file)] = global_destination

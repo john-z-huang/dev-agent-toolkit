@@ -62,6 +62,8 @@ def register_codex_session_fact_tools(server: MCPServer) -> None:
         idempotent_hint=True,
         open_world_hint=False,
     )
-    _register_adapter(server, get_codex_session_summary_guidance, read_only, local_stdio=True)
+    _register_adapter(
+        server, get_codex_session_summary_guidance, read_only, local_stdio=True
+    )
     for service in (order_codex_session_sources, prepare_codex_session_memory):
         _register_adapter(server, service, read_only)

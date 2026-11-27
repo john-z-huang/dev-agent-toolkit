@@ -190,11 +190,11 @@ def _snapshot(target: Path, metadata_path: Path) -> dict:
     if metadata_exists:
         metadata_bytes, _ = _read_regular(metadata_path, label="全局 AGENTS 元数据")
         metadata_value = _metadata(metadata_path)
-    if metadata_exists and not target_exists:
+    if metadata_value is not None and target_bytes is None:
         raise GlobalAgentsError("全局 AGENTS 元数据存在但目标缺失；拒绝自动修复")
-    if not target_exists:
+    if target_bytes is None:
         status = "missing"
-    elif not metadata_exists:
+    elif metadata_value is None:
         status = "unmanaged"
     elif _digest(target_bytes) != metadata_value["rendered_sha256"]:
         status = "locally_modified"

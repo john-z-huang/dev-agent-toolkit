@@ -36,6 +36,7 @@ class SerenaMemoryTests(IsolatedAsyncioTestCase):
                 env={},
             )
             async with asyncio.timeout(20), Client(params) as client:
+
                 async def call(name: str, **arguments):
                     result = await client.call_tool(name, arguments)
                     self.assertFalse(result.is_error, result.content)
@@ -47,7 +48,8 @@ class SerenaMemoryTests(IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(tail["content"], "Result\r\n完成")
                 self.assertEqual(
-                    (tail["total_lines"], tail["start_line"], tail["end_line"]), (3, 2, 3)
+                    (tail["total_lines"], tail["start_line"], tail["end_line"]),
+                    (3, 2, 3),
                 )
                 for expected, matches in (("Result", True), ("result", False)):
                     check = await call(
@@ -68,10 +70,12 @@ class SerenaMemoryTests(IsolatedAsyncioTestCase):
                         "serena_memory_tail_read", memory_path=name, tail_lines=1
                     )
                     self.assertEqual(
-                        (rejected["status"], rejected["reason_code"]), ("unavailable", reason)
+                        (rejected["status"], rejected["reason_code"]),
+                        ("unavailable", reason),
                     )
                 invalid = await client.call_tool(
-                    "serena_memory_tail_read", {"memory_path": "plan", "tail_lines": "2"}
+                    "serena_memory_tail_read",
+                    {"memory_path": "plan", "tail_lines": "2"},
                 )
                 self.assertTrue(invalid.is_error)
             self.assertEqual(file.read_bytes(), original)

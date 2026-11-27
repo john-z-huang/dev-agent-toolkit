@@ -32,14 +32,18 @@ def main() -> None:
     parser.add_argument("kind", choices=("issue", "pr"))
     parser.add_argument("path", type=Path, help="Markdown 正文路径，父目录须已存在")
     parser.add_argument(
-        "--title-file", type=Path, help="标题文件路径，默认同目录 <正文文件名去后缀>.title.txt"
+        "--title-file",
+        type=Path,
+        help="标题文件路径，默认同目录 <正文文件名去后缀>.title.txt",
     )
     parser.add_argument("--template", type=Path, help="使用指定模板覆盖默认结构")
     args = parser.parse_args()
     try:
         title_file = args.title_file or args.path.with_suffix(".title.txt")
         if args.action == "create":
-            default_template = Path(__file__).resolve().parents[1] / "assets" / f"{args.kind}.md"
+            default_template = (
+                Path(__file__).resolve().parents[1] / "assets" / f"{args.kind}.md"
+            )
             source = (args.template or default_template).read_text(encoding="utf-8")
             _create_files(args.path, title_file, source)
         else:

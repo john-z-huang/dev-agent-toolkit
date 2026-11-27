@@ -14,7 +14,13 @@ async def web_search(request: WebSearchRequest) -> dict:
 
 
 def register_web_search_tools(server: MCPServer) -> None:
-    _register_adapter(server, web_search, ToolAnnotations(
-        read_only_hint=True, destructive_hint=False,
-        idempotent_hint=False, open_world_hint=True,
-    ))
+    _register_adapter(
+        server,
+        web_search,
+        ToolAnnotations(
+            read_only_hint=True,
+            destructive_hint=False,
+            idempotent_hint=False,
+            open_world_hint=True,
+        ),
+    )

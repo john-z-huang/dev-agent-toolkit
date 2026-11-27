@@ -82,10 +82,21 @@ class SkillDistributionTests(unittest.TestCase):
                 if number == 2:
                     with (source / "SKILL.md").open("a") as stream:
                         stream.write("\n测试第二个发布快照。\n")
-                run(["git", "add", "--", "mcp-server", "skills", "instructions"], project)
                 run(
-                    ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com",
-                     "commit", "-qm", f"fixture-{number}"],
+                    ["git", "add", "--", "mcp-server", "skills", "instructions"],
+                    project,
+                )
+                run(
+                    [
+                        "git",
+                        "-c",
+                        "user.name=Test",
+                        "-c",
+                        "user.email=test@example.com",
+                        "commit",
+                        "-qm",
+                        f"fixture-{number}",
+                    ],
                     project,
                 )
                 commit = run(["git", "rev-parse", "HEAD"], project).stdout.strip()
@@ -128,7 +139,9 @@ class SkillDistributionTests(unittest.TestCase):
                     )
                     archive.extractall(extracted, filter="data")
                 rebuild_root = next(extracted.iterdir())
-                self.assertEqual((rebuild_root / "git-commit.txt").read_text().strip(), commit)
+                self.assertEqual(
+                    (rebuild_root / "git-commit.txt").read_text().strip(), commit
+                )
                 self.assertEqual(
                     (rebuild_root / "global-instructions-source.md").read_bytes(),
                     global_source.read_bytes(),
@@ -151,11 +164,16 @@ class SkillDistributionTests(unittest.TestCase):
                 wheels.append(wheel)
                 with zipfile.ZipFile(wheel) as archive:
                     git_metadata = next(
-                        name for name in archive.namelist()
+                        name
+                        for name in archive.namelist()
                         if name.endswith(".dist-info/extra_metadata/git-commit.txt")
                     )
-                    self.assertEqual(archive.read(git_metadata).decode().strip(), commit)
-                    global_resource = "dev_agent_toolkit_tools/global_instructions/codex-global.md"
+                    self.assertEqual(
+                        archive.read(git_metadata).decode().strip(), commit
+                    )
+                    global_resource = (
+                        "dev_agent_toolkit_tools/global_instructions/codex-global.md"
+                    )
                     self.assertEqual(
                         archive.read(global_resource), global_source.read_bytes()
                     )
@@ -170,7 +188,10 @@ class SkillDistributionTests(unittest.TestCase):
                         p.relative_to(source).as_posix(): p.read_bytes()
                         for p in source.rglob("*.md")
                     }
-                    for script in ("scripts/github_draft.py", "scripts/validate_github_draft.py"):
+                    for script in (
+                        "scripts/github_draft.py",
+                        "scripts/validate_github_draft.py",
+                    ):
                         expected_files[script] = (source / script).read_bytes()
                     self.assertEqual(shipped, expected_files)
                     self.assertIn("hooks/index.md", shipped)
@@ -182,8 +203,14 @@ class SkillDistributionTests(unittest.TestCase):
                     self.assertIn("Pi Code Agent", skill_text)
                     self.assertIn("## Pi 工具发现与能力边界", skill_text)
                     self.assertIn("describeNamespace", skill_text)
-                    self.assertIn("### Pi stdio 环境传递与工具时限", shipped["references/openai-workflow-tools.md"].decode())
-                    self.assertIn("## 宿主适用范围", shipped["references/codex-session-facts.md"].decode())
+                    self.assertIn(
+                        "### Pi stdio 环境传递与工具时限",
+                        shipped["references/openai-workflow-tools.md"].decode(),
+                    )
+                    self.assertIn(
+                        "## 宿主适用范围",
+                        shipped["references/codex-session-facts.md"].decode(),
+                    )
                     self.assertIn("Codex writes approval", skill_text)
                     self.assertNotIn("AGENTS.md", shipped)
                     self.assertIn(

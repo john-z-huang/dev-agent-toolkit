@@ -8,7 +8,7 @@ import os
 import traceback
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, Protocol, TypedDict, TypeVar, cast
 from urllib.parse import urlsplit
 
 import anyio
@@ -22,8 +22,17 @@ from openai import (
     PermissionDeniedError,
     RateLimitError,
 )
+from pydantic import BaseModel
 
 from . import api_input_policy
+
+if TYPE_CHECKING:
+    from openai.types import DecisionCreateParams
+    from openai.types.responses import WebSearchToolParam
+    from openai.types.responses.response_create_params import (
+        ResponseCreateParamsNonStreaming,
+    )
+    from openai.types.shared_params import Reasoning, ReasoningEffort
 
 GPT_SOL_MODEL = "gpt-6.2-sol"
 GPT_TERRA_MODEL = "gpt-6.1-terra"
@@ -41,6 +50,21 @@ CLIENT_CLEANUP_SECONDS = 5.0
 _active_secrets: ContextVar[tuple[str, ...]] = ContextVar(
     "openai_active_secrets", default=()
 )
+
+
+class _StructuredResponsePayload(TypedDict):
+    model: str
+    instructions: str
+    input: str
+    text_format: dict[str, Any]
+    reasoning: Reasoning
+    store: Literal[False]
+    max_output_tokens: int
+    truncation: Literal["disabled"]
+
+
+class _JsonModelDump(Protocol):
+    def model_dump(self, *, mode: Literal["json"]) -> object: ...
 
 
 def _configuration_secrets() -> tuple[str, ...]:
@@ -116,7 +140,7 @@ def _install_log_redaction() -> None:
             record.stack_info = _redact_log_text(record.stack_info)
         return record
 
-    redacting_factory._openai_config_redactor = True  # type: ignore[attr-defined]
+    setattr(redacting_factory, "_openai_config_redactor", True)
     logging.setLogRecordFactory(redacting_factory)
 
 
@@ -371,7 +395,7 @@ async def _request_attempts(
             request_attempted = True
             response = await operation(client)
             response_text = _payload_text(
-                response.model_dump(mode="json")
+                cast(_JsonModelDump, response).model_dump(mode="json")
                 if hasattr(response, "model_dump")
                 else response
             )
@@ -408,7 +432,7 @@ async def create_decision(
 ) -> Any:
     """请求 Decisions 判断；仅发送固定模型、事实和问题，不添加不支持的选项。"""
     # 首次等待前复制输入；审核、发送和超时重试均使用同一份内容快照。
-    payload = {
+    payload: DecisionCreateParams = {
         "model": DECISIONS_MODEL_NAME,
         "input": json.loads(_payload_text(input)),
         "questions": json.loads(_payload_text(questions)),
@@ -428,7 +452,7 @@ async def _create_policy_review_decision(
     *, purpose: str, content: str, questions: list[dict[str, Any]]
 ) -> Any:
     """审核专用私有入口：保留统一配置和本地检测，仅避免再次触发语义审核。"""
-    payload = {
+    payload: DecisionCreateParams = {
         "model": DECISIONS_MODEL_NAME,
         "input": [{"role": "user", "content": content}],
         "questions": json.loads(_payload_text(questions)),
@@ -449,7 +473,7 @@ async def parse_response(
     *,
     instructions: str,
     input: str,
-    text_format: type,
+    text_format: type[BaseModel],
     reasoning_effort: str,
     max_output_tokens: int,
     purpose: str = "依据调用方提供的来源材料，生成结构化候选。",
@@ -478,12 +502,12 @@ async def parse_response(
         (text_format,),
         {"model_json_schema": classmethod(frozen_model_json_schema)},
     )
-    payload = {
+    payload: _StructuredResponsePayload = {
         "model": RESPONSES_MODEL_NAME,
         "instructions": str(instructions),
         "input": str(input),
         "text_format": schema,
-        "reasoning": {"effort": str(reasoning_effort)},
+        "reasoning": {"effort": cast("ReasoningEffort", str(reasoning_effort))},
         "store": False,
         "max_output_tokens": int(max_output_tokens),
         "truncation": "disabled",
@@ -496,9 +520,9 @@ async def parse_response(
             input=payload["input"],
             text_format=frozen_text_format,
             reasoning=payload["reasoning"],
-            store=False,
+            store=payload["store"],
             max_output_tokens=payload["max_output_tokens"],
-            truncation="disabled",
+            truncation=payload["truncation"],
         ),
         purpose=purpose,
     )
@@ -511,21 +535,21 @@ async def create_web_search_response(
     budgets = {"low": 4096, "medium": 8192, "high": 16384}
     if reasoning_effort not in budgets:
         raise OpenAIWorkflowError("invalid_search_effort")
-    search_tool: dict[str, Any] = {
+    search_tool: WebSearchToolParam = {
         "type": "web_search",
         "external_web_access": True,
         "search_context_size": "medium",
     }
     if allowed_domains:
         search_tool["filters"] = {"allowed_domains": list(allowed_domains)}
-    payload = {
+    payload: ResponseCreateParamsNonStreaming = {
         "model": RESPONSES_MODEL_NAME,
         "instructions": str(instructions),
         "input": str(input),
         "tools": [search_tool],
         "tool_choice": "required",
         "include": ["web_search_call.action.sources"],
-        "reasoning": {"effort": reasoning_effort},
+        "reasoning": {"effort": cast("ReasoningEffort", reasoning_effort)},
         "max_output_tokens": budgets[reasoning_effort],
         "store": False,
         "truncation": "disabled",

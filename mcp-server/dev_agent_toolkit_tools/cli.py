@@ -15,7 +15,8 @@ def _parser() -> argparse.ArgumentParser:
     )
     groups = parser.add_subparsers(dest="group", required=True)
     groups.add_parser(
-        "mcp", help="从 stdin 读取单个 JSON 对象，发现或调用已安装 uv tool 的离线只读工具"
+        "mcp",
+        help="从 stdin 读取单个 JSON 对象，发现或调用已安装 uv tool 的离线只读工具",
     )
     skills = groups.add_parser("skills", help="安装、查看及更新独立 Skill 快照")
     commands = skills.add_subparsers(dest="action", required=True)

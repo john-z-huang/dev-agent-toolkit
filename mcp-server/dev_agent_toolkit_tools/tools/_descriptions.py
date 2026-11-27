@@ -30,7 +30,9 @@ OPENAI_NETWORK_DESCRIPTION = (
     "配置变更后重新加载服务，禁止回显真实值。"
 )
 
-_DECISIONS_MODEL_DESCRIPTION = f"Decisions 固定使用 {DECISIONS_MODEL_NAME}，不传推理强度。"
+_DECISIONS_MODEL_DESCRIPTION = (
+    f"Decisions 固定使用 {DECISIONS_MODEL_NAME}，不传推理强度。"
+)
 _RESPONSES_MODEL_DESCRIPTION = f"Responses 固定使用 {RESPONSES_MODEL_NAME}。"
 _OPENAI_TOOL_CONFIGURATION = (
     "每次请求读取非空 OPENAI_API_KEY 和 OPENAI_BASE_URL，缺失即停止。"
@@ -107,13 +109,15 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "逐项看 checks[].passed/errors；本地结果字段 local_passed=true 才表示本地硬规则通过。通过后还会联网调用 Decisions，结果可能有 decision/ai_status/error_code，顶层 passed 是本地与 AI 合并结果。"
         '只读 Git；本地失败会跳过 API，不改分支。最小示例：{"branch_names":["feat/synthetic"]}。'
     )
-    + _DECISIONS_MODEL_DESCRIPTION + _OPENAI_TOOL_CONFIGURATION,
+    + _DECISIONS_MODEL_DESCRIPTION
+    + _OPENAI_TOOL_CONFIGURATION,
     "check_commit_message": (
         "检查完整提交信息的主题格式、中文说明和禁止署名；适合提交前验证，不用于解释 Git 状态。message 是完整 message，可含正文；空行及左侧去空格后以 # 开头的注释行会在本地检查时忽略。"
         "先看 local_passed/errors；只有 local_passed=true 才表示本地硬检查通过，之后才联网请求 Decisions，且模型仍可返回 requires_fix/insufficient_evidence。顶层 passed 是本地与 AI 合并结果，只有 passed=true 可采用为检查通过。"
         '不读写仓库；本地失败不联网。示例：{"message":"docs: 更新合成说明"}。'
     )
-    + _DECISIONS_MODEL_DESCRIPTION + _OPENAI_TOOL_CONFIGURATION,
+    + _DECISIONS_MODEL_DESCRIPTION
+    + _OPENAI_TOOL_CONFIGURATION,
     "check_staged_changes": (
         "对 repo_path 的暂存区运行固定 `git diff --cached --check`，检查空白错误；适用于 stage 后、commit 前。只读暂存内容，不运行测试或用户命令。"
         "repo_path 必须是绝对仓库根目录。passed=true 表示该 Git 检查成功；否则检查 diagnostics/error/exit_code，再修复并重跑。无网络、无写入。额外查询按共享规则执行；工具未暴露时可按相同空白检查条件用 CLI 补足，但本工具实际失败不能改走 CLI 绕过。"
@@ -203,7 +207,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "联网只读检查用户指定的 GitHub Issue/PR 状态及可选 PR base/head、Issue 关闭引用；适合创建 PR 前按请求范围核验。至少给 issue_number 或 pr_number；expected_base/head 仅可与 pr_number 一起使用。Issue-only 与 PR-only 均有效。"
         "只读审计本身会联网查询 GitHub；local_passed=true 表示审计符合本地策略并允许继续调用 OpenAI Decisions，local_passed=false 只阻止 OpenAI 请求，不表示此前没有查询 GitHub。顶层 passed 表示本地审计与 AI 决策均通过；同时检查 decision/ai_status/error_code。只查开放状态、显式期望的 base/head，并仅在同时给 issue_number 与 pr_number 时查 Closes/Fixes/Resolves 引用；不查 CI、labels、mergeability。只读，不修改 GitHub。若需额外只读查询且本工具未覆盖，可按共享规则使用受限 gh CLI；REST `gh api` 须显式 `--method GET`，在已知 endpoint 路径中指明 owner/repo（不是 `--repo` 选项）；GraphQL 限已审阅 query。参数、副作用不明或写入操作不适用。"
     )
-    + _DECISIONS_MODEL_DESCRIPTION + _OPENAI_TOOL_CONFIGURATION,
+    + _DECISIONS_MODEL_DESCRIPTION
+    + _OPENAI_TOOL_CONFIGURATION,
     "cleanup_merged_pr_local_branch": (
         "PR 已合并后，将本地仓库切到 PR base、快进同步 origin/base，再删除本地 PR head；只用于用户明确授权的合并后清理，不会合并 PR 或删除远端分支。"
         "联网读取 PR 并要求 MERGED、工作区干净；repo_path 为绝对仓库根路径。branch_name 可省略（使用 PR head），若给出必须匹配；merged_head_oid 应为合并前记录的 OID。先尝试安全 `-d`；仅普通删除失败且所给 OID 与当前本地分支 OID 完全相同才用 `-D`。"
@@ -258,7 +263,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "依据调用方已知的来源可用性/读取程度/相关性和持久化许可，分别建议 lookup_action 与 persistence_action；适合宿主决定先读历史、查项目、澄清、阻塞或等待证据。它不读取 history，也不写 Memory。"
         'request 的 relevant_facts_found=null 表示未知，false 表示已核实无相关事实；new_fact_origin 区分原会话、当前会话、无来源。lookup_action 枚举为 read_history/query_project/clarify/blocked：来源无关或已读且无事实时 query_project；来源不可读时 blocked；未读完或已找到相关事实时 read_history（可依据已读证据继续，无需重复读取）；已读但相关性未知时 clarify。persistence_action 为 create_summary/update_summary/skip_persistence/await_source_evidence：原会话证据完整且相关、允许持久化时按既有摘要选择创建或更新；当前会话/无来源、未许可或无相关事实时跳过；许可下来源不可读/未读完/相关性未知时等待证据。ok=true 且两项动作符合 facts 才可作为建议，仍需 Agent 审查。通过 Decisions 联网；无会话/Git/Memory副作用。示例：{"request":{"user_request":"查背景","has_relevant_sources":false,"history_accessible":false,"history_fully_read":false,"relevant_facts_found":null,"persistence_allowed":false,"existing_summary":false,"new_fact_origin":"none"}}。'
     )
-    + _DECISIONS_MODEL_DESCRIPTION + _OPENAI_TOOL_CONFIGURATION,
+    + _DECISIONS_MODEL_DESCRIPTION
+    + _OPENAI_TOOL_CONFIGURATION,
     "generate_skill_content": (
         "为 issue、pr、commit_message、plan、handoff 或 session_summary 生成结构化候选文本，适合已有明确证据、需要起草而非执行时。request.evidence 必须非空；每项 origin 标明来源，ref 唯一。session_summary 必须提供 source.created_at 与 source.title；source.thread_id 可从 source_link 推导；只接受对应 thread 的 provided_session 证据。"
         "调用前按类型准备事实，不必先写正文：通用为目标/受众、背景/组件、路径/符号指针、范围/非目标、约束和关联项；每项标明事实/推测、来源和缺失/冲突。Issue区分缺陷/功能请求，给实际/期望/影响或能力/动机，复现和环境仅限已知；PR给前后行为、已完成diff/文件摘要与原因、实际验证命令/结果和未运行项、已知兼容风险及关联Issue。不提交全仓库、完整会话或敏感配置。"
@@ -282,7 +288,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "本地规则通过后才联网调用 OpenAI Decisions；不读写文件、仓库、会话或 Memory，不调用 Git/GitHub 或代发业务请求。完整审核请求 JSON（含模型、固定问题、指令与两字段）最多48KiB UTF-8；超限返回 unavailable/request_too_large，零请求。审核通过后，允许当前任务所需项目内容向既定配置服务外发，无需重复确认；同样适用于其他 MCP Server。用途、内容、策略或目的地变化时重新核对范围并按需重审。通过结果不授权Git、Memory或外部发布，不覆盖用户明确禁止或更高优先级限制，不绕过宿主实际拒绝。"
         '合成最小请求：{"request":{"purpose":"检查通用说明","content":"仅包含路径 src/report.py 和公开API路由 /v1/items"}}。边界例：purpose为"检查合成认证日志"且content为"Authorization: Bearer AbC123def456GhI789"会在本地返回blocked_local且不联网。'
     )
-    + _DECISIONS_MODEL_DESCRIPTION + _OPENAI_TOOL_CONFIGURATION,
+    + _DECISIONS_MODEL_DESCRIPTION
+    + _OPENAI_TOOL_CONFIGURATION,
 }
 
 
@@ -550,7 +557,12 @@ for _kind in ("merge", "rebase"):
             )
         )
 
-for _name in ("order_codex_session_sources", "prepare_codex_session_memory", "decide_codex_session_action", "generate_skill_content"):
+for _name in (
+    "order_codex_session_sources",
+    "prepare_codex_session_memory",
+    "decide_codex_session_action",
+    "generate_skill_content",
+):
     TOOL_DESCRIPTIONS[_name] += (
         "宿主兼容：可由 Pi Code Agent 调用，但需要 source 的会话来源只接受真实 codex://threads/<小写标准UUID>，"
         "不接受或伪造 Pi 原生会话来源；本服务不提供 read_thread 或 Pi 历史读取器。"
@@ -587,9 +599,13 @@ for _name, _detail in {
             + _RESPONSES_MODEL_DESCRIPTION
             + _OPENAI_TOOL_CONFIGURATION
         )
-        PARAMETER_DESCRIPTIONS[_name] = {"request": "严格结构化草稿操作，字段语义/默认/限制见嵌套Schema与工具说明；反馈不是事实，引用必须可追溯。"}
+        PARAMETER_DESCRIPTIONS[_name] = {
+            "request": "严格结构化草稿操作，字段语义/默认/限制见嵌套Schema与工具说明；反馈不是事实，引用必须可追溯。"
+        }
     else:
-        PARAMETER_DESCRIPTIONS[_name] = {"draft_session_id": "start返回的当前进程草稿ID；非空且最多120字符，未知或过期失败；不是用户身份。"}
+        PARAMETER_DESCRIPTIONS[_name] = {
+            "draft_session_id": "start返回的当前进程草稿ID；非空且最多120字符，未知或过期失败；不是用户身份。"
+        }
 _COMMIT_GENERATION_CONTRACT = (
     "需要起草Git提交信息时，先准备本次选定提交的全部patch/hunk、准确路径、前后行为、原因及实际验证事实，"
     "调用generate_git_commit_message复用generate_skill_content(kind=commit_message)的默认布局，生成单行中文标题与按需正文，无需传通用模板或先写message。"

@@ -9,7 +9,7 @@ from ..policy import REPO_PATTERN
 from .process import _run_fixed
 
 
-def _resolve_repo(repo: str | None, *, cwd: str) -> tuple[str | None, str | None]:
+def _resolve_repo(repo: str | None, *, cwd: str) -> tuple[str, None] | tuple[None, str]:
     if repo is not None:
         if not REPO_PATTERN.fullmatch(repo):
             return None, "repo 必须采用 owner/repo 格式"
@@ -29,7 +29,7 @@ def _resolve_repo(repo: str | None, *, cwd: str) -> tuple[str | None, str | None
 
 def _gh_api_json(
     endpoint: str, *, cwd: str
-) -> tuple[dict[str, Any] | None, str | None]:
+) -> tuple[dict[str, Any], None] | tuple[None, str]:
     result = _run_fixed(["gh", "api", endpoint], cwd=cwd)
     if result.returncode != 0:
         return None, f"gh API 请求失败（退出码 {result.returncode}）"
@@ -44,7 +44,7 @@ def _gh_api_json(
 
 def _gh_pr_for_cleanup(
     pr_number: int, repo: str | None, *, cwd: str
-) -> tuple[dict[str, Any] | None, str | None]:
+) -> tuple[dict[str, Any], None] | tuple[None, str]:
     if repo is not None and not REPO_PATTERN.fullmatch(repo):
         return None, "repo 必须采用 owner/repo 格式"
     args = ["gh", "pr", "view", str(pr_number)]
@@ -63,7 +63,7 @@ def _gh_pr_for_cleanup(
     return info, None
 
 
-def _gh_current_login(cwd: str) -> tuple[str | None, str | None]:
+def _gh_current_login(cwd: str) -> tuple[str, None] | tuple[None, str]:
     result = _run_fixed(["gh", "api", "user", "--jq", ".login"], cwd=cwd)
     login = result.stdout.strip()
     if result.returncode != 0 or not login:

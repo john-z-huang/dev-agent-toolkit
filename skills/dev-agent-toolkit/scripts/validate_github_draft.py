@@ -38,7 +38,6 @@ def _sections(markdown: str, *, include_code: bool = True) -> list[tuple[str, st
     return sections
 
 
-
 def validate_draft(kind: str, path: Path, template: Path | None = None) -> None:
     default_template = Path(__file__).resolve().parents[1] / "assets" / f"{kind}.md"
     source = (template or default_template).read_text(encoding="utf-8")
@@ -59,7 +58,9 @@ def validate_draft(kind: str, path: Path, template: Path | None = None) -> None:
             raise ValueError(f"章节尚未填写：{title}")
 
     if kind == "pr" and (template or default_template).resolve() == default_template:
-        issue_body = dict(_sections(visible_draft, include_code=False)).get("关联 Issue", "")
+        issue_body = dict(_sections(visible_draft, include_code=False)).get(
+            "关联 Issue", ""
+        )
         if not _ISSUE_REFERENCE.search(issue_body):
             raise ValueError("关联 Issue 一节须包含 Closes、Fixes 或 Resolves 加 #编号")
 

@@ -840,12 +840,11 @@ def _validate_merge_message(
     native_files: dict[str, bytes | None], expected_message: str
 ) -> None:
     """恢复时只接受启动操作时记录的合并消息。"""
-    if native_files["MERGE_MSG"] is None:
+    message_bytes = native_files["MERGE_MSG"]
+    if message_bytes is None:
         raise _RecoveryFailure("native_state_unavailable", "merge 恢复缺少 MERGE_MSG")
     try:
-        merge_message = (
-            native_files["MERGE_MSG"].decode("utf-8").splitlines()[0].strip()
-        )
+        merge_message = message_bytes.decode("utf-8").splitlines()[0].strip()
     except (UnicodeError, IndexError):
         raise _RecoveryFailure(
             "native_state_unsupported", "merge message 格式不受支持"
@@ -884,9 +883,16 @@ def _merge_native_state(
         raise _RecoveryFailure(
             "recovery_operation_mismatch", "MERGE_HEAD 与记录的固定 base 不一致"
         )
+    original_head_bytes = native_files["ORIG_HEAD"]
     try:
-        original_head = native_files["ORIG_HEAD"].decode("ascii").strip().lower()
-    except (AttributeError, UnicodeError):
+        original_head = (
+            original_head_bytes.decode("ascii").strip().lower()
+            if original_head_bytes is not None
+            else None
+        )
+    except UnicodeError:
+        original_head = None
+    if original_head is None:
         raise _RecoveryFailure(
             "native_state_unavailable", "merge 恢复缺少有效 ORIG_HEAD"
         ) from None
@@ -907,13 +913,17 @@ def _validate_rebase_boundaries(
 ) -> None:
     """核对 rebase 必需文件以及固定的原分支、原始 HEAD 和 onto。"""
     required = ("head-name", "orig-head", "onto", "done", "git-rebase-todo")
-    if any(native_files.get(f"rebase-merge/{name}") is None for name in required):
-        raise _RecoveryFailure(
-            "native_state_unavailable", "rebase 元数据缺少固定边界或 todo"
-        )
+    required_files: dict[str, bytes] = {}
+    for name in required:
+        content = native_files.get(f"rebase-merge/{name}")
+        if content is None:
+            raise _RecoveryFailure(
+                "native_state_unavailable", "rebase 元数据缺少固定边界或 todo"
+            )
+        required_files[name] = content
     try:
         boundaries = {
-            name: native_files[f"rebase-merge/{name}"].decode("utf-8").strip()
+            name: required_files[name].decode("utf-8").strip()
             for name in ("head-name", "orig-head", "onto")
         }
     except UnicodeError:

@@ -1,9 +1,9 @@
 """按服务的同步/异步属性注册 MCP 适配器，保持参数 Schema 和注解。"""
 
 import inspect
-from collections.abc import Callable
 from functools import wraps
-from typing import Annotated, Any, get_type_hints
+from operator import getitem
+from typing import Annotated, Any, Protocol, get_type_hints
 
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
@@ -13,9 +13,16 @@ from ..services.local_mcp import BRIDGE_METADATA_KEY
 from ._descriptions import PARAMETER_DESCRIPTIONS, TOOL_DESCRIPTIONS
 
 
+class _Service(Protocol):
+    @property
+    def __name__(self) -> str: ...
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
+
+
 def _register_adapter(
     server: MCPServer,
-    service: Callable[..., Any],
+    service: _Service,
     annotations: ToolAnnotations,
     *,
     local_stdio: bool = False,
@@ -29,12 +36,16 @@ def _register_adapter(
         raise ValueError(
             f"MCP parameter descriptions do not match {service_name} signature"
         )
+    # 参数类型在运行时解析，供 MCP 从 Annotated 中提取说明。
     parameters = [
         parameter.replace(
-            annotation=Annotated[
-                type_hints[parameter.name],
-                Field(description=descriptions[parameter.name]),
-            ]
+            annotation=getitem(
+                Annotated,
+                (
+                    type_hints[parameter.name],
+                    Field(description=descriptions[parameter.name]),
+                ),
+            )
         )
         for parameter in signature.parameters.values()
     ]
@@ -51,10 +62,11 @@ def _register_adapter(
         def adapter(*args: Any, **kwargs: Any) -> Any:
             return service(*args, **kwargs)
 
-    adapter.__signature__ = signature.replace(
+    adapter_signature = signature.replace(
         parameters=parameters,
         return_annotation=type_hints.get("return", signature.return_annotation),
     )
+    setattr(adapter, "__signature__", adapter_signature)
     server.tool(
         description=TOOL_DESCRIPTIONS[service_name],
         annotations=annotations,
