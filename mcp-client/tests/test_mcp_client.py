@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dev_agent_toolkit_tools.mcp_client import (
+from mcp_client import (
     ClientError,
     Registry,
     ServerConfig,
@@ -41,7 +41,7 @@ class StandaloneMCPClientTests(unittest.IsolatedAsyncioTestCase):
             sys.executable,
             "-B",
             "-m",
-            "dev_agent_toolkit_tools.mcp_client.cli",
+            "mcp_client.cli",
             "--registry",
             str(self.registry.path),
             *args,

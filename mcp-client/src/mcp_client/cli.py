@@ -30,7 +30,7 @@ def _json_options(parser: argparse.ArgumentParser) -> None:
 
 def _parser() -> argparse.ArgumentParser:
     parser = _Parser(
-        prog="dev-agent-toolkit-mcp",
+        prog="dev_agent_toolkit_mcp_client",
         description="Call explicitly configured local MCP servers",
     )
     parser.add_argument("--registry", type=Path, help="use this server registry file")

@@ -10,7 +10,7 @@
 
 从 [Skill 入口](skills/dev-agent-toolkit/SKILL.md) 和 [Hook 索引](skills/dev-agent-toolkit/hooks/index.md) 查找当前动作的合同。工具选择与参数见 [MCP 工具目录](skills/dev-agent-toolkit/references/mcp-tools.md)。
 
-- 通过 [独立 MCP Client](docs/mcp-client.md) 在 Shell 或 Python 中按需调用本地 STDIO MCP Server。
+- 通过 [独立 MCP Client](mcp-client/README.md) 在 Shell 或 Python 中按需调用本地 STDIO MCP Server。
 - 分支与 worktree 的场景见 [原地建分支](skills/dev-agent-toolkit/references/mcp-tools.md#原地创建工作分支)、[基线同步](skills/dev-agent-toolkit/references/worktree-base-sync.md) 和 [冲突恢复](skills/dev-agent-toolkit/references/worktree-recovery.md)。
 - 托管操作与 CLI 查询见 [GitHub](skills/dev-agent-toolkit/references/github.md)、[CLI 补充](skills/dev-agent-toolkit/references/cli-fallback.md) 和 [只读查询规约](skills/dev-agent-toolkit/references/read-only-queries.md)。
 

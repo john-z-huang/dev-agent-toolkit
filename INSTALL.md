@@ -2,7 +2,7 @@
 
 ## 首次安装
 
-需要 Git 和 `uv`。发行包要求 Python 3.11 或更新版本，构建和安装由 uv 选择受管 Python。运行 MCP 时还需要选择一个支持 stdio MCP 的宿主。曾使用旧版的用户请从干净的宿主配置安装。
+需要 Git 和 `uv`。发行包要求 Python 3.11 或更新版本，构建和安装由 uv 选择受管 Python。注册 Dev Agent Toolkit 的 MCP Server 时还需要选择一个支持 STDIO 的宿主。曾使用旧版的用户请从干净的宿主配置安装。
 
 1. 获取源码。已有本地 checkout 时，可以跳过克隆。从本地源码仓库的根目录执行后续命令。
 
@@ -55,7 +55,14 @@
 
 ## 独立 MCP Client
 
-完成首次安装的构建和发行包安装步骤即可获得 `dev-agent-toolkit-mcp`。在 macOS 或 Linux 上从 Shell 使用该入口时，按 [独立 MCP Client](docs/mcp-client.md) 配置要调用的本地 STDIO Server。
+在 macOS 或 Linux 上，从仓库根目录安装 `mcp-client` 项目，再检查 CLI 入口。
+
+```bash
+/bin/bash -c 'exec uv tool install --managed-python ./mcp-client'
+/bin/bash -c 'exec dev_agent_toolkit_mcp_client --help'
+```
+
+Server 注册、请求参数和 Python API 见 [独立 MCP Client](mcp-client/README.md)。
 
 ## 独立安装 Skill
 
