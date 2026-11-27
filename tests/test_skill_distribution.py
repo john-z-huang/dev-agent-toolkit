@@ -33,6 +33,20 @@ class SkillDistributionTests(unittest.TestCase):
                 self.assertTrue(linked.resolve().is_relative_to(source), (name, link))
                 self.assertTrue(linked.exists(), (name, link))
 
+    def assert_no_agents_links(self, documents: dict[str, bytes]) -> None:
+        """交付内容不得链接或引用只用于仓库开发的 .agents/ 文档。"""
+        for name, data in documents.items():
+            if not name.endswith(".md"):
+                continue
+            text = data.decode()
+            for match in re.finditer(r"\.agents/", text):
+                # ~/.agents/skills 与 $HOME/.agents/skills 是用户的 Skill 安装目标。
+                prefix = text[max(0, match.start() - 6) : match.start()]
+                if prefix.endswith(("~/", "$HOME/")):
+                    continue
+                context = text[max(0, match.start() - 20) : match.end() + 20]
+                self.fail(f"{name} 引用了仓库 .agents/: {context!r}")
+
     def test_sdist_rebuild_and_installed_cli_without_source(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
@@ -44,6 +58,10 @@ class SkillDistributionTests(unittest.TestCase):
             global_source = ROOT / "instructions" / "codex-global.md"
             (project / "instructions").mkdir()
             shutil.copy2(global_source, project / "instructions" / "codex-global.md")
+            tracked = ["mcp-server", "skills", "instructions"]
+            if (ROOT / ".agents").is_dir():
+                shutil.copytree(ROOT / ".agents", project / ".agents")
+                tracked.append(".agents")
             shutil.copytree(
                 ROOT / "mcp-server" / "dev_agent_toolkit_tools",
                 package / "dev_agent_toolkit_tools",
@@ -82,10 +100,7 @@ class SkillDistributionTests(unittest.TestCase):
                 if number == 2:
                     with (source / "SKILL.md").open("a") as stream:
                         stream.write("\n测试第二个发布快照。\n")
-                run(
-                    ["git", "add", "--", "mcp-server", "skills", "instructions"],
-                    project,
-                )
+                run(["git", "add", "--", *tracked], project)
                 run(
                     [
                         "git",
@@ -136,6 +151,10 @@ class SkillDistributionTests(unittest.TestCase):
                             ".git/" in name or ".venv/" in name or "archive/" in name
                             for name in archive.getnames()
                         )
+                    )
+                    # 开发专用文档不随发行包交付。
+                    self.assertFalse(
+                        any("/.agents/" in name for name in archive.getnames())
                     )
                     archive.extractall(extracted, filter="data")
                 rebuild_root = next(extracted.iterdir())
@@ -252,7 +271,14 @@ class SkillDistributionTests(unittest.TestCase):
                     self.assertFalse(
                         any(name.startswith("tests/") for name in archive.namelist())
                     )
+                    self.assertFalse(
+                        any("/.agents/" in name for name in archive.namelist())
+                    )
                     self.assert_skill_links(source, shipped)
+                    self.assert_no_agents_links(shipped)
+                    self.assert_no_agents_links(
+                        {"codex-global.md": archive.read(global_resource)}
+                    )
                 shutil.rmtree(extracted)
             shutil.rmtree(project)
             self.assertFalse(project.exists())
