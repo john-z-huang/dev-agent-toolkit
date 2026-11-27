@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-LAUNCHER = Path(__file__).resolve().parents[1] / "dws"
+LAUNCHER = Path(__file__).resolve().parents[1] / "dev-agent-toolkit"
 
 
 @unittest.skipUnless(Path("/bin/bash").is_file(), "requires Bash")
@@ -70,14 +70,14 @@ class SetupLauncherTests(unittest.TestCase):
                 encoding="utf-8",
             )
             uv.chmod(0o755)
-            (dist / "dev_workflow_standards_tools-2.3.3-py3-none-any.whl").touch()
-            wheel = dist / "dev_workflow_standards_tools-2.3.4rc1-py3-none-any.whl"
+            (dist / "dev_agent_toolkit_tools-2.3.3-py3-none-any.whl").touch()
+            wheel = dist / "dev_agent_toolkit_tools-2.3.4rc1-py3-none-any.whl"
             command = [str(launcher), "--uv-tool-install"]
             env = {**os.environ, "PATH": f"{root}:/usr/bin:/bin"}
 
             result = subprocess.run(command, cwd=root, env=env, capture_output=True)
             self.assertEqual(result.returncode, 1)
-            self.assertIn(b"./dws --uv-build", result.stderr)
+            self.assertIn(b"./dev-agent-toolkit --uv-build", result.stderr)
             self.assertEqual(result.stdout, b"")
 
             wheel.touch()
@@ -98,7 +98,7 @@ class SetupLauncherTests(unittest.TestCase):
             uv = root / "uv"
             uv.write_text("#!/bin/bash\nexit 19\n", encoding="utf-8")
             uv.chmod(0o755)
-            cli = root / "dev-workflow-standards"
+            cli = root / "dev-agent-toolkit"
             cli.write_text("#!/bin/bash\nexit 99\n", encoding="utf-8")
             cli.chmod(0o755)
             result = subprocess.run(
@@ -127,7 +127,7 @@ class SetupLauncherTests(unittest.TestCase):
                 'printf "%s\\n" "${0%/*}"\n',
                 encoding="utf-8",
             )
-            cli = root / "dev-workflow-standards"
+            cli = root / "dev-agent-toolkit"
             cli.write_text(
                 "#!/bin/bash\nprintf '%s\\0' \"$@\"\nexit 24\n", encoding="utf-8"
             )
@@ -162,7 +162,7 @@ class SetupLauncherTests(unittest.TestCase):
                 'printf "%s\\n" "${0%/*}"\n',
                 encoding="utf-8",
             )
-            cli = root / "dev-workflow-standards"
+            cli = root / "dev-agent-toolkit"
             cli.write_text('#!/bin/bash\nprintf "%s\\0" "$@"\n', encoding="utf-8")
             for executable in (uv, cli):
                 executable.chmod(0o755)
@@ -177,7 +177,7 @@ class SetupLauncherTests(unittest.TestCase):
                 "install",
                 "--managed-python",
                 "--reinstall-package",
-                "dev-workflow-standards-tools",
+                "dev-agent-toolkit-tools",
                 str(LAUNCHER.parent / "mcp-server"),
             ]
             lookup = ["tool", "dir", "--bin"]

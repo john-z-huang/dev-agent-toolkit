@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
-from dev_workflow_standards_tools.services.ai_workflow import (
+from dev_agent_toolkit_tools.services.ai_workflow import (
     ContentQualityReview,
     GeneratedContent,
 )

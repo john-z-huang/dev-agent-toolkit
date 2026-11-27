@@ -21,17 +21,17 @@
 
 ## 安装、注册与更新
 
-Hooks 作为独立的 `dev-workflow-standards-hooks` Python 发行包发布，要求 Python 3.11+，运行时使用标准库和 Git。按 [原生 Codex Hooks 合同](../skills/dev-workflow-standards/hooks/install-codex-hooks.md) 选择预览、安装、合并或更新，以及宿主审阅与信任步骤。
+Hooks 作为独立的 `dev-agent-toolkit-hooks` Python 发行包发布，要求 Python 3.11+，运行时使用标准库和 Git。按 [原生 Codex Hooks 合同](../skills/dev-agent-toolkit/hooks/install-codex-hooks.md) 选择预览、安装、合并或更新，以及宿主审阅与信任步骤。
 
 已安装的 CLI 无参数时从 stdin 读取单个事件 JSON。`--version` 查看包版本，`configure --help` 查看注册选项。`configure` 无 `--install` 或 `--update` 时仅输出候选配置。配置命令使用 uv tool 的绝对入口，不依赖源码或项目虚拟环境。移动 uv tool 的 bin 目录后需重新注册。
 
 ## 协议与边界
 
 - 输入为 stdin 单个 JSON 对象；输出为 stdout 单个事件结果。明确违反路径规则返回 `PreToolUse.permissionDecision=deny`，不会返回 `allow` 或改写参数，更不会处理 `PermissionRequest` 自动批准。
-- 匹配默认注册名 `mcp__dev-workflow-standards-tools__*` 及规范化名称 `mcp__dev_workflow_standards_tools__*`，校验该服务的显式路径。缺失或 null 字段是否合法仍由对应工具 Schema 校验；不把 cwd 填入缺失字段。其他服务不套用本项目的输入约定。服务改名时需同步 matcher 和运行时前缀。
+- 按默认服务注册名 `dev_agent_toolkit` 匹配 Codex 工具前缀 `mcp__dev_agent_toolkit__`，校验该服务的显式路径。缺失或 null 字段是否合法仍由对应工具 Schema 校验；不把 cwd 填入缺失字段。其他服务不套用本项目的输入约定。服务改名时需同步 matcher 和运行时前缀。
 - 路径检查使用固定只读 `git rev-parse --show-toplevel`，关闭可选 index 锁，移除继承的 `GIT_*` 覆盖，支持其他目标仓库、符号链接路径和 linked worktree；并不证明目标得到用户授权。
 - 失败识别仅覆盖对象的 `isError=true`、`ok=false`、非零整数 `exit_code`，以及 `structuredContent.ok=false`。不解析不稳定的日志、文本化 MCP JSON 或运行中进程；识别不到不表示通过。原工具返回仍供 Agent 判断。
-- 运行时与安装器不联网、不调用 OpenAI、不读取会话/凭据、不写 Memory、不执行 Git 写入。运行时不写文件；注册器只管理显式目标的配置、清单和合并备份。`dws` 的安装阶段会通过 `uv tool` 构建/安装包，可能访问包索引；事件运行与配置注册均离线。不自动跑测试、暂存或发布。
+- 运行时与安装器不联网、不调用 OpenAI、不读取会话/凭据、不写 Memory、不执行 Git 写入。运行时不写文件；注册器只管理显式目标的配置、清单和合并备份。`dev-agent-toolkit` 的安装阶段会通过 `uv tool` 构建/安装包，可能访问包索引；事件运行与配置注册均离线。不自动跑测试、暂存或发布。
 - Hook 超时、异常或无效输出可能让调用继续；特殊工具路径也可能不触发 hooks。本组件是辅助防线，不能替代 MCP、Git hooks、宿主审批和统一 API 客户端约束。
 
 ## 验证

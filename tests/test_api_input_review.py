@@ -10,10 +10,10 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
-from dev_workflow_standards_tools.infrastructure import api_input_policy, openai_client
-from dev_workflow_standards_tools.server import mcp
-from dev_workflow_standards_tools.services import ai_workflow, api_input_review
-from dev_workflow_standards_tools.services.ai_workflow import (
+from dev_agent_toolkit_tools.infrastructure import api_input_policy, openai_client
+from dev_agent_toolkit_tools.server import mcp
+from dev_agent_toolkit_tools.services import ai_workflow, api_input_review
+from dev_agent_toolkit_tools.services.ai_workflow import (
     ContentGenerationRequest,
     ContentQualityReview,
     GeneratedContent,

@@ -3,8 +3,8 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from dev_workflow_standards_tools.services import worktree_recovery as recovery
-from dev_workflow_standards_tools.services import worktree_sync as sync
+from dev_agent_toolkit_tools.services import worktree_recovery as recovery
+from dev_agent_toolkit_tools.services import worktree_sync as sync
 from worktree_fixtures import WorktreeTestCase
 
 

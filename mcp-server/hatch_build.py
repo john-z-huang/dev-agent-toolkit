@@ -101,13 +101,15 @@ class CustomBuildHook(BuildHookInterface):
         # sdist 中优先使用封装的源；仅开发构建从仓库的唯一源取得资源。
         source = root / "skill-source"
         if not source.exists():
-            source = root.parent / "skills" / "dev-workflow-standards"
+            source = root.parent / "skills" / "dev-agent-toolkit"
         if source.is_symlink() or not (source / "SKILL.md").is_file():
             raise ValueError("缺少完整 Skill 指令源")
         payload = _skill_payload(source)
         global_data = _global_instructions(root)
 
-        self._stage = tempfile.TemporaryDirectory(prefix="dev-workflow-skill-build-")
+        self._stage = tempfile.TemporaryDirectory(
+            prefix="dev-agent-toolkit-skill-build-"
+        )
         stage = Path(self._stage.name)
         for name, data in payload.items():
             path = stage / name
@@ -117,8 +119,8 @@ class CustomBuildHook(BuildHookInterface):
         if self.target_name == "wheel":
             manifest = {
                 "schema": 1,
-                "owner": "dev-workflow-standards-tools",
-                "skill": "dev-workflow-standards",
+                "owner": "dev-agent-toolkit-tools",
+                "skill": "dev-agent-toolkit",
                 "version": self.metadata.version,
                 "files": {
                     name: hashlib.sha256(data).hexdigest()
@@ -130,17 +132,17 @@ class CustomBuildHook(BuildHookInterface):
                 + "\n",
                 encoding="utf-8",
             )
-            destination = "dev_workflow_standards_tools/skill_bundle"
+            destination = "dev_agent_toolkit_tools/skill_bundle"
         build_data.setdefault("force_include", {})[str(stage)] = destination
 
         self._global_stage = tempfile.TemporaryDirectory(
-            prefix="dev-workflow-global-agents-build-"
+            prefix="dev-agent-toolkit-global-agents-build-"
         )
         global_stage = Path(self._global_stage.name)
         global_file = global_stage / "codex-global.md"
         global_file.write_bytes(global_data)
         if self.target_name == "wheel":
-            global_destination = "dev_workflow_standards_tools/global_instructions/codex-global.md"
+            global_destination = "dev_agent_toolkit_tools/global_instructions/codex-global.md"
         else:
             global_destination = "global-instructions-source.md"
         build_data["force_include"][str(global_file)] = global_destination

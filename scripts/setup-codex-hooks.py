@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TOOL = "dev-workflow-standards-hooks"
+TOOL = "dev-agent-toolkit-hooks"
 
 
 def build_parser() -> argparse.ArgumentParser:

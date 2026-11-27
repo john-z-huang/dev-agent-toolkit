@@ -6,11 +6,11 @@ from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import patch
 
-from dev_workflow_standards_tools.services import workflows
+from dev_agent_toolkit_tools.services import workflows
 
 from codex_session_fixtures import ROOT
 
-SKILL = ROOT / "skills" / "dev-workflow-standards"
+SKILL = ROOT / "skills" / "dev-agent-toolkit"
 
 
 class GitHubDraftFilesTests(unittest.TestCase):

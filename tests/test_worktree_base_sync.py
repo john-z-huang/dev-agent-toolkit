@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from dev_workflow_standards_tools.server import mcp as complete_server
-from dev_workflow_standards_tools.services import worktree_sync as sync
+from dev_agent_toolkit_tools.server import mcp as complete_server
+from dev_agent_toolkit_tools.services import worktree_sync as sync
 from worktree_fixtures import WorktreeTestCase
 
 

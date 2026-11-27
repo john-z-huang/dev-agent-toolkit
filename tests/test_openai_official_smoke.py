@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from dev_workflow_standards_tools.infrastructure.openai_client import GPT_SOL_MODEL, GPT_TERRA_MODEL
+from dev_agent_toolkit_tools.infrastructure.openai_client import GPT_SOL_MODEL, GPT_TERRA_MODEL
 from pydantic import BaseModel
 
 ROOT = Path(__file__).parents[1]

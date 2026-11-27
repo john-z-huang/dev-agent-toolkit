@@ -72,4 +72,7 @@ class HooksDistributionTests(unittest.TestCase):
             self.assertIn(
                 "additionalContext", json.loads(event.stdout)["hookSpecificOutput"]
             )
-            self.assertFalse((home / "hooks/dev_workflow.py").exists())
+            self.assertEqual(
+                [path.name for path in (home / "hooks").iterdir()],
+                ["dev_agent_toolkit.manifest.json"],
+            )

@@ -7,8 +7,8 @@ from importlib.resources import files
 from unittest.mock import patch
 
 from codex_session_fixtures import DOC, source
-from dev_workflow_standards_tools.services import codex_session_facts as service
-from dev_workflow_standards_tools.services.codex_session_facts import (
+from dev_agent_toolkit_tools.services import codex_session_facts as service
+from dev_agent_toolkit_tools.services.codex_session_facts import (
     CodexSessionSource,
     get_codex_session_summary_guidance,
     order_codex_session_sources,
@@ -19,7 +19,7 @@ from dev_workflow_standards_tools.services.codex_session_facts import (
 class GuidanceTests(unittest.TestCase):
     def test_resource_questions_and_template_match_reference(self) -> None:
         resource = json.loads(
-            files("dev_workflow_standards_tools")
+            files("dev_agent_toolkit_tools")
             .joinpath("resources/codex_session_summary.json")
             .read_text(encoding="utf-8")
         )

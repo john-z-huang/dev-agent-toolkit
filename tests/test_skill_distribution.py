@@ -39,14 +39,14 @@ class SkillDistributionTests(unittest.TestCase):
             project = root / "checkout"
             package = project / "mcp-server"
             package.mkdir(parents=True)
-            source = project / "skills" / "dev-workflow-standards"
-            shutil.copytree(ROOT / "skills" / "dev-workflow-standards", source)
+            source = project / "skills" / "dev-agent-toolkit"
+            shutil.copytree(ROOT / "skills" / "dev-agent-toolkit", source)
             global_source = ROOT / "instructions" / "codex-global.md"
             (project / "instructions").mkdir()
             shutil.copy2(global_source, project / "instructions" / "codex-global.md")
             shutil.copytree(
-                ROOT / "mcp-server" / "dev_workflow_standards_tools",
-                package / "dev_workflow_standards_tools",
+                ROOT / "mcp-server" / "dev_agent_toolkit_tools",
+                package / "dev_agent_toolkit_tools",
                 ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "skill_bundle"),
             )
             for name in ("pyproject.toml", "hatch_build.py"):
@@ -155,11 +155,11 @@ class SkillDistributionTests(unittest.TestCase):
                         if name.endswith(".dist-info/extra_metadata/git-commit.txt")
                     )
                     self.assertEqual(archive.read(git_metadata).decode().strip(), commit)
-                    global_resource = "dev_workflow_standards_tools/global_instructions/codex-global.md"
+                    global_resource = "dev_agent_toolkit_tools/global_instructions/codex-global.md"
                     self.assertEqual(
                         archive.read(global_resource), global_source.read_bytes()
                     )
-                    prefix = "dev_workflow_standards_tools/skill_bundle/"
+                    prefix = "dev_agent_toolkit_tools/skill_bundle/"
                     manifest = json.loads(archive.read(prefix + "manifest.json"))
                     shipped = {
                         name.removeprefix(prefix): archive.read(name)
@@ -196,7 +196,7 @@ class SkillDistributionTests(unittest.TestCase):
                     metadata = yaml.safe_load(
                         shipped["SKILL.md"].decode().split("---", 2)[1]
                     )
-                    self.assertEqual(metadata["name"], "dev-workflow-standards")
+                    self.assertEqual(metadata["name"], "dev-agent-toolkit")
                     self.assertTrue(metadata["description"].strip())
                     self.assertEqual(
                         manifest["files"],
@@ -211,7 +211,7 @@ class SkillDistributionTests(unittest.TestCase):
                         if name.endswith("entry_points.txt")
                     )
                     self.assertIn(
-                        "dev-workflow-standards-tools = dev_workflow_standards_tools.server:main",
+                        "dev-agent-toolkit-tools = dev_agent_toolkit_tools.server:main",
                         archive.read(entrypoints).decode(),
                     )
                     metadata_path = next(
@@ -233,7 +233,7 @@ class SkillDistributionTests(unittest.TestCase):
             venv = root / "environment"
             run([sys.executable, "-m", "venv", "--without-pip", str(venv)])
             python = venv / "bin" / "python"
-            cli = venv / "bin" / "dev-workflow-standards"
+            cli = venv / "bin" / "dev-agent-toolkit"
             run(
                 [
                     "uv",
@@ -248,7 +248,7 @@ class SkillDistributionTests(unittest.TestCase):
             )
             build_query = (
                 "import json; "
-                "from dev_workflow_standards_tools.services.build_info import get_mcp_server_build_info; "
+                "from dev_agent_toolkit_tools.services.build_info import get_mcp_server_build_info; "
                 "print(json.dumps(get_mcp_server_build_info()))"
             )
             self.assertEqual(
@@ -258,10 +258,10 @@ class SkillDistributionTests(unittest.TestCase):
             # 该环境没有 OpenAI/MCP 依赖，管理命令仍应独立工作。
             skill_home = root / "skill-home"
             environment["HOME"] = str(skill_home)
-            target = skill_home / ".agents" / "skills" / "dev-workflow-standards"
+            target = skill_home / ".agents" / "skills" / "dev-agent-toolkit"
             args = [str(cli), "skills"]
             self.assertIn(
-                "~/.agents/skills/dev-workflow-standards\n",
+                "~/.agents/skills/dev-agent-toolkit\n",
                 run([*args, "install", "--help"]).stdout,
             )
             run([*args, "install", "--dry-run"])

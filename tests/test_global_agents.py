@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 class GlobalAgentsTests(unittest.TestCase):
     def setUp(self):
-        from dev_workflow_standards_tools.services import global_agents
+        from dev_agent_toolkit_tools.services import global_agents
 
         self.global_agents = global_agents
         self.temporary = tempfile.TemporaryDirectory()
@@ -26,7 +26,7 @@ class GlobalAgentsTests(unittest.TestCase):
         self.template = self._template("candidate v1")
         self.source.write_text(self.template, encoding="utf-8")
         self.target = self.home / ".codex" / "AGENTS.md"
-        self.metadata = self.home / ".codex" / ".AGENTS.md.dev-workflow-standards.json"
+        self.metadata = self.home / ".codex" / ".AGENTS.md.dev-agent-toolkit.json"
         self.lock = self.home / ".codex" / ".AGENTS.md.global-agents.lock"
 
     def tearDown(self):
@@ -379,7 +379,7 @@ class GlobalAgentsTests(unittest.TestCase):
             self._manage(dry_run=True)
 
     def test_cli_json_and_invalid_argument_combinations(self):
-        from dev_workflow_standards_tools.cli import main
+        from dev_agent_toolkit_tools.cli import main
 
         stdout, stderr = io.StringIO(), io.StringIO()
         with patch("sys.stdout", stdout), patch("sys.stderr", stderr):

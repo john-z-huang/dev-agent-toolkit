@@ -15,7 +15,7 @@ class SerenaMemoryTests(IsolatedAsyncioTestCase):
         package_root = Path(__file__).resolve().parents[1] / "mcp-server"
         bootstrap = (
             "import sys; sys.path.insert(0, sys.argv[1]); "
-            "from dev_workflow_standards_tools.server import main; main()"
+            "from dev_agent_toolkit_tools.server import main; main()"
         )
         with TemporaryDirectory() as temp:
             root = Path(temp)

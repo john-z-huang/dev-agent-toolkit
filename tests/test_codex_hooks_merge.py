@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import tempfile
 from pathlib import Path
@@ -25,7 +26,7 @@ class CodexHookMergeTests(InstalledHooksTestCase):
             timeout=10,
         )
 
-    def test_update_rejects_boolean_legacy_manifest_version_without_writing(
+    def test_update_rejects_boolean_manifest_version_without_writing(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -33,17 +34,12 @@ class CodexHookMergeTests(InstalledHooksTestCase):
             config = root / "hooks.json"
             original = b'{"hooks": {}}'
             config.write_bytes(original)
-            legacy = root / "hooks/dev_workflow.py"
-            legacy.parent.mkdir()
-            legacy.write_bytes(b"# old runtime")
+            manifest = root / "hooks/dev_agent_toolkit.manifest.json"
+            manifest.parent.mkdir()
             record = {
                 "format": True,
-                "files": {
-                    path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-                    for path in (config, legacy)
-                },
+                "files": {config.name: hashlib.sha256(original).hexdigest()},
             }
-            manifest = root / "hooks/dev_workflow.manifest.json"
             manifest.write_text(json.dumps(record), encoding="utf-8")
             result = self.run_setup(root, "--update")
             self.assertEqual(result.returncode, 1)
@@ -96,8 +92,7 @@ class CodexHookMergeTests(InstalledHooksTestCase):
         self,
     ) -> None:
         for resource in (
-            "hooks/dev_workflow.py",
-            "hooks/dev_workflow.manifest.json",
+            "hooks/dev_agent_toolkit.manifest.json",
             None,
         ):
             with (
@@ -118,6 +113,61 @@ class CodexHookMergeTests(InstalledHooksTestCase):
                 self.assertEqual(config.read_bytes(), original)
                 self.assertEqual(list(root.glob("hooks.json.backup-*")), [])
 
+    def test_install_refuses_legacy_hooks_before_writing(self) -> None:
+        old_executable = "/example/old tools' bin/dev-workflow-standards-hooks"
+        original = json.dumps(
+            {
+                "hooks": {
+                    "SessionStart": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": shlex.quote(old_executable),
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        ).encode()
+        for resource, flags in (
+            ("dev_workflow.manifest.json", ("--install",)),
+            ("dev_workflow.manifest.json", ("--install", "--merge", "--dry-run")),
+            ("dev_workflow.manifest.json", ("--install", "--merge")),
+            ("dev_workflow.py", ("--install", "--merge")),
+            (None, ("--install", "--merge", "--dry-run")),
+            (None, ("--install", "--merge")),
+        ):
+            with (
+                self.subTest(resource=resource, flags=flags),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory).resolve()
+                config = root / "hooks.json"
+                config.write_bytes(original)
+                if resource is not None:
+                    marker = root / "hooks" / resource
+                    marker.parent.mkdir()
+                    marker.write_bytes(b"unread legacy resource")
+                    expected = resource
+                else:
+                    expected = "dev-workflow-standards-hooks"
+                result = self.run_setup(root, *flags)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn(expected, result.stderr)
+                self.assertEqual(result.stdout, "")
+                self.assertEqual(config.read_bytes(), original)
+                self.assertFalse(
+                    (root / "hooks/dev_agent_toolkit.manifest.json").exists()
+                )
+                self.assertEqual(list(root.glob("hooks.json.backup-*")), [])
+                if resource is not None:
+                    self.assertEqual(
+                        (root / "hooks" / resource).read_bytes(),
+                        b"unread legacy resource",
+                    )
+
     def test_reconcile_updates_only_current_unmanaged_configuration(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
@@ -129,7 +179,7 @@ class CodexHookMergeTests(InstalledHooksTestCase):
             installed = self.run_setup(root, "--install", "--merge")
             self.assertEqual(installed.returncode, 0, installed.stderr)
             backups = set(root.glob("hooks.json.backup-*"))
-            manifest = root / "hooks/dev_workflow.manifest.json"
+            manifest = root / "hooks/dev_agent_toolkit.manifest.json"
             old_manifest = manifest.read_bytes()
             current = json.loads(config.read_bytes())
             current["description"] = "updated by user"
@@ -167,7 +217,7 @@ class CodexHookMergeTests(InstalledHooksTestCase):
             installed = self.run_setup(root, "--install")
             self.assertEqual(installed.returncode, 0, installed.stderr)
             config = root / "hooks.json"
-            manifest = root / "hooks/dev_workflow.manifest.json"
+            manifest = root / "hooks/dev_agent_toolkit.manifest.json"
             original = config.read_bytes()
             old_manifest = manifest.read_bytes()
             modified = json.loads(original)

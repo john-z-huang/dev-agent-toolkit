@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from dev_workflow_standards_tools.services import skill_installation as service
+from dev_agent_toolkit_tools.services import skill_installation as service
 
 
 def bundle(version="1", text=b"# Test Skill\n"):
@@ -71,7 +71,7 @@ class SkillInstallationTests(unittest.TestCase):
                 )
 
     def test_default_install_and_update_use_skill_name_as_directory(self):
-        expected = self.root / ".agents" / "skills" / "dev-workflow-standards"
+        expected = self.root / ".agents" / "skills" / "dev-agent-toolkit"
         with patch.object(Path, "home", return_value=self.root):
             result = service.manage_skill("install", dry_run=True)
             self.assertEqual(result["target"], str(expected))

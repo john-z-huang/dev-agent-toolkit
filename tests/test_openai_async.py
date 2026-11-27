@@ -13,9 +13,9 @@ from unittest.mock import AsyncMock, patch
 
 import anyio
 import httpx2
-from dev_workflow_standards_tools.infrastructure import openai_client
-from dev_workflow_standards_tools.server import mcp
-from dev_workflow_standards_tools.services import ai_workflow
+from dev_agent_toolkit_tools.infrastructure import openai_client
+from dev_agent_toolkit_tools.server import mcp
+from dev_agent_toolkit_tools.services import ai_workflow
 from mcp.client import Client
 
 ENVIRONMENT = {
@@ -47,7 +47,7 @@ class AsyncOpenAITransportTests(unittest.IsolatedAsyncioTestCase):
         ):
             if skip_review:
                 with patch(
-                    "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+                    "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
                     new=AsyncMock(return_value={"passed": True}),
                 ):
                     yield clients

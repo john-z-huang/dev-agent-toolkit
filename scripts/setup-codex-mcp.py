@@ -24,7 +24,8 @@ from typing import Any
 import tomlkit
 from tomlkit.exceptions import ParseError
 
-DEFAULT_SERVER = "dev-workflow-standards-tools"
+DEFAULT_SERVER = "dev_agent_toolkit"
+UV_TOOL_NAME = "dev-agent-toolkit-tools"
 DEFAULT_ENV_NAMES = (
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",
@@ -434,7 +435,7 @@ def _executable(args: argparse.Namespace, *, after_install: bool) -> Path:
         if not path.is_absolute():
             raise SetupError("--executable must be an absolute path")
     else:
-        path = _tool_bin() / "dev-workflow-standards-tools"
+        path = _tool_bin() / UV_TOOL_NAME
     try:
         resolved = path.resolve(strict=True)
     except (OSError, RuntimeError):
@@ -496,7 +497,7 @@ def _install_mcp_tool(force: bool) -> None:
     install_argv.extend(
         [
             "--reinstall-package",
-            DEFAULT_SERVER,
+            UV_TOOL_NAME,
             str(Path(__file__).resolve().parents[1] / "mcp-server"),
         ]
     )

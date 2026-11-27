@@ -5,9 +5,9 @@ import os
 from unittest.mock import AsyncMock, patch
 
 from ai_workflow_fixtures import ContentGenerationTestCase
-from dev_workflow_standards_tools.infrastructure import openai_client
-from dev_workflow_standards_tools.services import ai_workflow
-from dev_workflow_standards_tools.services.commit_content import (
+from dev_agent_toolkit_tools.infrastructure import openai_client
+from dev_agent_toolkit_tools.services import ai_workflow
+from dev_agent_toolkit_tools.services.commit_content import (
     CommitMessageRequest,
     generate_git_commit_message,
 )

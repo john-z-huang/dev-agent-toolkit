@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -15,8 +14,8 @@ from pathlib import Path
 from codex_hooks_test_support import InstalledHooksTestCase
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME = ROOT / "codex-hooks/dev_workflow_standards_hooks/runtime.py"
-PREFIX = "mcp__dev_workflow_standards_tools__"
+RUNTIME = ROOT / "codex-hooks/dev_agent_toolkit_hooks/runtime.py"
+PREFIX = "mcp__dev_agent_toolkit__"
 
 
 def run_hook(event: dict, runtime: Path = RUNTIME) -> dict:
@@ -107,11 +106,13 @@ class CodexHookTests(unittest.TestCase):
         self.assertNotIn("permissionDecision", pre_tool(None)["hookSpecificOutput"])
         self.assertEqual(pre_tool("relative", "mcp__other__query"), {})
 
-    def test_registered_server_name_with_hyphens_is_also_checked(self):
-        output = pre_tool(
-            "relative", "mcp__dev-workflow-standards-tools__audit_repository_state"
+    def test_executable_name_is_not_a_server_prefix(self):
+        self.assertEqual(
+            pre_tool(
+                "relative", "mcp__dev-agent-toolkit-tools__audit_repository_state"
+            ),
+            {},
         )
-        self.assertEqual(output["hookSpecificOutput"]["permissionDecision"], "deny")
 
     def test_shell_and_patch_get_advice_without_granting_permission(self):
         for name in ("Bash", "exec_command", "apply_patch"):
@@ -188,8 +189,7 @@ class CodexHookInstallationTests(InstalledHooksTestCase):
                 "exec_command": "Python/Shell",
                 "Bash": "Python/Shell",
                 "apply_patch": "修改范围",
-                "mcp__dev_workflow_standards_tools__check_branch_name": "目标仓库",
-                "mcp__dev-workflow-standards-tools__check_branch_name": "目标仓库",
+                "mcp__dev_agent_toolkit__check_branch_name": "目标仓库",
             }
             for tool, message in cases.items():
                 groups = [
@@ -238,7 +238,10 @@ class CodexHookInstallationTests(InstalledHooksTestCase):
             self.assertIn(
                 "additionalContext", json.loads(result.stdout)["hookSpecificOutput"]
             )
-            self.assertFalse((project / ".codex/hooks/dev_workflow.py").exists())
+            self.assertEqual(
+                [path.name for path in (project / ".codex/hooks").iterdir()],
+                ["dev_agent_toolkit.manifest.json"],
+            )
             before = (project / ".codex/hooks.json").read_bytes()
             refused = subprocess.run(
                 [*command, "--install"], capture_output=True, check=False
@@ -297,7 +300,7 @@ class CodexHookInstallationTests(InstalledHooksTestCase):
                 self.assertEqual(result.returncode, 2)
 
     def test_update_refuses_modified_missing_and_linked_resources(self) -> None:
-        for name in ("hooks.json", "hooks/dev_workflow.manifest.json"):
+        for name in ("hooks.json", "hooks/dev_agent_toolkit.manifest.json"):
             for change in ("modified", "missing", "symlink", "hardlink"):
                 with (
                     self.subTest(name=name, change=change),
@@ -354,35 +357,6 @@ class CodexHookInstallationTests(InstalledHooksTestCase):
                 )
                 self.assertEqual(result.returncode, status, result.stderr)
             self.assertEqual(list(outside.iterdir()), [])
-
-    def test_update_migrates_legacy_snapshot_and_preserves_script(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory).resolve()
-            scripts = root / "hooks"
-            scripts.mkdir()
-            legacy = scripts / "dev_workflow.py"
-            legacy.write_bytes(b"# legacy managed script")
-            config = root / "hooks.json"
-            config.write_bytes(b'{"hooks": {}}')
-            manifest = scripts / "dev_workflow.manifest.json"
-            record = {
-                "format": 1,
-                "files": {
-                    path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-                    for path in (legacy, config)
-                },
-            }
-            manifest.write_text(json.dumps(record))
-            result = subprocess.run(
-                [*self.configure_command, "--global", "--update"],
-                env={**os.environ, "CODEX_HOME": str(root)},
-                capture_output=True,
-                check=False,
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(json.loads(manifest.read_bytes())["format"], 3)
-            self.assertEqual(legacy.read_bytes(), b"# legacy managed script")
-            self.assertIn("dev-workflow-standards-hooks", config.read_text())
 
 
 if __name__ == "__main__":

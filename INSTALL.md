@@ -1,41 +1,84 @@
-# 安装与构建
+# 安装与构建 Dev Agent Toolkit
 
-从源码 checkout 执行 `/bin/bash ./dws --help` 可查看独立操作。按下面的目标选择命令；对应 Hook 合同包含参数、目标检查、预览及验收步骤，安装前可直接查阅所选合同。需要 `uv` 位于 PATH。
+## 首次安装
+
+需要 Git 和 `uv`。发行包要求 Python 3.11 或更新版本，构建和安装由 uv 选择受管 Python。运行 MCP 时还需要选择一个支持 stdio MCP 的宿主。曾使用旧版的用户请从干净的宿主配置安装。
+
+1. 获取源码。已有本地 checkout 时，可以跳过克隆。从本地源码仓库的根目录执行后续命令。
+
+   ```bash
+   /bin/bash -c 'git clone https://github.com/john-z-huang/dev-agent-toolkit.git'
+   ```
+
+2. 从源码仓库根目录构建并安装。构建产物放在 `dist/`，安装时选用与当前项目版本匹配的 wheel。
+
+   ```bash
+   /bin/bash ./dev-agent-toolkit --help
+   /bin/bash ./dev-agent-toolkit --uv-build
+   /bin/bash ./dev-agent-toolkit --uv-tool-install
+   /bin/bash -c 'uv tool list --show-paths && tool_bin=$(uv tool dir --bin) && "$tool_bin/dev-agent-toolkit" --help'
+   ```
+
+3. 安装 Skill 并检查状态。默认安装到 `~/.agents/skills/dev-agent-toolkit`。
+
+   ```bash
+   /bin/bash -c 'tool_bin=$(uv tool dir --bin) && "$tool_bin/dev-agent-toolkit" skills install && "$tool_bin/dev-agent-toolkit" skills show'
+   ```
+
+4. 选择宿主，将 MCP 服务注册为 `dev_agent_toolkit`。两个宿主均通过已安装的 `dev-agent-toolkit-tools` 可执行文件启动服务。
+
+   - **Codex** 从仓库根目录运行以下命令。重载 MCP 或重新打开客户端，并在宿主中确认工具可用。
+
+     ```bash
+     /bin/bash ./dev-agent-toolkit --server dev_agent_toolkit
+     /bin/bash -c 'exec codex mcp get dev_agent_toolkit'
+     ```
+
+   - **Pi** 从仓库根目录运行以下命令。已有会话用 `/reload` 重新加载，再通过工具发现确认服务可用。
+
+     ```bash
+     /bin/bash -c 'exec uv run --managed-python -- scripts/setup-pi-mcp.py'
+     /bin/bash -c 'exec pi mcp list'
+     ```
+
+   离线工具可以直接使用。使用 OpenAI 工具前，给宿主进程配置非空的 `OPENAI_API_KEY` 和 `OPENAI_BASE_URL`。详见 [Codex 环境传递与排查](skills/dev-agent-toolkit/references/openai-workflow-tools.md#codex-stdio-环境传递与排查)和 [Pi 环境传递与时限](skills/dev-agent-toolkit/references/openai-workflow-tools.md#pi-stdio-环境传递与工具时限)。
+
+5. 在宿主中调用只读工具 `get_mcp_server_build_info`，输入 `{}`，查看运行中的发行包版本。Codex 默认工具全名为 `mcp__dev_agent_toolkit__get_mcp_server_build_info`。也可通过已安装的管理命令执行同一个只读调用。
+
+   ```bash
+   /bin/bash -c 'tool_bin=$(uv tool dir --bin) && printf "%s\n" "{\"tool_name\":\"get_mcp_server_build_info\",\"arguments\":{}}" | "$tool_bin/dev-agent-toolkit" mcp'
+   ```
 
 ## 构建与安装发行包
 
-`/bin/bash ./dws --uv-build` 在 `dist/` 生成 sdist 和 wheel。`/bin/bash ./dws --uv-tool-install` 安装与项目当前版本匹配的 wheel；重装加 `--force`。见 [项目工具合同](skills/dev-workflow-standards/hooks/install-tooling.md)。
+`/bin/bash ./dev-agent-toolkit --uv-build` 在 `dist/` 生成 sdist 和 wheel。`/bin/bash ./dev-agent-toolkit --uv-tool-install` 安装与项目当前版本匹配的 wheel。缺少匹配的 wheel 时，安装命令会退出，先执行构建再重试。重装时加 `--force`。见 [项目工具合同](skills/dev-agent-toolkit/hooks/install-tooling.md)。
 
 ## 独立安装 Skill
 
-选择 `/bin/bash ./dws --skills-install` 或 `/bin/bash ./dws --skills-update`。默认目标为 `~/.agents/skills/dev-workflow-standards`，也可选择独立的仓库外目录。见 [Skill 合同](skills/dev-workflow-standards/hooks/install-skill.md)。
+选择 `/bin/bash ./dev-agent-toolkit --skills-install` 或 `/bin/bash ./dev-agent-toolkit --skills-update`。默认目标为 `~/.agents/skills/dev-agent-toolkit`，也可选择独立的仓库外目录。见 [Skill 合同](skills/dev-agent-toolkit/hooks/install-skill.md)。
 
 ## 版本管理与更新全局 AGENTS.md
 
-选择 `/bin/bash ./dws --agents-install` 或 `/bin/bash ./dws --agents-update`，从当前源码模板创建或更新用户的 `~/.codex/AGENTS.md`。见 [全局指令合同](skills/dev-workflow-standards/hooks/install-global-agents.md)。
+选择 `/bin/bash ./dev-agent-toolkit --agents-install` 或 `/bin/bash ./dev-agent-toolkit --agents-update`，从当前源码模板创建或更新用户的 `~/.codex/AGENTS.md`。见 [全局指令合同](skills/dev-agent-toolkit/hooks/install-global-agents.md)。
 
 ## Codex 中安装
 
-选择 `/bin/bash ./dws --mcp-install` 或 `/bin/bash ./dws --mcp-update`，安装软件包、注册服务并配置环境变量转发。只注册已安装工具或只修复转发时，有独立入口。见 [Codex MCP 合同](skills/dev-workflow-standards/hooks/install-codex-mcp.md)。
+选择 `/bin/bash ./dev-agent-toolkit --mcp-install` 或 `/bin/bash ./dev-agent-toolkit --mcp-update`，安装软件包、注册服务并配置环境变量转发。只注册已安装工具或只修复转发时，有独立入口。见 [Codex MCP 合同](skills/dev-agent-toolkit/hooks/install-codex-mcp.md)。
 
 ## 安装与更新原生 Codex Hooks
 
-选择 `/bin/bash ./dws --hooks-install --global` 或 `/bin/bash ./dws --hooks-update --global`。项目级注册改用 `--project-root` 和已有项目的绝对路径。预览、合并及宿主信任步骤见 [原生 Codex Hooks 合同](skills/dev-workflow-standards/hooks/install-codex-hooks.md)。
+选择 `/bin/bash ./dev-agent-toolkit --hooks-install --global` 或 `/bin/bash ./dev-agent-toolkit --hooks-update --global`。项目级注册改用 `--project-root` 和已有项目的绝对路径。预览、合并及宿主信任步骤见 [原生 Codex Hooks 合同](skills/dev-agent-toolkit/hooks/install-codex-hooks.md)。
 
 ## 给 Pi Code Agent 注册 MCP
 
-选择 [Pi MCP 合同](skills/dev-workflow-standards/hooks/install-pi-mcp.md) 中的独立脚本命令，按需安装包并注册到用户级或项目级配置。Pi 可从同一 Skill 目录加载声明式合同。
-
-## 从旧名称迁移
-
-先核实存在的旧服务和软件包，再处理已获准的旧资源并按新名称注册。见 [旧名称迁移](skills/dev-workflow-standards/hooks/install-codex-mcp.md#旧名称迁移)。
+选择 [Pi MCP 合同](skills/dev-agent-toolkit/hooks/install-pi-mcp.md) 中的独立脚本命令，按需安装包并注册到用户级或项目级配置。Pi 可从同一 Skill 目录加载声明式合同。
 
 ## 安装排查
 
 ### 发布包缺少 Skill 资源
 
-先核对是否使用了完整 wheel 安装的管理 CLI。见 [Skill 命令入口排查](skills/dev-workflow-standards/references/installation.md#包资源缺失与命令入口排查)。
+先核对是否使用了完整 wheel 安装的管理 CLI。见 [Skill 命令入口排查](skills/dev-agent-toolkit/references/installation.md#包资源缺失与命令入口排查)。
 
 ### Codex 缺少 OpenAI 环境变量
 
-检查服务的变量名转发、Codex 主进程是否具有非空变量以及是否已重载。见 [Codex stdio 环境排查](skills/dev-workflow-standards/references/openai-workflow-tools.md#codex-stdio-环境传递与排查)。
+检查服务的变量名转发、Codex 主进程是否具有非空变量以及是否已重载。见 [Codex stdio 环境排查](skills/dev-agent-toolkit/references/openai-workflow-tools.md#codex-stdio-环境传递与排查)。

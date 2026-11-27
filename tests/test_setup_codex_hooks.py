@@ -114,7 +114,7 @@ class HooksSetupTests(unittest.TestCase):
             patch.object(
                 setup,
                 "install_tool",
-                return_value=Path("/synthetic/bin/dev-workflow-standards-hooks"),
+                return_value=Path("/synthetic/bin/dev-agent-toolkit-hooks"),
             ),
             patch.object(
                 setup.subprocess,

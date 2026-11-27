@@ -18,9 +18,9 @@ from pydantic import ValidationError
 
 from ai_workflow_fixtures import choice_answer, configured_env, decision_response
 from codex_session_fixtures import tool_json
-from dev_workflow_standards_tools.infrastructure import openai_client
-from dev_workflow_standards_tools.server import mcp
-from dev_workflow_standards_tools.services import web_search as service
+from dev_agent_toolkit_tools.infrastructure import openai_client
+from dev_agent_toolkit_tools.server import mcp
+from dev_agent_toolkit_tools.services import web_search as service
 
 
 def search_response():
@@ -71,7 +71,7 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
                 with (
                     patch.dict(os.environ, configured_env(), clear=True),
                     patch.object(openai_client.httpx2, "AsyncClient", CapturedClient),
-                    patch("dev_workflow_standards_tools.services.api_input_review.review_api_input", review),
+                    patch("dev_agent_toolkit_tools.services.api_input_review.review_api_input", review),
                 ):
                     async with Client(mcp) as client:
                         result = tool_json(await client.call_tool("web_search", {"request": {
@@ -125,7 +125,7 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
                 with (
                     patch.dict(os.environ, env, clear=True),
                     patch.object(openai_client, "AsyncOpenAI") as sdk,
-                    patch("dev_workflow_standards_tools.services.api_input_review.review_api_input",
+                    patch("dev_agent_toolkit_tools.services.api_input_review.review_api_input",
                           AsyncMock(return_value={"passed": True})),
                 ):
                     with self.assertRaises(openai_client.OpenAIWorkflowError):
@@ -136,7 +136,7 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.dict(os.environ, configured_env(), clear=True),
             patch.object(openai_client, "AsyncOpenAI") as sdk,
-            patch("dev_workflow_standards_tools.services.api_input_review.review_api_input",
+            patch("dev_agent_toolkit_tools.services.api_input_review.review_api_input",
                   AsyncMock(return_value={"passed": False, "status": "needs_revision"})),
         ):
             with self.assertRaises(openai_client.OpenAIWorkflowError):
@@ -183,7 +183,7 @@ class WebSearchTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_real_stdio_initialize_and_search_discovery(self):
         params = StdioServerParameters(
-            command=sys.executable, args=["-m", "dev_workflow_standards_tools.server"],
+            command=sys.executable, args=["-m", "dev_agent_toolkit_tools.server"],
             cwd=Path(__file__).resolve().parents[1] / "mcp-server", env={},
         )
         async with asyncio.timeout(20), Client(params) as client:

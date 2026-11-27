@@ -37,7 +37,7 @@ class SetupPiMcpTests(unittest.TestCase):
 
     def test_registration_and_install_order(self):
         with tempfile.TemporaryDirectory(prefix="pi tool ") as tmp:
-            executable = Path(tmp) / setup.DEFAULT_SERVER
+            executable = Path(tmp) / "dev-agent-toolkit-tools"
             executable.write_text("#!/bin/sh\nexit 0\n")
             executable.chmod(0o755)
             with (
@@ -69,7 +69,7 @@ class SetupPiMcpTests(unittest.TestCase):
                     "/bin/pi",
                     "mcp",
                     "add",
-                    setup.DEFAULT_SERVER,
+                    "dev_agent_toolkit",
                     "--exposure",
                     "deferred",
                     "--local",
@@ -158,7 +158,7 @@ class SetupPiMcpTests(unittest.TestCase):
             config.write_text(
                 json.dumps({"mcpServers": {"untouched": {"enabled": False}}})
             )
-            executable = root / setup.DEFAULT_SERVER
+            executable = root / "dev-agent-toolkit-tools"
             executable.write_text("#!/bin/sh\nexit 0\n")
             executable.chmod(0o755)
             original_run = setup.run
@@ -176,7 +176,7 @@ class SetupPiMcpTests(unittest.TestCase):
             self.assertEqual(code, 0)
             document = json.loads(config.read_text())
             self.assertEqual(document["mcpServers"]["untouched"], {"enabled": False})
-            server = document["mcpServers"][setup.DEFAULT_SERVER]
+            server = document["mcpServers"]["dev_agent_toolkit"]
             self.assertEqual(server["command"], str(executable))
             self.assertEqual(server["exposure"], "codemode")
             self.assertFalse(server.get("env"))

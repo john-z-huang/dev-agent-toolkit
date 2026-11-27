@@ -1,7 +1,7 @@
 [project]
-name = "dev-workflow-standards-hooks"
+name = "dev-agent-toolkit-hooks"
 version = "0.2.0"
-description = "Offline Codex lifecycle hooks and registration for development standards"
+description = "Offline Codex lifecycle hooks and registration for Dev Agent Toolkit"
 requires-python = ">=3.11"
 dependencies = []
 
@@ -11,18 +11,21 @@ dev = [
     "ty>=0.0.96",
 ]
 
+[project.urls]
+Repository = "https://github.com/john-z-huang/dev-agent-toolkit"
+
 [project.scripts]
-dev-workflow-standards-hooks = "dev_workflow_standards_hooks.cli:main"
+dev-agent-toolkit-hooks = "dev_agent_toolkit_hooks.cli:main"
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["dev_workflow_standards_hooks"]
+packages = ["dev_agent_toolkit_hooks"]
 
 [tool.hatch.build.targets.sdist]
-include = ["dev_workflow_standards_hooks", "pyproject.toml", "README.md"]
+include = ["dev_agent_toolkit_hooks", "pyproject.toml", "README.md"]
 
 [tool.ruff]
 target-version = "py311"

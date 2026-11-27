@@ -15,7 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-DEFAULT_SERVER = "dev-workflow-standards-tools"
+DEFAULT_SERVER = "dev_agent_toolkit"
+UV_TOOL_NAME = "dev-agent-toolkit-tools"
 SOURCE = Path(__file__).resolve().parents[1] / "mcp-server"
 
 
@@ -54,7 +55,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--server", default=DEFAULT_SERVER, help="pi server name")
     result.add_argument(
         "--command",
-        default=DEFAULT_SERVER,
+        default=UV_TOOL_NAME,
         help="executable basename inside uv tool dir --bin (not a PATH lookup)",
     )
     result.add_argument(
@@ -97,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         cli.error("--command must be an executable basename")
     if args.force and not args.install:
         cli.error("--force requires --install")
-    if args.install and args.command != DEFAULT_SERVER:
+    if args.install and args.command != UV_TOOL_NAME:
         cli.error("--install only installs this repository's default command")
     if args.dry_run:
         if args.install:

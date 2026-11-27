@@ -15,11 +15,11 @@ from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
 
 from codex_session_fixtures import ROOT, tool_json
-from dev_workflow_standards_tools.infrastructure.openai_client import GPT_LUNA_MODEL, GPT_SOL_MODEL
-from dev_workflow_standards_tools.server import mcp as complete_server
-from dev_workflow_standards_tools.services import codex_session_facts as service
-from dev_workflow_standards_tools.services import local_mcp, validation, workflows
-from dev_workflow_standards_tools.services.codex_session_facts import (
+from dev_agent_toolkit_tools.infrastructure.openai_client import GPT_LUNA_MODEL, GPT_SOL_MODEL
+from dev_agent_toolkit_tools.server import mcp as complete_server
+from dev_agent_toolkit_tools.services import codex_session_facts as service
+from dev_agent_toolkit_tools.services import local_mcp, validation, workflows
+from dev_agent_toolkit_tools.services.codex_session_facts import (
     CodexSessionSource,
 )
 from mcp import Client, StdioServerParameters
@@ -31,14 +31,14 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
 
     async def test_local_mcp_bridge_discovers_and_calls_fresh_stdio(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            prefix = Path(temporary) / local_mcp.SERVER_NAME
-            executable = prefix / "bin" / local_mcp.SERVER_NAME
+            prefix = Path(temporary) / local_mcp.UV_TOOL_NAME
+            executable = prefix / "bin" / local_mcp.UV_TOOL_NAME
             executable.parent.mkdir(parents=True)
             (prefix / "uv-receipt.toml").touch()
             executable.write_text(
                 "#!/bin/bash\n"
                 f"cd -- {shlex.quote(str(ROOT / 'mcp-server'))} || exit 1\n"
-                f"exec {shlex.quote(sys.executable)} -m dev_workflow_standards_tools.server\n"
+                f"exec {shlex.quote(sys.executable)} -m dev_agent_toolkit_tools.server\n"
             )
             executable.chmod(0o700)
             with patch.object(local_mcp, "sys", SimpleNamespace(prefix=str(prefix))):
@@ -60,23 +60,23 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
                 self.assertEqual(response, {"ok": False, "status": "tool_not_available"})
 
     async def test_issue_pr_metadata_over_stdio_initialize_and_tools_list(self) -> None:
-        from dev_workflow_standards_tools.services.ai_workflow import (
+        from dev_agent_toolkit_tools.services.ai_workflow import (
             ContentGenerationRequest,
         )
-        from dev_workflow_standards_tools.tools._descriptions import (
+        from dev_agent_toolkit_tools.tools._descriptions import (
             CLI_FALLBACK_DESCRIPTION,
             OPENAI_NETWORK_DESCRIPTION,
         )
 
         params = StdioServerParameters(
             command=sys.executable,
-            args=["-m", "dev_workflow_standards_tools.server"],
+            args=["-m", "dev_agent_toolkit_tools.server"],
             cwd=ROOT / "mcp-server",
             env={},
         )
         async with asyncio.timeout(20), Client(params) as client:
             instructions = client.instructions
-            self.assertEqual(client.server_info.name, "dev-workflow-standards-tools")
+            self.assertEqual(client.server_info.name, "dev_agent_toolkit")
             self.assertIn(CLI_FALLBACK_DESCRIPTION, instructions)
             self.assertEqual(instructions.count(OPENAI_NETWORK_DESCRIPTION), 1)
             for phrase in (
@@ -131,7 +131,7 @@ class MCPRegistrationTests(IsolatedAsyncioTestCase):
             self.assertEqual(set(bridge.input_schema["properties"]), {"tool_name", "arguments"})
             self.assertTrue(bridge.annotations.read_only_hint)
             self.assertFalse(bridge.annotations.open_world_hint)
-            self.assertNotIn("dev-workflow-standards/local-stdio", bridge.meta or {})
+            self.assertNotIn("dev-agent-toolkit/local-stdio", bridge.meta or {})
             self.assertIn("title_file", instructions)
             self.assertIn("body_file", instructions)
             for name in ("create_github_issue", "create_github_pull_request"):

@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from unittest.mock import patch
 
 import httpx2
-from dev_workflow_standards_tools.infrastructure import openai_client
+from dev_agent_toolkit_tools.infrastructure import openai_client
 from pydantic import BaseModel
 
 
@@ -84,7 +84,7 @@ class OpenAITimeoutTests(unittest.IsolatedAsyncioTestCase):
                 self.subTest(api=api),
                 self.transport(handler) as clients,
                 patch(
-                    "dev_workflow_standards_tools.services.api_input_review.review_api_input",
+                    "dev_agent_toolkit_tools.services.api_input_review.review_api_input",
                     return_value={"passed": True},
                 ) as review,
             ):

@@ -6,9 +6,9 @@ import unittest
 from copy import deepcopy
 from unittest.mock import AsyncMock, patch
 
-from dev_workflow_standards_tools.server import mcp
-from dev_workflow_standards_tools.services import ai_workflow as ai
-from dev_workflow_standards_tools.services import draft_sessions as d
+from dev_agent_toolkit_tools.server import mcp
+from dev_agent_toolkit_tools.services import ai_workflow as ai
+from dev_agent_toolkit_tools.services import draft_sessions as d
 
 
 class DraftTests(unittest.IsolatedAsyncioTestCase):
